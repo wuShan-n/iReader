@@ -34,7 +34,7 @@ object ReaderRuntimeModule {
                         persistOutline = false
                     )
                 ),
-                EpubEngine(),
+                EpubEngine(context = context),
                 PdfEngine()
             )
         )

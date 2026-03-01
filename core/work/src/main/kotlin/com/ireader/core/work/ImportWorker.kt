@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.BackoffPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -34,6 +35,7 @@ import dagger.assisted.AssistedInject
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
+import java.util.concurrent.TimeUnit
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -219,11 +221,17 @@ class ImportWorker @AssistedInject constructor(
 
             val enrichConstraints = Constraints.Builder()
                 .setRequiresBatteryNotLow(true)
+                .setRequiresStorageNotLow(true)
                 .build()
             val enrichWork = OneTimeWorkRequestBuilder<EnrichWorker>()
                 .setInputData(EnrichWorkerInput.data(jobId))
                 .addTag(WorkNames.tagEnrichForJob(jobId))
                 .setConstraints(enrichConstraints)
+                .setBackoffCriteria(
+                    BackoffPolicy.EXPONENTIAL,
+                    10,
+                    TimeUnit.MINUTES
+                )
                 .build()
             WorkManager.getInstance(applicationContext).enqueueUniqueWork(
                 WorkNames.uniqueEnrichForJob(jobId),

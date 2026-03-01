@@ -1,1 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="com.ireader.engines.epub.internal.content.EpubContentProvider"
+            android:authorities="${applicationId}.epub"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>

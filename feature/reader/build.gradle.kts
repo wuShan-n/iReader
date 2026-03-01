@@ -11,4 +11,5 @@ dependencies {
     implementation(project(":core:navigation"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:reader:runtime"))
+    implementation(libs.kotlinx.coroutines.core)
 }

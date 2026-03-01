@@ -55,6 +55,10 @@ object CoverRenderer {
 
     private fun minScale(a: Float, b: Float): Float = if (a < b) a else b
 
+    fun placeholderBitmap(width: Int, height: Int, title: String): Bitmap {
+        return placeholder(width, height, title)
+    }
+
     private fun placeholder(width: Int, height: Int, title: String): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
