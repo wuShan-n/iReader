@@ -9,4 +9,5 @@ android {
 dependencies {
     implementation(project(":core:reader:api"))
     implementation(project(":engines:engine-common"))
+    implementation(libs.kotlinx.coroutines.core)
 }

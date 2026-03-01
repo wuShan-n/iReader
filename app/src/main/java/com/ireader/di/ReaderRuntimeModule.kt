@@ -1,8 +1,10 @@
 package com.ireader.di
 
+import android.content.Context
 import com.ireader.engines.epub.EpubEngine
 import com.ireader.engines.pdf.PdfEngine
 import com.ireader.engines.txt.TxtEngine
+import com.ireader.engines.txt.TxtEngineConfig
 import com.ireader.reader.api.engine.EngineRegistry
 import com.ireader.reader.runtime.DefaultReaderRuntime
 import com.ireader.reader.runtime.ReaderRuntime
@@ -11,6 +13,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Singleton
 
 @Module
@@ -19,10 +22,18 @@ object ReaderRuntimeModule {
 
     @Provides
     @Singleton
-    fun provideEngineRegistry(): EngineRegistry {
+    fun provideEngineRegistry(
+        @ApplicationContext context: Context
+    ): EngineRegistry {
         return EngineRegistryImpl(
             setOf(
-                TxtEngine(),
+                TxtEngine(
+                    config = TxtEngineConfig(
+                        cacheDir = context.cacheDir,
+                        persistPagination = true,
+                        persistOutline = false
+                    )
+                ),
                 EpubEngine(),
                 PdfEngine()
             )
