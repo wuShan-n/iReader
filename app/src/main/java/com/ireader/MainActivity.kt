@@ -2,12 +2,22 @@ package com.ireader
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ireader.core.designsystem.IReaderTheme
+import com.ireader.core.files.importing.ImportManager
+import com.ireader.core.files.importing.ImportRequest
 import com.ireader.core.navigation.AppRoutes
 import com.ireader.feature.annotations.ui.AnnotationsScreen
 import com.ireader.feature.library.ui.LibraryScreen
@@ -15,26 +25,60 @@ import com.ireader.feature.reader.ui.ReaderScreen
 import com.ireader.feature.search.ui.SearchScreen
 import com.ireader.feature.settings.ui.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var importManager: ImportManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             IReaderTheme {
-                iReaderApp()
+                iReaderApp(importManager = importManager)
             }
         }
     }
 }
 
 @Composable
-private fun iReaderApp() {
+private fun iReaderApp(importManager: ImportManager) {
     val navController = rememberNavController()
+    val scope = rememberCoroutineScope()
+    var activeJobId by remember { mutableStateOf<String?>(null) }
+    var importStatusText by remember { mutableStateOf<String?>(null) }
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) {
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            runCatching {
+                importManager.enqueue(ImportRequest(uris = uris))
+            }.onSuccess { jobId ->
+                activeJobId = jobId
+            }.onFailure { throwable ->
+                importStatusText = throwable.message ?: "Import enqueue failed"
+            }
+        }
+    }
+
+    LaunchedEffect(activeJobId) {
+        val jobId = activeJobId ?: return@LaunchedEffect
+        importManager.observe(jobId).collectLatest { state ->
+            importStatusText = "${state.status} ${state.done}/${state.total}"
+        }
+    }
 
     NavHost(navController = navController, startDestination = AppRoutes.LIBRARY) {
         composable(AppRoutes.LIBRARY) {
             LibraryScreen(
+                onImportBooks = { launcher.launch(arrayOf("*/*")) },
+                importStatusText = importStatusText,
                 onOpenReader = { navController.navigate(AppRoutes.READER) },
                 onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) }
             )

@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 @Suppress("FunctionNaming")
 fun LibraryScreen(
+    onImportBooks: () -> Unit,
+    importStatusText: String?,
     onOpenReader: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -25,6 +27,10 @@ fun LibraryScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(text = "Library")
+        Button(onClick = onImportBooks) { Text("Import Books") }
+        if (!importStatusText.isNullOrBlank()) {
+            Text(text = importStatusText)
+        }
         Button(onClick = onOpenReader) { Text("Open Reader") }
         Button(onClick = onOpenSettings) { Text("Open Settings") }
     }

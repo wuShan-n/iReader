@@ -26,6 +26,10 @@ android {
 
 dependencies {
     implementation(project(":core:navigation"))
+    implementation(project(":core:data"))
+    implementation(project(":core:database"))
+    implementation(project(":core:files"))
+    implementation(project(":core:work"))
     implementation(project(":core:reader:runtime"))
     implementation(project(":core:designsystem"))
 
@@ -45,6 +49,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.androidx.hilt.navigation.compose)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
