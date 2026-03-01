@@ -1,0 +1,141 @@
+####################################
+# OS / Editor
+####################################
+.DS_Store
+Thumbs.db
+ehthumbs.db
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Android Studio / IntelliJ generated (keep code style/settings by exception if you want)
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/compose-designer.xml
+.idea/deploymentTargetDropDown.xml
+.idea/misc.xml
+.idea/inspectionProfiles/
+.idea/shelf/
+.idea/httpRequests/
+
+####################################
+# Gradle / Build outputs
+####################################
+.gradle/
+**/.gradle/
+build/
+**/build/
+
+# Gradle local properties (SDK path, etc.)
+local.properties
+
+# Gradle GUI
+gradle-app.setting
+
+# Build scans / temp
+out/
+tmp/
+
+####################################
+# Kotlin / KSP / KAPT / Compose
+####################################
+# Kotlin compiler caches
+.kotlin/
+**/.kotlin/
+
+# KSP / KAPT generated sources (generated, do not commit)
+**/build/generated/ksp/
+**/build/generated/source/kapt/
+**/build/generated/source/kaptKotlin/
+**/kaptKotlin/
+
+# Compose compiler reports (optional)
+**/build/compose_compiler/
+**/build/reports/compose/
+
+####################################
+# Android build artifacts
+####################################
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.so
+*.jar
+*.war
+*.ear
+
+# Resource intermediate
+**/generated/
+**/captures/
+
+####################################
+# Firebase / Secrets / Keystore
+####################################
+google-services.json
+**/google-services.json
+
+*.jks
+*.keystore
+*.p12
+*.pem
+*.der
+
+# If you keep signing configs locally
+signing.properties
+keystore.properties
+
+####################################
+# Logs
+####################################
+*.log
+logcat.txt
+
+####################################
+# Test / Coverage
+####################################
+**/build/reports/
+**/build/test-results/
+**/build/outputs/
+*.hprof
+
+####################################
+# Build-logic (included build)
+####################################
+build-logic/.gradle/
+build-logic/**/build/
+build-logic/convention/.gradle/
+build-logic/convention/**/build/
+
+####################################
+# Detekt / Ktlint (reports)
+####################################
+**/build/reports/detekt/
+**/build/reports/ktlint/
+detekt.sarif
+ktlint.sarif
+
+####################################
+# NDK / CMake (if any)
+####################################
+.cxx/
+**/.cxx/
+externalNativeBuild/
+**/externalNativeBuild/
+
+####################################
+# Misc
+####################################
+*.tmp
+*.bak
+*.orig
+*.rej
