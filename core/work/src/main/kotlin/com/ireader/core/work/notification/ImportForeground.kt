@@ -3,6 +3,7 @@ package com.ireader.core.work.notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.ForegroundInfo
@@ -26,7 +27,11 @@ object ImportForeground {
             .setProgress(total.coerceAtLeast(0), done.coerceAtLeast(0), total <= 0)
             .build()
 
-        return ForegroundInfo(NOTIFICATION_ID, notification)
+        return ForegroundInfo(
+            NOTIFICATION_ID,
+            notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        )
     }
 
     private fun ensureChannel(context: Context) {
