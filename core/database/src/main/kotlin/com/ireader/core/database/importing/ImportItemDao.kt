@@ -39,4 +39,10 @@ interface ImportItemDao {
 
     @Query("DELETE FROM import_items WHERE jobId = :jobId")
     suspend fun deleteByJob(jobId: String)
+
+    @Query(
+        "SELECT DISTINCT bookId FROM import_items " +
+            "WHERE jobId = :jobId AND status = 'SUCCEEDED' AND bookId IS NOT NULL"
+    )
+    suspend fun listSucceededBookIds(jobId: String): List<String>
 }

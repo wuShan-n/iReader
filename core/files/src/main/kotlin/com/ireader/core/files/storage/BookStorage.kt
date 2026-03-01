@@ -21,6 +21,10 @@ class BookStorage @Inject constructor(
         return File(bookDir(bookId), "original.$ext")
     }
 
+    fun coverFile(bookId: String): File {
+        return File(bookDir(bookId), "cover.png")
+    }
+
     fun importTempFile(): File {
         val dir = File(context.filesDir, "import_tmp").apply { mkdirs() }
         return File(dir, ".tmp-${UUID.randomUUID()}")

@@ -3,8 +3,12 @@ package com.ireader.core.work
 import android.content.Context
 import android.net.Uri
 import androidx.hilt.work.HiltWorker
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.importing.ImportItemRepo
@@ -20,6 +24,8 @@ import com.ireader.core.files.source.ContentUriDocumentSource
 import com.ireader.core.files.source.FileDocumentSource
 import com.ireader.core.files.storage.BookStorage
 import com.ireader.core.work.notification.ImportForeground
+import com.ireader.core.work.enrich.EnrichWorker
+import com.ireader.core.work.enrich.EnrichWorkerInput
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.runtime.format.BookFormatDetector
@@ -210,6 +216,21 @@ class ImportWorker @AssistedInject constructor(
                 errorMessage = null,
                 now = System.currentTimeMillis()
             )
+
+            val enrichConstraints = Constraints.Builder()
+                .setRequiresBatteryNotLow(true)
+                .build()
+            val enrichWork = OneTimeWorkRequestBuilder<EnrichWorker>()
+                .setInputData(EnrichWorkerInput.data(jobId))
+                .addTag(WorkNames.tagEnrichForJob(jobId))
+                .setConstraints(enrichConstraints)
+                .build()
+            WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                WorkNames.uniqueEnrichForJob(jobId),
+                ExistingWorkPolicy.KEEP,
+                enrichWork
+            )
+
             Result.success()
         } catch (cancelled: CancellationException) {
             jobRepo.updateProgress(
