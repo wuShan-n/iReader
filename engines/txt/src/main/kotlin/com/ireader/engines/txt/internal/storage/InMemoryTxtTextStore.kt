@@ -1,6 +1,7 @@
 package com.ireader.engines.txt.internal.storage
 
 import com.ireader.core.files.source.DocumentSource
+import com.ireader.engines.txt.internal.open.TxtTextNormalizer
 import java.nio.charset.Charset
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -61,7 +62,7 @@ internal class InMemoryTxtTextStore(
             throw IllegalStateException("TXT too large for in-memory store: ${bytes.size} bytes")
         }
 
-        val text = decodeRemovingBom(bytes, charset)
+        val text = TxtTextNormalizer.normalize(decodeRemovingBom(bytes, charset))
         cached = text
         text
     }

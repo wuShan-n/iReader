@@ -1,6 +1,8 @@
 package com.ireader.engines.txt.internal.session
 
+import com.ireader.engines.txt.TxtEngineConfig
 import com.ireader.engines.txt.internal.controller.TxtController
+import com.ireader.engines.txt.internal.controller.TxtLocatorMapper
 import com.ireader.engines.txt.internal.paging.TxtLastPositionStore
 import com.ireader.engines.txt.internal.paging.TxtPager
 import com.ireader.engines.txt.internal.paging.TxtPaginationStore
@@ -50,11 +52,26 @@ internal class TxtSession private constructor(
             explicitInitial: Boolean,
             initialStartChar: Int,
             initialConfig: RenderConfig.ReflowText,
-            ioDispatcher: CoroutineDispatcher
+            ioDispatcher: CoroutineDispatcher,
+            engineConfig: TxtEngineConfig
         ): ReaderResult<ReaderSession> = withContext(ioDispatcher) {
             try {
-                val pager = TxtPager(store)
+                val pager = TxtPager(
+                    store = store,
+                    chunkSizeChars = engineConfig.chunkSizeChars
+                )
                 val annotationProvider = InMemoryAnnotationProvider()
+                val locatorMapper = TxtLocatorMapper(
+                    store = store,
+                    snippetLength = engineConfig.snippetLength,
+                    sampleStrideChars = engineConfig.locatorSampleStrideChars,
+                    sampleWindowChars = engineConfig.locatorSampleWindowChars,
+                    maxSamples = engineConfig.locatorMaxSamples,
+                    smallDocumentFullScanThresholdChars = engineConfig.locatorSmallDocumentFullScanThresholdChars,
+                    snippetWindowMinChars = engineConfig.locatorSnippetWindowMinChars,
+                    snippetWindowMaxChars = engineConfig.locatorSnippetWindowMaxChars,
+                    snippetWindowCapChars = engineConfig.locatorSnippetWindowCapChars
+                )
                 val controller = TxtController(
                     store = store,
                     pager = pager,
@@ -64,7 +81,9 @@ internal class TxtSession private constructor(
                     lastPositionStore = lastPositionStore,
                     explicitInitial = explicitInitial,
                     documentId = documentId,
-                    initialStartChar = initialStartChar
+                    initialStartChar = initialStartChar,
+                    locatorMapper = locatorMapper,
+                    engineConfig = engineConfig
                 ).apply {
                     setConfig(initialConfig)
                 }
@@ -74,7 +93,12 @@ internal class TxtSession private constructor(
                         id = SessionId(UUID.randomUUID().toString()),
                         controller = controller,
                         outline = TxtOutlineProvider(store, ioDispatcher, outlineCache),
-                        search = TxtSearchProvider(store, ioDispatcher),
+                        search = TxtSearchProvider(
+                            store = store,
+                            ioDispatcher = ioDispatcher,
+                            locatorMapper = locatorMapper,
+                            defaultMaxHits = engineConfig.maxSearchHitsDefault
+                        ),
                         text = TxtTextProvider(store),
                         annotations = annotationProvider,
                         resources = null

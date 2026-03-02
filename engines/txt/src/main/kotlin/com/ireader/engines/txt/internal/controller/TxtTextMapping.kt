@@ -6,7 +6,8 @@ import com.ireader.reader.model.LocatorRange
 import com.ireader.reader.model.LocatorSchemes
 
 internal class TxtTextMapping(
-    private val pageStartChar: Int
+    private val pageStartChar: Int,
+    private val pageEndCharExclusive: Int
 ) : TextMapping {
 
     override fun locatorAt(charIndex: Int): Locator {
@@ -27,8 +28,10 @@ internal class TxtTextMapping(
         }
         val start = range.start.value.toIntOrNull() ?: return null
         val end = range.end.value.toIntOrNull() ?: return null
-        val localStart = (start - pageStartChar).coerceAtLeast(0)
-        val localEnd = (end - pageStartChar).coerceAtLeast(localStart)
+        if (start < pageStartChar || end > pageEndCharExclusive) return null
+        val localStart = start - pageStartChar
+        val localEnd = end - pageStartChar
+        if (localEnd < localStart) return null
         return localStart until localEnd
     }
 }

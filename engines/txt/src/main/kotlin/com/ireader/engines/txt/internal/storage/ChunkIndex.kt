@@ -2,7 +2,9 @@ package com.ireader.engines.txt.internal.storage
 
 internal data class ChunkAnchor(
     val charOffset: Int,
-    val byteOffset: Long
+    val byteOffset: Long,
+    val lastWasCr: Boolean = false,
+    val emittedAny: Boolean = false
 )
 
 internal class ChunkIndex(

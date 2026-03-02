@@ -9,6 +9,7 @@ internal class TxtOutlineCache(
     private val docNamespace: String,
     private val charsetName: String
 ) {
+    // Persisted format is v2-only: level<TAB>offset<TAB>title
     val asTree: Boolean
         get() = config.outlineAsTree
 
@@ -30,17 +31,11 @@ internal class TxtOutlineCache(
             val builder = TxtOutlineTreeBuilder(asTree = asTree)
             file.readLines(Charsets.UTF_8).forEach { line ->
                 val parts = line.split('\t')
-                if (parts.size >= 3) {
-                    val level = parts[0].toIntOrNull() ?: return@forEach
-                    val offset = parts[1].toIntOrNull() ?: return@forEach
-                    val title = parts.subList(2, parts.size).joinToString("\t")
-                    builder.add(level, title, offset)
-                } else if (parts.size == 2) {
-                    // Backward compatible with the old flat format.
-                    val offset = parts[0].toIntOrNull() ?: return@forEach
-                    val title = parts[1]
-                    builder.add(1, title, offset)
-                }
+                if (parts.size < 3) return@forEach
+                val level = parts[0].toIntOrNull() ?: return@forEach
+                val offset = parts[1].toIntOrNull() ?: return@forEach
+                val title = parts.subList(2, parts.size).joinToString("\t")
+                builder.add(level, title, offset)
             }
             builder.build()
         }.getOrNull()
@@ -69,7 +64,7 @@ internal class TxtOutlineCache(
 
     private fun file(): File? {
         val base = config.cacheDir ?: return null
-        val folder = File(base, "reader-txt/outline")
+        val folder = File(base, "reader-txt-v2/outline")
         return File(folder, "${docNamespace.hashCode()}_${charsetName.hashCode()}.txt")
     }
 

@@ -7,6 +7,7 @@ import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.engines.txt.internal.controller.TxtLocatorMapper
 import com.ireader.engines.txt.internal.paging.TxtLastPositionStore
 import com.ireader.engines.txt.internal.paging.TxtPaginationStore
 import com.ireader.engines.txt.internal.provider.TxtOutlineCache
@@ -18,7 +19,6 @@ import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorSchemes
 import java.nio.charset.Charset
 import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineDispatcher
@@ -91,10 +91,21 @@ internal class TxtDocument(
         initialLocator: Locator?,
         initialConfig: RenderConfig
     ): ReaderResult<ReaderSession> = withContext(ioDispatcher) {
-        val normalizedLocator = normalizeLocator(initialLocator)
         val normalizedConfig = normalizeConfig(initialConfig)
-        val startChar = normalizedLocator.value.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val textStore = getStore()
+        val totalChars = textStore.totalChars().coerceAtLeast(0)
+        val mapper = TxtLocatorMapper(
+            store = textStore,
+            snippetLength = config.snippetLength,
+            sampleStrideChars = config.locatorSampleStrideChars,
+            sampleWindowChars = config.locatorSampleWindowChars,
+            maxSamples = config.locatorMaxSamples,
+            smallDocumentFullScanThresholdChars = config.locatorSmallDocumentFullScanThresholdChars,
+            snippetWindowMinChars = config.locatorSnippetWindowMinChars,
+            snippetWindowMaxChars = config.locatorSnippetWindowMaxChars,
+            snippetWindowCapChars = config.locatorSnippetWindowCapChars
+        )
+        val startChar = mapper.offsetForLocator(initialLocator, totalChars)
 
         TxtSession.create(
             documentId = id,
@@ -105,7 +116,8 @@ internal class TxtDocument(
             explicitInitial = (initialLocator != null),
             initialStartChar = startChar,
             initialConfig = normalizedConfig,
-            ioDispatcher = ioDispatcher
+            ioDispatcher = ioDispatcher,
+            engineConfig = config
         )
     }
 
@@ -117,15 +129,9 @@ internal class TxtDocument(
         store ?: TxtTextStoreFactory.create(
             source = source,
             charset = charset,
-            ioDispatcher = ioDispatcher
+            ioDispatcher = ioDispatcher,
+            config = config
         ).also { store = it }
-    }
-
-    private fun normalizeLocator(locator: Locator?): Locator {
-        if (locator == null) return Locator(LocatorSchemes.TXT_OFFSET, "0")
-        if (locator.scheme != LocatorSchemes.TXT_OFFSET) return Locator(LocatorSchemes.TXT_OFFSET, "0")
-        val offset = locator.value.toIntOrNull()?.coerceAtLeast(0) ?: 0
-        return Locator(LocatorSchemes.TXT_OFFSET, offset.toString(), locator.extras)
     }
 
     private fun normalizeConfig(config: RenderConfig): RenderConfig.ReflowText {

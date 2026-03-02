@@ -18,23 +18,6 @@ internal data class RenderKey(
     val fontFamily: String?
 ) {
     companion object {
-        fun placeholder(docId: String, charset: String): RenderKey {
-            return RenderKey(
-                docId = docId,
-                charset = charset,
-                viewportW = -1,
-                viewportH = -1,
-                densityBits = 0,
-                fontScaleBits = 0,
-                fontSizeBits = 0,
-                lineHeightBits = 0,
-                paragraphBits = 0,
-                paddingBits = 0,
-                hyphenation = false,
-                fontFamily = null
-            )
-        }
-
         fun of(
             docId: String,
             charset: String,

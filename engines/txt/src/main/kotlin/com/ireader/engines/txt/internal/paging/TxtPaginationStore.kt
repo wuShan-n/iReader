@@ -82,7 +82,7 @@ internal class TxtPaginationStore(
         val baseDir = config.cacheDir ?: return null
         val folder = File(
             baseDir,
-            "reader-txt/pagination/${docNamespace.hashCode()}_${charsetName.hashCode()}"
+            "reader-txt-v2/pagination/${docNamespace.hashCode()}_${charsetName.hashCode()}"
         )
         return File(folder, "${KeyHash.stableName(key)}.bin")
     }

@@ -1,7 +1,11 @@
 package com.ireader.engines.txt.internal.paging
 
 import com.ireader.engines.txt.TxtEngineConfig
+import com.ireader.reader.model.Locator
 import java.io.File
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.Properties
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,20 +18,20 @@ internal class TxtLastPositionStore(
 ) {
     val minIntervalMs: Long = config.lastPositionMinIntervalMs.coerceAtLeast(0L)
 
-    suspend fun load(key: RenderKey): Int? = withContext(ioDispatcher) {
+    suspend fun load(key: RenderKey): Locator? = withContext(ioDispatcher) {
         if (!config.persistLastPosition) return@withContext null
         val file = fileFor(key) ?: return@withContext null
         if (!file.exists()) return@withContext null
-        runCatching { decodeVarInt(file.readBytes()) }.getOrNull()
+        runCatching { decodeLocator(file.readBytes()) }.getOrNull()
     }
 
-    fun save(key: RenderKey, startChar: Int, force: Boolean = false) {
+    fun save(key: RenderKey, locator: Locator) {
         if (!config.persistLastPosition) return
         val file = fileFor(key) ?: return
         runCatching {
             file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, "${file.name}.tmp")
-            tmp.writeBytes(encodeVarInt(startChar.coerceAtLeast(0)))
+            tmp.writeBytes(encodeLocator(locator))
             if (file.exists()) file.delete()
             val renamed = tmp.renameTo(file)
             if (!renamed) {
@@ -41,38 +45,41 @@ internal class TxtLastPositionStore(
         val base = config.cacheDir ?: return null
         val folder = File(
             base,
-            "reader-txt/lastpos/${docNamespace.hashCode()}_${charsetName.hashCode()}"
+            "reader-txt-v2/lastpos/${docNamespace.hashCode()}_${charsetName.hashCode()}"
         )
         return File(folder, "${KeyHash.stableName(key)}.pos")
     }
 
-    private fun encodeVarInt(value: Int): ByteArray {
-        var v = value
-        val out = ArrayList<Byte>(5)
-        while (true) {
-            val b = v and 0x7F
-            v = v ushr 7
-            if (v == 0) {
-                out.add(b.toByte())
-                break
-            } else {
-                out.add((b or 0x80).toByte())
+    private fun encodeLocator(locator: Locator): ByteArray {
+        val properties = Properties().apply {
+            setProperty("scheme", locator.scheme)
+            setProperty("value", locator.value)
+            setProperty("extras.size", locator.extras.size.toString())
+            locator.extras.entries.forEachIndexed { index, entry ->
+                setProperty("extras.$index.key", entry.key)
+                setProperty("extras.$index.value", entry.value)
             }
         }
+        val out = ByteArrayOutputStream()
+        properties.store(out, null)
         return out.toByteArray()
     }
 
-    private fun decodeVarInt(bytes: ByteArray): Int {
-        var result = 0
-        var shift = 0
-        var i = 0
-        while (i < bytes.size) {
-            val b = bytes[i].toInt() and 0xFF
-            result = result or ((b and 0x7F) shl shift)
-            i += 1
-            if ((b and 0x80) == 0) break
-            shift += 7
+    private fun decodeLocator(bytes: ByteArray): Locator? {
+        val properties = Properties()
+        ByteArrayInputStream(bytes).use { input ->
+            properties.load(input)
         }
-        return result
+        val scheme = properties.getProperty("scheme") ?: return null
+        val value = properties.getProperty("value") ?: return null
+        val size = properties.getProperty("extras.size")?.toIntOrNull() ?: 0
+        val extras = buildMap<String, String> {
+            for (index in 0 until size) {
+                val key = properties.getProperty("extras.$index.key") ?: continue
+                val entryValue = properties.getProperty("extras.$index.value") ?: continue
+                put(key, entryValue)
+            }
+        }
+        return Locator(scheme = scheme, value = value, extras = extras)
     }
 }

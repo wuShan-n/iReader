@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.provider
 
+import com.ireader.engines.txt.internal.controller.TxtLocatorMapper
 import com.ireader.engines.txt.internal.storage.TxtTextStore
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
@@ -17,7 +18,9 @@ import kotlinx.coroutines.withContext
 
 internal class TxtSearchProvider(
     private val store: TxtTextStore,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val locatorMapper: TxtLocatorMapper,
+    private val defaultMaxHits: Int = 500
 ) : SearchProvider {
 
     override fun search(query: String, options: SearchOptions): Flow<SearchHit> = flow {
@@ -31,8 +34,9 @@ internal class TxtSearchProvider(
         var cursor = options.startFrom?.let { parseOffset(it) } ?: 0
         cursor = cursor.coerceIn(0, totalChars)
         var emitted = 0
+        val maxHits = options.maxHits.takeIf { it > 0 } ?: defaultMaxHits
 
-        while (cursor < totalChars && emitted < options.maxHits) {
+        while (cursor < totalChars && emitted < maxHits) {
             coroutineContext.ensureActive()
 
             val readLen = (chunkSize + overlap).coerceAtMost(totalChars - cursor)
@@ -41,7 +45,7 @@ internal class TxtSearchProvider(
 
             val hasNextChunk = cursor + chunkSize < totalChars
             var searchFrom = 0
-            while (searchFrom <= chunk.length - query.length && emitted < options.maxHits) {
+            while (searchFrom <= chunk.length - query.length && emitted < maxHits) {
                 coroutineContext.ensureActive()
 
                 val found = indexOfMatch(
@@ -62,8 +66,8 @@ internal class TxtSearchProvider(
                 emit(
                     SearchHit(
                         range = LocatorRange(
-                            start = Locator(LocatorSchemes.TXT_OFFSET, start.toString()),
-                            end = Locator(LocatorSchemes.TXT_OFFSET, end.toString())
+                            start = locatorMapper.locatorForOffsetFast(start, totalChars),
+                            end = locatorMapper.locatorForBoundaryOffset(end.coerceAtMost(totalChars), totalChars)
                         ),
                         excerpt = buildExcerpt(chunk, found, query.length),
                         sectionTitle = null

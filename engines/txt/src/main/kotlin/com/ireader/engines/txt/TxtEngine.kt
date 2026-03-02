@@ -18,8 +18,10 @@ import kotlinx.coroutines.withContext
 
 class TxtEngine(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val config: TxtEngineConfig = TxtEngineConfig()
+    config: TxtEngineConfig = TxtEngineConfig()
 ) : ReaderEngine {
+    private val config: TxtEngineConfig = config.normalized()
+
     override val supportedFormats: Set<BookFormat> = setOf(BookFormat.TXT)
 
     override suspend fun open(
