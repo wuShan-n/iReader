@@ -11,4 +11,7 @@ dependencies {
     implementation(project(":engines:engine-common"))
     implementation(libs.kotlinx.coroutines.core)
     implementation("io.legere:pdfiumandroid:2.0.0")
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

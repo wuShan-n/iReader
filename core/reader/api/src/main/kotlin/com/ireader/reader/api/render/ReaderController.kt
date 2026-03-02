@@ -22,6 +22,19 @@ interface ReaderController : Closeable {
     val state: StateFlow<RenderState>
     val events: Flow<ReaderEvent>
 
+    /**
+     * 绑定渲染承载面（可选）。
+     *
+     * - 导航器型引擎（如 EPUB）会在该 surface 中渲染实际内容
+     * - 非导航器型引擎可返回 Ok(Unit)
+     */
+    suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit>
+
+    /**
+     * 解除渲染承载面绑定（可选）。
+     */
+    suspend fun unbindSurface(): ReaderResult<Unit>
+
     suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit>
 
     suspend fun setConfig(config: RenderConfig): ReaderResult<Unit>

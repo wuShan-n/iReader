@@ -9,6 +9,5 @@ android {
 dependencies {
     api(project(":core:model"))
     api(project(":core:files"))
-    api(libs.androidx.fragment.ktx)
     implementation(libs.kotlinx.coroutines.core)
 }

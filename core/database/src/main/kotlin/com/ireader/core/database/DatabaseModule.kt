@@ -2,6 +2,7 @@ package com.ireader.core.database
 
 import android.content.Context
 import androidx.room.Room
+import com.ireader.core.database.annotation.AnnotationDao
 import com.ireader.core.database.book.BookDao
 import com.ireader.core.database.collection.BookCollectionDao
 import com.ireader.core.database.collection.CollectionDao
@@ -45,4 +46,7 @@ object DatabaseModule {
 
     @Provides
     fun provideImportItemDao(database: ReaderDatabase): ImportItemDao = database.importItemDao()
+
+    @Provides
+    fun provideAnnotationDao(database: ReaderDatabase): AnnotationDao = database.annotationDao()
 }

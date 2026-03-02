@@ -1,14 +1,15 @@
 package com.ireader.feature.reader.presentation
 
 import android.graphics.Bitmap
-import com.ireader.reader.api.render.ReaderNavigatorAdapter
+import com.ireader.reader.api.render.ReaderController
+import com.ireader.reader.api.render.TileProvider
 
 sealed interface ReaderUiState {
     data object Loading : ReaderUiState
 
-    data class Navigator(
-        val sessionId: String,
-        val adapter: ReaderNavigatorAdapter
+    data class Embedded(
+        val pageId: String,
+        val controller: ReaderController
     ) : ReaderUiState
 
     data class Html(
@@ -24,6 +25,13 @@ sealed interface ReaderUiState {
 
     data class BitmapPage(
         val bitmap: Bitmap
+    ) : ReaderUiState
+
+    data class TilesPage(
+        val pageId: String,
+        val pageWidthPx: Int,
+        val pageHeightPx: Int,
+        val tileProvider: TileProvider
     ) : ReaderUiState
 
     data class Unsupported(

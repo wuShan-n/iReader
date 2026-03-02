@@ -42,7 +42,8 @@ object CoverRenderer {
             }
 
             is RenderContent.Text,
-            is RenderContent.Html -> placeholder(desiredWidth, desiredHeight, titleFallback)
+            is RenderContent.Html,
+            RenderContent.Embedded -> placeholder(desiredWidth, desiredHeight, titleFallback)
         }
     }
 

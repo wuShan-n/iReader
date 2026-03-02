@@ -3,6 +3,8 @@ package com.ireader.core.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import com.ireader.core.database.annotation.AnnotationDao
+import com.ireader.core.database.annotation.AnnotationEntity
 import com.ireader.core.database.book.BookDao
 import com.ireader.core.database.book.BookEntity
 import com.ireader.core.database.collection.BookCollectionDao
@@ -23,9 +25,10 @@ import com.ireader.core.database.progress.ProgressEntity
         CollectionEntity::class,
         BookCollectionEntity::class,
         ImportJobEntity::class,
-        ImportItemEntity::class
+        ImportItemEntity::class,
+        AnnotationEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(DbConverters::class)
@@ -36,4 +39,5 @@ abstract class ReaderDatabase : RoomDatabase() {
     abstract fun bookCollectionDao(): BookCollectionDao
     abstract fun importJobDao(): ImportJobDao
     abstract fun importItemDao(): ImportItemDao
+    abstract fun annotationDao(): AnnotationDao
 }

@@ -7,6 +7,9 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:common-android"))
+    implementation(project(":core:model"))
+    implementation(project(":core:files"))
     implementation(project(":core:reader:api"))
     implementation(project(":engines:engine-common"))
     implementation(libs.androidx.fragment.ktx)

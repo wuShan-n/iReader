@@ -6,6 +6,7 @@ import com.ireader.engines.pdf.PdfEngine
 import com.ireader.engines.txt.TxtEngine
 import com.ireader.engines.txt.TxtEngineConfig
 import com.ireader.reader.api.engine.EngineRegistry
+import com.ireader.reader.api.provider.AnnotationStore
 import com.ireader.reader.runtime.DefaultReaderRuntime
 import com.ireader.reader.runtime.ReaderRuntime
 import com.ireader.reader.runtime.registry.EngineRegistryImpl
@@ -23,7 +24,8 @@ object ReaderRuntimeModule {
     @Provides
     @Singleton
     fun provideEngineRegistry(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        annotationStore: AnnotationStore
     ): EngineRegistry {
         return EngineRegistryImpl(
             setOf(
@@ -34,7 +36,10 @@ object ReaderRuntimeModule {
                         persistOutline = false
                     )
                 ),
-                EpubEngine(context = context),
+                EpubEngine(
+                    context = context,
+                    annotationStore = annotationStore
+                ),
                 PdfEngine(context = context)
             )
         )

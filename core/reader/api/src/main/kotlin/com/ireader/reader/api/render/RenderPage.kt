@@ -50,6 +50,11 @@ sealed interface RenderContent {
         val pageHeightPx: Int,
         val tileProvider: TileProvider
     ) : RenderContent
+
+    /**
+     * 页面由引擎直接在 bindSurface() 绑定的承载面中渲染。
+     */
+    data object Embedded : RenderContent
 }
 
 data class RenderMetrics(
