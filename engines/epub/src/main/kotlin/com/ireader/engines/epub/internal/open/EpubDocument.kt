@@ -1,7 +1,6 @@
 package com.ireader.engines.epub.internal.open
 
-import com.ireader.engines.epub.internal.content.EpubStore
-import com.ireader.engines.epub.internal.session.EpubSession
+import com.ireader.engines.epub.internal.session.ReadiumEpubSession
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderResult
@@ -13,34 +12,55 @@ import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
 import kotlinx.coroutines.CoroutineDispatcher
+import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.epub.EpubLayout
+import org.readium.r2.shared.publication.presentation.presentation
+import org.readium.r2.shared.publication.services.content.content
+import org.readium.r2.shared.publication.services.search.isSearchable
+import org.readium.r2.shared.util.asset.Asset
 
 internal class EpubDocument(
-    private val container: EpubContainer,
+    override val id: DocumentId,
+    private val publication: Publication,
+    private val asset: Asset,
     override val openOptions: OpenOptions,
     private val ioDispatcher: CoroutineDispatcher
 ) : ReaderDocument {
 
-    override val id: DocumentId = container.id
-
     override val format: BookFormat = BookFormat.EPUB
 
+    @OptIn(ExperimentalReadiumApi::class)
     override val capabilities: DocumentCapabilities = DocumentCapabilities(
-        reflowable = true,
-        fixedLayout = false,
-        outline = true,
-        search = true,
-        textExtraction = true,
+        reflowable = publication.metadata.presentation.layout != EpubLayout.FIXED,
+        fixedLayout = publication.metadata.presentation.layout == EpubLayout.FIXED,
+        outline = publication.tableOfContents.isNotEmpty(),
+        search = publication.isSearchable,
+        textExtraction = publication.content() != null,
         annotations = true,
         links = true
     )
 
     override suspend fun metadata(): ReaderResult<DocumentMetadata> {
+        val meta = publication.metadata
+        val firstAuthor = meta.authors.firstOrNull()?.name
+        val language = meta.languages.firstOrNull()
+
         val extra = buildMap {
-            put("uriAuthority", container.authority)
-            put("spineCount", container.spineCount.toString())
-            putAll(container.opf.metadata.extra)
-        }
-        return ReaderResult.Ok(container.opf.metadata.copy(extra = extra))
+            put("layout", meta.presentation.layout?.value.orEmpty())
+            put("description", meta.description.orEmpty())
+            meta.numberOfPages?.let { put("numberOfPages", it.toString()) }
+        }.filterValues { it.isNotBlank() }
+
+        return ReaderResult.Ok(
+            DocumentMetadata(
+                title = meta.title,
+                author = firstAuthor,
+                language = language,
+                identifier = meta.identifier,
+                extra = extra
+            )
+        )
     }
 
     override suspend fun createSession(
@@ -48,8 +68,8 @@ internal class EpubDocument(
         initialConfig: RenderConfig
     ): ReaderResult<ReaderSession> {
         val config = (initialConfig as? RenderConfig.ReflowText) ?: RenderConfig.ReflowText()
-        return EpubSession.create(
-            container = container,
+        return ReadiumEpubSession.create(
+            publication = publication,
             initialLocator = initialLocator,
             initialConfig = config,
             ioDispatcher = ioDispatcher
@@ -57,6 +77,7 @@ internal class EpubDocument(
     }
 
     override fun close() {
-        EpubStore.unregister(id.value)
+        runCatching { publication.close() }
+        runCatching { asset.close() }
     }
 }

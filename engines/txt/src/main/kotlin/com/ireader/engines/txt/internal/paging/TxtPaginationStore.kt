@@ -3,11 +3,15 @@ package com.ireader.engines.txt.internal.paging
 import com.ireader.engines.txt.TxtEngineConfig
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal class TxtPaginationStore(
     private val config: TxtEngineConfig,
     private val docNamespace: String,
-    private val charsetName: String
+    private val charsetName: String,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private data class Bucket(
         val index: PageStartsIndex,
@@ -26,7 +30,7 @@ internal class TxtPaginationStore(
         }.index
     }
 
-    fun maybePersist(key: RenderKey, index: PageStartsIndex, newAdds: Int) {
+    suspend fun maybePersist(key: RenderKey, index: PageStartsIndex, newAdds: Int) {
         if (!config.persistPagination) return
         if (newAdds <= 0) return
         val bucket = buckets[key] ?: return
@@ -45,7 +49,7 @@ internal class TxtPaginationStore(
         }
     }
 
-    fun flush(key: RenderKey, index: PageStartsIndex) {
+    suspend fun flush(key: RenderKey, index: PageStartsIndex) {
         if (!config.persistPagination) return
         saveToDisk(key, index)
         buckets[key]?.let { bucket ->
@@ -63,8 +67,8 @@ internal class TxtPaginationStore(
         }.getOrNull()
     }
 
-    private fun saveToDisk(key: RenderKey, index: PageStartsIndex) {
-        val file = fileFor(key) ?: return
+    private suspend fun saveToDisk(key: RenderKey, index: PageStartsIndex) = withContext(ioDispatcher) {
+        val file = fileFor(key) ?: return@withContext
         runCatching {
             file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, "${file.name}.tmp")

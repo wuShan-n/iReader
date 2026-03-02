@@ -25,9 +25,9 @@ internal class TxtLastPositionStore(
         runCatching { decodeLocator(file.readBytes()) }.getOrNull()
     }
 
-    fun save(key: RenderKey, locator: Locator) {
-        if (!config.persistLastPosition) return
-        val file = fileFor(key) ?: return
+    suspend fun save(key: RenderKey, locator: Locator) = withContext(ioDispatcher) {
+        if (!config.persistLastPosition) return@withContext
+        val file = fileFor(key) ?: return@withContext
         runCatching {
             file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, "${file.name}.tmp")

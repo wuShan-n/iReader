@@ -1,7 +1,6 @@
 package com.ireader
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.fragment.app.FragmentActivity
 import com.ireader.core.designsystem.IReaderTheme
 import com.ireader.core.files.importing.ImportManager
 import com.ireader.core.files.importing.ImportRequest
@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     @Inject
     lateinit var importManager: ImportManager
 

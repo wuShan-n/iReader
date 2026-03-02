@@ -32,7 +32,8 @@ data class TxtEngineConfig(
     val locatorSnippetWindowCapChars: Int = 1_000_000,
 
     // Provider defaults
-    val maxSearchHitsDefault: Int = 500
+    val maxSearchHitsDefault: Int = 500,
+    val maxTextExtractChars: Int = 200_000
 ) {
     fun normalized(): TxtEngineConfig {
         val safeSnippetLength = snippetLength.coerceIn(24, 256)
@@ -68,8 +69,8 @@ data class TxtEngineConfig(
             locatorSnippetWindowMinChars = safeMinWindow,
             locatorSnippetWindowMaxChars = safeMaxWindow,
             locatorSnippetWindowCapChars = safeCapWindow,
-            maxSearchHitsDefault = maxSearchHitsDefault.coerceIn(1, 5_000)
+            maxSearchHitsDefault = maxSearchHitsDefault.coerceIn(1, 5_000),
+            maxTextExtractChars = maxTextExtractChars.coerceIn(1_024, 2_000_000)
         )
     }
 }
-

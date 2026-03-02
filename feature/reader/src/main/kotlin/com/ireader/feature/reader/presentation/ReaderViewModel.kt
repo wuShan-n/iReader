@@ -11,6 +11,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
+import com.ireader.reader.model.Locator
 import com.ireader.reader.runtime.ReaderSessionHandle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -41,6 +43,8 @@ class ReaderViewModel @Inject constructor(
     private var layoutConstraints: LayoutConstraints? = null
     private var loadJob: Job? = null
     private var progressJob: Job? = null
+    private var lastObservedLocator: Locator? = null
+    private var lastObservedProgression: Double = 0.0
 
     fun loadBook(bookId: Long) {
         if (bookId <= 0L) {
@@ -64,7 +68,15 @@ class ReaderViewModel @Inject constructor(
                 is OpenBookResult.Success -> {
                     sessionHandle = result.session
                     observeProgress(bookId, result.session)
-                    renderCurrentPage()
+                    val navigatorAdapter = result.session.navigatorAdapter
+                    if (navigatorAdapter != null) {
+                        _uiState.value = ReaderUiState.Navigator(
+                            sessionId = result.session.session.id.value,
+                            adapter = navigatorAdapter
+                        )
+                    } else {
+                        renderCurrentPage()
+                    }
                 }
             }
         }
@@ -89,6 +101,10 @@ class ReaderViewModel @Inject constructor(
         }
         layoutConstraints = newConstraints
 
+        if (sessionHandle?.navigatorAdapter != null) {
+            return
+        }
+
         viewModelScope.launch {
             renderCurrentPage()
         }
@@ -96,6 +112,9 @@ class ReaderViewModel @Inject constructor(
 
     fun onWebSchemeUrl(url: String): Boolean {
         val handle = sessionHandle ?: return false
+        if (handle.navigatorAdapter != null) {
+            return false
+        }
         val handled = ReaderWebViewLinkRouter.tryHandle(
             url = url,
             controller = handle.controller,
@@ -112,19 +131,43 @@ class ReaderViewModel @Inject constructor(
 
     private fun observeProgress(bookId: Long, handle: ReaderSessionHandle) {
         progressJob?.cancel()
+        val navigatorAdapter = handle.navigatorAdapter
         progressJob = viewModelScope.launch {
-            handle.controller.state
-                .map { state -> state.locator to state.progression.percent }
-                .distinctUntilChanged()
-                .debounce(800L)
-                .collect { (locator, percent) ->
-                    saveProgressUseCase(bookId = bookId, locator = locator, progression = percent)
-                }
+            if (navigatorAdapter != null) {
+                navigatorAdapter.locatorFlow
+                    .mapNotNull { it }
+                    .map { locator -> locator to locator.progressionFromExtras() }
+                    .distinctUntilChanged()
+                    .debounce(800L)
+                    .collect { (locator, percent) ->
+                        lastObservedLocator = locator
+                        lastObservedProgression = percent
+                        saveProgressUseCase(bookId = bookId, locator = locator, progression = percent)
+                    }
+            } else {
+                handle.controller.state
+                    .map { state -> state.locator to state.progression.percent }
+                    .distinctUntilChanged()
+                    .debounce(800L)
+                    .collect { (locator, percent) ->
+                        lastObservedLocator = locator
+                        lastObservedProgression = percent
+                        saveProgressUseCase(bookId = bookId, locator = locator, progression = percent)
+                    }
+            }
         }
     }
 
     private suspend fun renderCurrentPage() {
         val handle = sessionHandle ?: return
+        val navigatorAdapter = handle.navigatorAdapter
+        if (navigatorAdapter != null) {
+            _uiState.value = ReaderUiState.Navigator(
+                sessionId = handle.session.id.value,
+                adapter = navigatorAdapter
+            )
+            return
+        }
         val constraints = layoutConstraints ?: return
 
         when (val layoutResult = handle.controller.setLayoutConstraints(constraints)) {
@@ -183,19 +226,34 @@ class ReaderViewModel @Inject constructor(
         val handle = sessionHandle
         val bookId = currentBookId
         if (handle != null && bookId != null) {
-            val state = handle.controller.state.value
+            val fallbackState = handle.controller.state.value
+            val finalLocator = lastObservedLocator ?: fallbackState.locator
+            val finalProgression = if (lastObservedLocator != null) {
+                lastObservedProgression
+            } else {
+                fallbackState.progression.percent
+            }
             runCatching {
                 saveProgressUseCase(
                     bookId = bookId,
-                    locator = state.locator,
-                    progression = state.progression.percent
+                    locator = finalLocator,
+                    progression = finalProgression
                 )
             }
         }
 
         runCatching { handle?.close() }
         sessionHandle = null
+        lastObservedLocator = null
+        lastObservedProgression = 0.0
     }
+}
+
+private fun Locator.progressionFromExtras(): Double {
+    val progression = extras["progression"]?.toDoubleOrNull()
+        ?: extras["totalProgression"]?.toDoubleOrNull()
+        ?: 0.0
+    return progression.coerceIn(0.0, 1.0)
 }
 
 private fun ReaderError.toUserMessage(): String {

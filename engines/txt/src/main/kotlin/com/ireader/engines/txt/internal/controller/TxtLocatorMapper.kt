@@ -19,14 +19,7 @@ internal object TxtLocatorExtras {
 
 internal class TxtLocatorMapper(
     private val store: TxtTextStore,
-    private val snippetLength: Int = 48,
-    private val sampleStrideChars: Int = 32 * 1024,
-    private val sampleWindowChars: Int = 512,
-    private val maxSamples: Int = 512,
-    private val smallDocumentFullScanThresholdChars: Int = 600_000,
-    private val snippetWindowMinChars: Int = 4_096,
-    private val snippetWindowMaxChars: Int = 256_000,
-    private val snippetWindowCapChars: Int = 1_000_000
+    private val config: LocatorConfig = LocatorConfig()
 ) {
     private companion object {
         private val SEARCH_WINDOW_SCALES = intArrayOf(1, 2, 4)
@@ -113,9 +106,9 @@ internal class TxtLocatorMapper(
     }
 
     private suspend fun readSnippet(offset: Int, totalChars: Int): String {
-        val half = (snippetLength / 2).coerceAtLeast(12)
+        val half = (config.snippetLength / 2).coerceAtLeast(12)
         val start = max(0, offset - half)
-        val end = min(totalChars, start + snippetLength.coerceAtLeast(24))
+        val end = min(totalChars, start + config.snippetLength.coerceAtLeast(24))
         if (end <= start) return ""
         return store.readRange(start, end)
     }
@@ -125,10 +118,12 @@ internal class TxtLocatorMapper(
         snippet: String,
         totalChars: Int
     ): Int? {
-        val baseWindow = (snippet.length * 1024)
-            .coerceIn(snippetWindowMinChars, snippetWindowMaxChars)
+        val baseWindow = (snippet.length * 1024).coerceIn(
+            config.snippetWindowMinChars,
+            config.snippetWindowMaxChars
+        )
         for (scale in SEARCH_WINDOW_SCALES) {
-            val size = (baseWindow * scale).coerceAtMost(snippetWindowCapChars)
+            val size = (baseWindow * scale).coerceAtMost(config.snippetWindowCapChars)
             val windowStart = (fallbackOffset - size / 2).coerceAtLeast(0)
             val windowEnd = (windowStart + size).coerceAtMost(totalChars)
             if (windowEnd <= windowStart) continue
@@ -139,7 +134,7 @@ internal class TxtLocatorMapper(
 
         searchSparseSamples(snippet, fallbackOffset, totalChars)?.let { return it }
 
-        if (totalChars <= smallDocumentFullScanThresholdChars) {
+        if (totalChars <= config.smallDocumentFullScanThresholdChars) {
             val full = store.readRange(0, totalChars)
             val nearest = nearestMatch(full, snippet, fallbackOffset)
             if (nearest >= 0) return nearest
@@ -174,13 +169,13 @@ internal class TxtLocatorMapper(
         val cached = sparseIndex
         if (cached != null && cached.totalChars == totalChars) return cached
 
-        val stride = sampleStrideChars
-            .coerceAtLeast(max(snippetLength * 4, 2_048))
+        val stride = config.sampleStrideChars
+            .coerceAtLeast(max(config.snippetLength * 4, 2_048))
             .coerceAtMost(max(totalChars, 2_048))
-        val windowChars = sampleWindowChars
-            .coerceAtLeast(snippetLength * 2)
+        val windowChars = config.sampleWindowChars
+            .coerceAtLeast(config.snippetLength * 2)
             .coerceIn(128, 4096)
-        val limit = maxSamples.coerceAtLeast(16)
+        val limit = config.maxSamples.coerceAtLeast(16)
 
         val samples = ArrayList<SnippetSample>(min(limit, (totalChars / stride) + 2))
         var offset = 0

@@ -24,7 +24,8 @@ class TxtEngineConfigTest {
             locatorSnippetWindowMinChars = 32,
             locatorSnippetWindowMaxChars = 64,
             locatorSnippetWindowCapChars = 128,
-            maxSearchHitsDefault = 0
+            maxSearchHitsDefault = 0,
+            maxTextExtractChars = 32
         ).normalized()
 
         assertTrue(normalized.paginationWriteEveryNewStarts >= 1)
@@ -40,6 +41,6 @@ class TxtEngineConfigTest {
         assertTrue(normalized.locatorSnippetWindowMaxChars >= normalized.locatorSnippetWindowMinChars)
         assertTrue(normalized.locatorSnippetWindowCapChars >= normalized.locatorSnippetWindowMaxChars)
         assertTrue(normalized.maxSearchHitsDefault >= 1)
+        assertTrue(normalized.maxTextExtractChars >= 1_024)
     }
 }
-

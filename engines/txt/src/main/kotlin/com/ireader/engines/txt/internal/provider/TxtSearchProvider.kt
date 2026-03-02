@@ -44,37 +44,62 @@ internal class TxtSearchProvider(
             if (chunk.isEmpty()) break
 
             val hasNextChunk = cursor + chunkSize < totalChars
-            var searchFrom = 0
-            while (searchFrom <= chunk.length - query.length && emitted < maxHits) {
-                coroutineContext.ensureActive()
+            if (options.caseSensitive && !options.wholeWord) {
+                var searchFrom = 0
+                while (searchFrom <= chunk.length - query.length && emitted < maxHits) {
+                    coroutineContext.ensureActive()
+                    val found = chunk.indexOf(query, searchFrom)
+                    if (found < 0) break
+                    if (hasNextChunk && found >= chunkSize) break
 
-                val found = indexOfMatch(
-                    haystack = chunk,
-                    needle = query,
-                    start = searchFrom,
-                    ignoreCase = !options.caseSensitive
-                )
-                if (found < 0) break
-                if (hasNextChunk && found >= chunkSize) break
-                if (options.wholeWord && !isWholeWord(chunk, found, query.length)) {
-                    searchFrom = found + query.length
-                    continue
-                }
-
-                val start = cursor + found
-                val end = start + query.length
-                emit(
-                    SearchHit(
-                        range = LocatorRange(
-                            start = locatorMapper.locatorForOffsetFast(start, totalChars),
-                            end = locatorMapper.locatorForBoundaryOffset(end.coerceAtMost(totalChars), totalChars)
-                        ),
-                        excerpt = buildExcerpt(chunk, found, query.length),
-                        sectionTitle = null
+                    val start = cursor + found
+                    val end = start + query.length
+                    emit(
+                        SearchHit(
+                            range = LocatorRange(
+                                start = locatorMapper.locatorForOffsetFast(start, totalChars),
+                                end = locatorMapper.locatorForBoundaryOffset(end.coerceAtMost(totalChars), totalChars)
+                            ),
+                            excerpt = buildExcerpt(chunk, found, query.length),
+                            sectionTitle = null
+                        )
                     )
-                )
-                emitted += 1
-                searchFrom = found + query.length
+                    emitted += 1
+                    searchFrom = found + query.length
+                }
+            } else {
+                var searchFrom = 0
+                while (searchFrom <= chunk.length - query.length && emitted < maxHits) {
+                    coroutineContext.ensureActive()
+
+                    val found = indexOfMatch(
+                        haystack = chunk,
+                        needle = query,
+                        start = searchFrom,
+                        ignoreCase = !options.caseSensitive
+                    )
+                    if (found < 0) break
+                    if (hasNextChunk && found >= chunkSize) break
+                    if (options.wholeWord && !isWholeWord(chunk, found, query.length)) {
+                        searchFrom = found + query.length
+                        continue
+                    }
+
+                    val start = cursor + found
+                    val end = start + query.length
+                    emit(
+                        SearchHit(
+                            range = LocatorRange(
+                                start = locatorMapper.locatorForOffsetFast(start, totalChars),
+                                end = locatorMapper.locatorForBoundaryOffset(end.coerceAtMost(totalChars), totalChars)
+                            ),
+                            excerpt = buildExcerpt(chunk, found, query.length),
+                            sectionTitle = null
+                        )
+                    )
+                    emitted += 1
+                    searchFrom = found + query.length
+                }
             }
 
             cursor += chunkSize

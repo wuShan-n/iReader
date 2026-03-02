@@ -6,13 +6,12 @@ import com.ireader.engines.txt.internal.controller.TxtLocatorMapper
 import com.ireader.engines.txt.internal.paging.TxtLastPositionStore
 import com.ireader.engines.txt.internal.paging.TxtPager
 import com.ireader.engines.txt.internal.paging.TxtPaginationStore
-import com.ireader.engines.txt.internal.provider.InMemoryAnnotationProvider
 import com.ireader.engines.txt.internal.provider.TxtOutlineCache
 import com.ireader.engines.txt.internal.provider.TxtOutlineProvider
 import com.ireader.engines.txt.internal.provider.TxtSearchProvider
 import com.ireader.engines.txt.internal.provider.TxtTextProvider
 import com.ireader.engines.txt.internal.storage.TxtTextStore
-import com.ireader.engines.txt.toReaderError
+import com.ireader.engines.txt.internal.util.toReaderError
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.AnnotationProvider
@@ -53,24 +52,14 @@ internal class TxtSession private constructor(
             initialStartChar: Int,
             initialConfig: RenderConfig.ReflowText,
             ioDispatcher: CoroutineDispatcher,
-            engineConfig: TxtEngineConfig
+            engineConfig: TxtEngineConfig,
+            locatorMapper: TxtLocatorMapper,
+            annotationProvider: AnnotationProvider
         ): ReaderResult<ReaderSession> = withContext(ioDispatcher) {
             try {
                 val pager = TxtPager(
                     store = store,
                     chunkSizeChars = engineConfig.chunkSizeChars
-                )
-                val annotationProvider = InMemoryAnnotationProvider()
-                val locatorMapper = TxtLocatorMapper(
-                    store = store,
-                    snippetLength = engineConfig.snippetLength,
-                    sampleStrideChars = engineConfig.locatorSampleStrideChars,
-                    sampleWindowChars = engineConfig.locatorSampleWindowChars,
-                    maxSamples = engineConfig.locatorMaxSamples,
-                    smallDocumentFullScanThresholdChars = engineConfig.locatorSmallDocumentFullScanThresholdChars,
-                    snippetWindowMinChars = engineConfig.locatorSnippetWindowMinChars,
-                    snippetWindowMaxChars = engineConfig.locatorSnippetWindowMaxChars,
-                    snippetWindowCapChars = engineConfig.locatorSnippetWindowCapChars
                 )
                 val controller = TxtController(
                     store = store,
@@ -99,7 +88,10 @@ internal class TxtSession private constructor(
                             locatorMapper = locatorMapper,
                             defaultMaxHits = engineConfig.maxSearchHitsDefault
                         ),
-                        text = TxtTextProvider(store),
+                        text = TxtTextProvider(
+                            store = store,
+                            maxRangeChars = engineConfig.maxTextExtractChars
+                        ),
                         annotations = annotationProvider,
                         resources = null
                     )

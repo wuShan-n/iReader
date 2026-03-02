@@ -4,13 +4,12 @@ import android.os.SystemClock
 import com.ireader.engines.txt.TxtEngineConfig
 import com.ireader.engines.txt.internal.paging.PageSlice
 import com.ireader.engines.txt.internal.paging.PageStartsIndex
-import com.ireader.engines.txt.internal.paging.PaginationCache
 import com.ireader.engines.txt.internal.paging.RenderKey
 import com.ireader.engines.txt.internal.paging.TxtLastPositionStore
 import com.ireader.engines.txt.internal.paging.TxtPager
 import com.ireader.engines.txt.internal.paging.TxtPaginationStore
 import com.ireader.engines.txt.internal.storage.TxtTextStore
-import com.ireader.engines.txt.toReaderError
+import com.ireader.engines.txt.internal.util.toReaderError
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.AnnotationProvider
@@ -35,8 +34,10 @@ import com.ireader.reader.model.Progression
 import kotlin.math.min
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -44,6 +45,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -62,8 +64,9 @@ internal class TxtController(
 ) : ReaderController {
 
     private val mutex = Mutex()
-    private val cache = PaginationCache(maxPages = engineConfig.pageCacheSize.coerceAtLeast(4))
-    private val historyStarts = ArrayDeque<Int>()
+    private val pageCache = TxtPageSliceCache(maxPages = engineConfig.pageCacheSize)
+    private val navigationHistory = TxtNavigationHistory()
+    private val persistenceQueue = Channel<suspend () -> Unit>(capacity = Channel.UNLIMITED)
 
     private var constraints: LayoutConstraints? = null
     private var config: RenderConfig.ReflowText = RenderConfig.ReflowText()
@@ -80,7 +83,13 @@ internal class TxtController(
     private var lastSavedAtMs: Long = 0L
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var prefetchJob: Job? = null
+    private val persistenceWorker = persistenceScope.launch {
+        for (task in persistenceQueue) {
+            runCatching { task() }
+        }
+    }
 
     private val _events = MutableSharedFlow<ReaderEvent>(extraBufferCapacity = 64)
     override val events: Flow<ReaderEvent> = _events.asSharedFlow()
@@ -99,7 +108,7 @@ internal class TxtController(
     override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> {
         return mutex.withLock {
             this.constraints = constraints
-            cache.clear()
+            pageCache.clear()
             currentSlice = null
 
             val total = totalCharsLocked()
@@ -129,7 +138,7 @@ internal class TxtController(
                 is RenderConfig.ReflowText -> config
                 else -> RenderConfig.ReflowText()
             }
-            cache.clear()
+            pageCache.clear()
             currentSlice = null
             _state.value = _state.value.copy(config = this.config)
             ensureRenderBucketLocked()
@@ -159,7 +168,7 @@ internal class TxtController(
                 return@withLock renderLocked(c, policy)
             }
 
-            pushHistoryLocked(currentStartChar)
+            navigationHistory.push(currentStartChar)
             currentStartChar = slice.endChar
             currentSlice = null
             renderLocked(c, policy)
@@ -172,15 +181,11 @@ internal class TxtController(
                 ReaderError.Internal("LayoutConstraints not set")
             )
 
-            if (currentStartChar <= 0 && historyStarts.isEmpty()) {
+            if (currentStartChar <= 0 && navigationHistory.isEmpty()) {
                 return@withLock renderLocked(c, policy)
             }
 
-            val previous = if (historyStarts.isNotEmpty()) {
-                historyStarts.removeLast()
-            } else {
-                computePrevStartLocked(c)
-            }
+            val previous = navigationHistory.popOrNull() ?: computePrevStartLocked(c)
 
             currentStartChar = previous.coerceAtLeast(0)
             currentSlice = null
@@ -271,7 +276,7 @@ internal class TxtController(
 
     override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
         return mutex.withLock {
-            cache.clear()
+            pageCache.clear()
             currentSlice = null
             ReaderResult.Ok(Unit)
         }
@@ -279,16 +284,25 @@ internal class TxtController(
 
     override fun close() {
         prefetchJob?.cancel()
-        scope.cancel()
-        renderKey?.let { key ->
-            val start = currentSlice?.startChar ?: currentStartChar
-            val total = if (totalCharsCache > 0) totalCharsCache else (start + 1)
-            val locator = locatorMapper.locatorForOffsetFast(start, total.coerceAtLeast(1))
-            lastPositionStore.save(key, locator)
-            pageStarts?.let { starts ->
-                paginationStore.flush(key, starts)
+        runBlocking {
+            renderKey?.let { key ->
+                val start = currentSlice?.startChar ?: currentStartChar
+                val total = if (totalCharsCache > 0) totalCharsCache else (start + 1)
+                val locator = locatorMapper.locatorForOffsetFast(start, total.coerceAtLeast(1))
+                runCatching {
+                    persistenceQueue.send {
+                        lastPositionStore.save(key, locator)
+                        pageStarts?.let { starts ->
+                            paginationStore.flush(key, starts)
+                        }
+                    }
+                }
             }
+            persistenceQueue.close()
+            persistenceWorker.join()
         }
+        persistenceScope.cancel()
+        scope.cancel()
     }
 
     private suspend fun renderLocked(
@@ -306,8 +320,12 @@ internal class TxtController(
             val starts = pageStarts
                 ?: return ReaderResult.Err(ReaderError.Internal("Pagination bucket not initialized"))
             val newAdds = recordPageBoundaries(starts, slice, total)
-            renderKey?.let { key ->
-                paginationStore.maybePersist(key, starts, newAdds)
+            if (newAdds > 0) {
+                renderKey?.let { key ->
+                    enqueuePersistence {
+                        paginationStore.maybePersist(key, starts, newAdds)
+                    }
+                }
             }
 
             val locator = locatorMapper.locatorForOffset(slice.startChar, total)
@@ -382,7 +400,7 @@ internal class TxtController(
                 if (start != lastSavedStartChar && (now - lastSavedAtMs) >= lastPositionStore.minIntervalMs) {
                     lastSavedStartChar = start
                     lastSavedAtMs = now
-                    lastPositionStore.save(key, locator)
+                    enqueuePersistence { lastPositionStore.save(key, locator) }
                 }
             }
 
@@ -409,14 +427,13 @@ internal class TxtController(
         constraints: LayoutConstraints,
         policy: RenderPolicy
     ): Pair<PageSlice, Boolean> {
-        val cacheNamespace = currentCacheNamespace()
         if (policy.allowCache) {
-            cache.get(startChar, cacheNamespace)?.let { return it to true }
+            pageCache.get(startChar, renderKey)?.let { return it to true }
         }
 
         val slice = pager.pageAt(startChar, constraints, config)
         if (policy.allowCache) {
-            cache.put(slice, cacheNamespace)
+            pageCache.put(slice, renderKey)
         }
         return slice to false
     }
@@ -425,13 +442,12 @@ internal class TxtController(
         startChar: Int,
         constraints: LayoutConstraints
     ): PageSlice? {
-        val cacheNamespace = currentCacheNamespace()
-        cache.get(startChar, cacheNamespace)?.let { return it }
+        pageCache.get(startChar, renderKey)?.let { return it }
         val total = totalCharsLocked()
         if (startChar >= total) return null
 
         val slice = pager.pageAt(startChar, constraints, config)
-        cache.put(slice, cacheNamespace)
+        pageCache.put(slice, renderKey)
         return slice
     }
 
@@ -451,13 +467,12 @@ internal class TxtController(
 
         ensureRenderBucketLocked()
         val starts = pageStarts ?: return 0
-        val cacheNamespace = currentCacheNamespace()
         var start = starts.floor(target) ?: 0
         start = start.coerceIn(0, total - 1)
 
         repeat(32) {
             val slice = pager.pageAt(start, constraints, config)
-            cache.put(slice, cacheNamespace)
+            pageCache.put(slice, renderKey)
             starts.addStart(slice.startChar)
             if (slice.endChar in 1 until total) {
                 starts.addStart(slice.endChar)
@@ -475,7 +490,6 @@ internal class TxtController(
         if (currentStartChar <= 0) return 0
         ensureRenderBucketLocked()
         val starts = pageStarts ?: return 0
-        val cacheNamespace = currentCacheNamespace()
 
         starts.floor(currentStartChar - 1)?.let { known ->
             if (known < currentStartChar) return known
@@ -488,7 +502,7 @@ internal class TxtController(
 
         repeat(24) {
             val slice = pager.pageAt(probe, constraints, config)
-            cache.put(slice, cacheNamespace)
+            pageCache.put(slice, renderKey)
             starts.addStart(slice.startChar)
             if (slice.endChar in 1 until total) {
                 starts.addStart(slice.endChar)
@@ -529,18 +543,9 @@ internal class TxtController(
         }
     }
 
-    private fun pushHistoryLocked(startChar: Int) {
-        val safe = startChar.coerceAtLeast(0)
-        if (historyStarts.isNotEmpty() && historyStarts.last() == safe) return
-        if (historyStarts.size >= 128) {
-            historyStarts.removeFirst()
-        }
-        historyStarts.addLast(safe)
-    }
-
     private fun moveToStartLocked(destinationStart: Int) {
         if (destinationStart == currentStartChar) return
-        pushHistoryLocked(currentStartChar)
+        navigationHistory.push(currentStartChar)
         currentStartChar = destinationStart
         currentSlice = null
     }
@@ -558,7 +563,7 @@ internal class TxtController(
         return additions
     }
 
-    private fun currentCacheNamespace(): String {
-        return renderKey?.toString() ?: "pending"
+    private fun enqueuePersistence(task: suspend () -> Unit) {
+        persistenceQueue.trySend(task)
     }
 }

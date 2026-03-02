@@ -2,6 +2,7 @@ package com.ireader.reader.runtime
 
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
+import com.ireader.reader.api.engine.NavigatorCapableSession
 import java.io.Closeable
 
 class ReaderSessionHandle(
@@ -16,6 +17,7 @@ class ReaderSessionHandle(
     val text = session.text
     val annotations = session.annotations
     val resources = session.resources
+    val navigatorAdapter = (session as? NavigatorCapableSession)?.navigatorAdapter
 
     override fun close() {
         // 逆序关闭更安全

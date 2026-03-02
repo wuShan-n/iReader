@@ -15,7 +15,10 @@ class TxtLocatorMapperTest {
     @Test
     fun locator_contains_snippet_and_progression() = runBlocking {
         val store = FakeStore("0123456789abcdefghijklmnopqrstuvwxyz")
-        val mapper = TxtLocatorMapper(store, snippetLength = 12)
+        val mapper = TxtLocatorMapper(
+            store = store,
+            config = LocatorConfig(snippetLength = 12)
+        )
 
         val locator = mapper.locatorForOffset(offset = 10, totalChars = store.totalChars())
 
@@ -28,14 +31,20 @@ class TxtLocatorMapperTest {
     @Test
     fun offset_for_locator_prefers_snippet_relocation() = runBlocking {
         val oldText = "Chapter 1\nHello world\nEnd"
-        val oldMapper = TxtLocatorMapper(FakeStore(oldText), snippetLength = 16)
+        val oldMapper = TxtLocatorMapper(
+            store = FakeStore(oldText),
+            config = LocatorConfig(snippetLength = 16)
+        )
         val locator = oldMapper.locatorForOffset(
             offset = oldText.indexOf("world"),
             totalChars = oldText.length
         )
 
         val newText = "Inserted preface\nChapter 1\nHello world\nEnd"
-        val newMapper = TxtLocatorMapper(FakeStore(newText), snippetLength = 16)
+        val newMapper = TxtLocatorMapper(
+            store = FakeStore(newText),
+            config = LocatorConfig(snippetLength = 16)
+        )
 
         val resolved = newMapper.offsetForLocator(locator, newText.length)
         val expected = newText.indexOf("world")
@@ -46,7 +55,10 @@ class TxtLocatorMapperTest {
     @Test
     fun offset_for_locator_falls_back_to_progression() = runBlocking {
         val text = "a".repeat(1000)
-        val mapper = TxtLocatorMapper(FakeStore(text), snippetLength = 16)
+        val mapper = TxtLocatorMapper(
+            store = FakeStore(text),
+            config = LocatorConfig(snippetLength = 16)
+        )
         val locator = Locator(
             scheme = LocatorSchemes.TXT_OFFSET,
             value = "12",

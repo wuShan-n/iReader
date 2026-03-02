@@ -11,7 +11,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 internal class TxtTextProvider(
-    private val store: TxtTextStore
+    private val store: TxtTextStore,
+    private val maxRangeChars: Int
 ) : TextProvider {
 
     override suspend fun getText(range: LocatorRange): ReaderResult<String> {
@@ -22,7 +23,7 @@ internal class TxtTextProvider(
 
         val from = min(start, end).coerceAtLeast(0)
         val to = max(start, end).coerceAtLeast(from)
-        val cappedEnd = min(to, from + 200_000)
+        val cappedEnd = min(to, from + maxRangeChars.coerceAtLeast(1))
         return ReaderResult.Ok(store.readRange(from, cappedEnd))
     }
 

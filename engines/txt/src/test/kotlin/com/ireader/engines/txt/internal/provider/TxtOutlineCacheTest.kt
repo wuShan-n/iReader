@@ -69,9 +69,44 @@ class TxtOutlineCacheTest {
         }
     }
 
+    @Test
+    fun saveToDisk_writes_version_header_and_can_round_trip() {
+        val dir = createTempDirectory(prefix = "txt-outline-version-").toFile()
+        try {
+            val cache = TxtOutlineCache(
+                config = TxtEngineConfig(
+                    cacheDir = dir,
+                    persistOutline = true,
+                    outlineAsTree = false
+                ),
+                docNamespace = "doc-version",
+                charsetName = "UTF-8"
+            )
+            val nodes = listOf(
+                com.ireader.reader.model.OutlineNode(
+                    title = "Chapter 1",
+                    locator = com.ireader.reader.model.Locator(
+                        scheme = com.ireader.reader.model.LocatorSchemes.TXT_OFFSET,
+                        value = "10"
+                    )
+                )
+            )
+
+            cache.saveToDisk(nodes)
+
+            val file = outlineFile(dir, "doc-version", "UTF-8")
+            val lines = file.readLines(Charsets.UTF_8)
+            assertTrue(lines.first().startsWith("#txt-outline-v"))
+            val restored = cache.loadFromDisk().orEmpty()
+            assertEquals(1, restored.size)
+            assertEquals("Chapter 1", restored.first().title)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     private fun outlineFile(baseDir: File, docNamespace: String, charset: String): File {
         val folder = File(baseDir, "reader-txt-v2/outline")
         return File(folder, "${docNamespace.hashCode()}_${charset.hashCode()}.txt")
     }
 }
-

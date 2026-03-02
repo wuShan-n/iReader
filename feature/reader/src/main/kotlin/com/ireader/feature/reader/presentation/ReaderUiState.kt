@@ -1,9 +1,15 @@
 package com.ireader.feature.reader.presentation
 
 import android.graphics.Bitmap
+import com.ireader.reader.api.render.ReaderNavigatorAdapter
 
 sealed interface ReaderUiState {
     data object Loading : ReaderUiState
+
+    data class Navigator(
+        val sessionId: String,
+        val adapter: ReaderNavigatorAdapter
+    ) : ReaderUiState
 
     data class Html(
         val pageId: String,
