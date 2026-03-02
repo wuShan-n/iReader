@@ -14,6 +14,15 @@ internal class ReflowPaginator(
 ) {
     private val lengthCache = SimpleLruCache<Int, Int>(maxSize = 64)
 
+    fun textLength(spineIndex: Int): Int {
+        return lengthCache.getOrPut(spineIndex) {
+            val file = File(container.rootDir, container.spinePath(spineIndex))
+            runCatching { XhtmlTextExtractor.extract(file) }
+                .getOrElse { runCatching { file.readText() }.getOrDefault("") }
+                .length
+        }
+    }
+
     fun pageCount(
         spineIndex: Int,
         constraints: LayoutConstraints?,
@@ -21,12 +30,7 @@ internal class ReflowPaginator(
     ): Int {
         if (constraints == null) return 1
 
-        val textLength = lengthCache.getOrPut(spineIndex) {
-            val file = File(container.rootDir, container.spinePath(spineIndex))
-            runCatching { XhtmlTextExtractor.extract(file) }
-                .getOrElse { runCatching { file.readText() }.getOrDefault("") }
-                .length
-        }
+        val textLength = textLength(spineIndex)
 
         val charsPerPage = charsPerPage(constraints, config, isCjk = textLength in 1..20_000)
             .coerceAtLeast(300)

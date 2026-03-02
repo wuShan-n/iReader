@@ -9,6 +9,7 @@ import com.ireader.reader.model.OutlineNode
 internal data class EpubContainer(
     val id: DocumentId,
     val rootDir: java.io.File,
+    val baseDir: java.io.File,
     val authority: String,
     val opf: EpubPackage,
     val outline: List<OutlineNode>

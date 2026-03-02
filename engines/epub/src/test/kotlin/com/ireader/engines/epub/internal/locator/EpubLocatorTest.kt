@@ -17,6 +17,7 @@ class EpubLocatorTest {
 
     private val container: EpubContainer by lazy {
         val root = Files.createTempDirectory("epub-locator").toFile()
+        val base = Files.createTempDirectory("epub-locator-base").toFile()
         val pkg = EpubPackage(
             metadata = DocumentMetadata(title = "Book"),
             manifest = mapOf(
@@ -36,6 +37,7 @@ class EpubLocatorTest {
         EpubContainer(
             id = DocumentId("epub:test"),
             rootDir = root,
+            baseDir = base,
             authority = "com.ireader.epub",
             opf = pkg,
             outline = emptyList()
@@ -67,5 +69,12 @@ class EpubLocatorTest {
             Locator(LocatorSchemes.EPUB_CFI, "epubcfi(/6/2)")
         )
         assertNull(index)
+    }
+
+    @Test
+    fun `reflow locator supports optional signature part`() {
+        val parsed = EpubLocator.parseReflowPage("2:9:12345")
+        assertEquals(2, parsed?.first)
+        assertEquals(9, parsed?.second)
     }
 }

@@ -102,6 +102,7 @@ internal class EpubOpener(
                 val container = EpubContainer(
                     id = docId,
                     rootDir = extractedDir,
+                    baseDir = baseDir,
                     authority = authority,
                     opf = pkg,
                     outline = toc

@@ -10,7 +10,7 @@ internal object HtmlComposer {
 
     private data class TemplateKey(
         val spineIndex: Int,
-        val configHash: Int,
+        val sig: Int,
         val viewportWidth: Int,
         val viewportHeight: Int
     )
@@ -24,14 +24,16 @@ internal object HtmlComposer {
         constraints: LayoutConstraints?,
         pageIndex: Int,
         baseRelPath: String,
-        anchorId: String?
+        anchorId: String?,
+        sig: Int,
+        spineIndexForMetrics: Int
     ): String {
         val width = constraints?.viewportWidthPx ?: 0
         val height = constraints?.viewportHeightPx ?: 0
 
         val key = TemplateKey(
             spineIndex = spineIndex,
-            configHash = config.hashCode(),
+            sig = sig,
             viewportWidth = width,
             viewportHeight = height
         )
@@ -60,6 +62,8 @@ internal object HtmlComposer {
                     const PAGE = __PAGE__;
                     const BASE_REL = "__BASE_REL__";
                     const ANCHOR = "__ANCHOR__";
+                    const SPINE = __SPINE__;
+                    const SIG = __SIG__;
 
                     function normalizePath(path){
                       const parts = [];
@@ -96,6 +100,89 @@ internal object HtmlComposer {
                       }
                     }
 
+                    function reportMetrics(){
+                      if(!VW || VW <= 0) return null;
+                      const scroller = document.scrollingElement || document.documentElement;
+                      const scrollWidth = scroller.scrollWidth || 0;
+                      const pages = Math.max(1, Math.ceil(scrollWidth / VW));
+                      const page = Math.max(0, Math.round((scroller.scrollLeft || 0) / VW));
+                      window.location.href = 'reader://metrics?spine=' + SPINE + '&sig=' + SIG + '&pages=' + pages + '&page=' + page;
+                      return { pages: pages, page: page };
+                    }
+
+                    function clamp01(value){
+                      return Math.max(0, Math.min(1, value));
+                    }
+
+                    function round3(value){
+                      return Math.round(value * 1000) / 1000;
+                    }
+
+                    function reportLinkBounds(page){
+                      try{
+                        const links = [];
+                        const nodes = document.querySelectorAll('a[href]');
+                        const maxCount = 40;
+                        const vh = Math.max(1, window.innerHeight || 1);
+                        for(let i = 0; i < nodes.length && links.length < maxCount; i++){
+                          const anchor = nodes[i];
+                          const rect = anchor.getBoundingClientRect();
+                          if(rect.right <= 0 || rect.bottom <= 0 || rect.left >= VW || rect.top >= vh){
+                            continue;
+                          }
+
+                          const href = anchor.getAttribute('href') || '';
+                          if(!href) continue;
+
+                          let key = '';
+                          if(isAbsoluteScheme(href)){
+                            key = 'E|' + href;
+                          }else{
+                            const fragment = href.includes('#') ? href.split('#')[1] : '';
+                            const resolved = resolveFrom(BASE_REL, href);
+                            const value = 'href:' + resolved + (fragment ? ('#' + fragment) : '');
+                            key = 'I|' + value;
+                          }
+
+                          const left = clamp01(rect.left / VW);
+                          const top = clamp01(rect.top / vh);
+                          const right = clamp01(rect.right / VW);
+                          const bottom = clamp01(rect.bottom / vh);
+                          if(right <= left || bottom <= top) continue;
+
+                          links.push({
+                            k: key,
+                            l: round3(left),
+                            t: round3(top),
+                            r: round3(right),
+                            b: round3(bottom)
+                          });
+                        }
+
+                        if(links.length === 0) return;
+                        const data = encodeURIComponent(JSON.stringify(links));
+                        window.location.href =
+                          'reader://linkbounds?spine=' + SPINE + '&sig=' + SIG + '&page=' + page + '&data=' + data;
+                      }catch(e){}
+                    }
+
+                    let reportTimer = 0;
+                    let lastReportedPage = -1;
+
+                    function reportAll(){
+                      const metrics = reportMetrics();
+                      if(!metrics) return;
+                      if(metrics.page !== lastReportedPage){
+                        lastReportedPage = metrics.page;
+                        reportLinkBounds(metrics.page);
+                      }
+                    }
+
+                    function debounceReport(){
+                      if(reportTimer) clearTimeout(reportTimer);
+                      reportTimer = setTimeout(reportAll, 120);
+                    }
+
                     document.addEventListener('click', function(event){
                       const anchor = event.target && event.target.closest ? event.target.closest('a[href]') : null;
                       if(!anchor) return;
@@ -115,9 +202,14 @@ internal object HtmlComposer {
                       window.location.href = 'reader://goto?scheme=epub.cfi&value=' + encodeURIComponent(value);
                     }, true);
 
+                    window.addEventListener('scroll', function(){
+                      debounceReport();
+                    }, {passive:true});
+
                     window.addEventListener('load', function(){
                       goToPage();
                       goToAnchor();
+                      setTimeout(reportAll, 0);
                     });
                   })();
                 </script>
@@ -131,6 +223,8 @@ internal object HtmlComposer {
             .replace("__PAGE__", pageIndex.toString())
             .replace("__BASE_REL__", escapeJs(baseRelPath))
             .replace("__ANCHOR__", escapeJs(anchorId.orEmpty()))
+            .replace("__SPINE__", spineIndexForMetrics.toString())
+            .replace("__SIG__", sig.toString())
     }
 
     private fun buildCss(config: RenderConfig.ReflowText, constraints: LayoutConstraints?): String {
