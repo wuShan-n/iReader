@@ -5,9 +5,12 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.render.InvalidateReason
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.NavigationAvailability
+import com.ireader.reader.api.render.PageId
 import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.RenderContent
+import com.ireader.reader.api.render.RenderMetrics
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
@@ -70,33 +73,28 @@ internal class ReadiumEpubController(
         return navigatorAdapter.submitConfig(reflow)
     }
 
-    override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> =
-        ReaderResult.Err(ReaderError.Internal("EPUB navigator session does not produce RenderPage"))
+    override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> {
+        val locator = navigatorAdapter.locatorFlow.value ?: state.value.locator
+        val page = virtualPage(locator = locator, policy = policy, cacheHit = true)
+        _events.tryEmit(ReaderEvent.Rendered(page.id, page.metrics))
+        return ReaderResult.Ok(page)
+    }
 
     override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> {
-        return when (val result = navigatorAdapter.next()) {
-            is ReaderResult.Ok -> ReaderResult.Err(ReaderError.Internal("EPUB navigator session does not produce RenderPage"))
-            is ReaderResult.Err -> result
-        }
+        return navigate(policy) { navigatorAdapter.next() }
     }
 
     override suspend fun prev(policy: RenderPolicy): ReaderResult<RenderPage> {
-        return when (val result = navigatorAdapter.prev()) {
-            is ReaderResult.Ok -> ReaderResult.Err(ReaderError.Internal("EPUB navigator session does not produce RenderPage"))
-            is ReaderResult.Err -> result
-        }
+        return navigate(policy) { navigatorAdapter.prev() }
     }
 
     override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> {
-        return when (val result = navigatorAdapter.goTo(locator)) {
-            is ReaderResult.Ok -> ReaderResult.Err(ReaderError.Internal("EPUB navigator session does not produce RenderPage"))
-            is ReaderResult.Err -> result
-        }
+        return navigate(policy) { navigatorAdapter.goTo(locator) }
     }
 
     override suspend fun goToProgress(percent: Double, policy: RenderPolicy): ReaderResult<RenderPage> {
         if (positionLocators.isEmpty()) {
-            return ReaderResult.Err(ReaderError.Internal("No position map for progression seek"))
+            return render(policy)
         }
         val safePercent = percent.coerceIn(0.0, 1.0)
         val index = (safePercent * (positionLocators.size - 1)).roundToInt()
@@ -106,7 +104,11 @@ internal class ReadiumEpubController(
 
     override suspend fun prefetchNeighbors(count: Int): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-    override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+    override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
+        val locator = navigatorAdapter.locatorFlow.value ?: state.value.locator
+        _state.value = buildState(locator)
+        return ReaderResult.Ok(Unit)
+    }
 
     override fun close() {
         scope.cancel()
@@ -126,9 +128,48 @@ internal class ReadiumEpubController(
                 current = current,
                 total = 100
             ),
-            nav = NavigationAvailability(canGoPrev = true, canGoNext = true),
+            nav = NavigationAvailability(
+                canGoPrev = percent > 0.00001,
+                canGoNext = percent < 0.99999
+            ),
             titleInView = locator.extras["title"],
             config = config
+        )
+    }
+
+    private suspend fun navigate(
+        policy: RenderPolicy,
+        operation: suspend () -> ReaderResult<Unit>
+    ): ReaderResult<RenderPage> {
+        return when (val result = operation()) {
+            is ReaderResult.Err -> result
+            is ReaderResult.Ok -> {
+                val locator = navigatorAdapter.locatorFlow.value ?: state.value.locator
+                _state.value = buildState(locator)
+                _events.tryEmit(ReaderEvent.PageChanged(locator))
+
+                val page = virtualPage(locator = locator, policy = policy, cacheHit = false)
+                _events.tryEmit(ReaderEvent.Rendered(page.id, page.metrics))
+                ReaderResult.Ok(page)
+            }
+        }
+    }
+
+    private fun virtualPage(
+        locator: Locator,
+        policy: RenderPolicy,
+        cacheHit: Boolean
+    ): RenderPage {
+        return RenderPage(
+            id = PageId("epub:navigator:${locator.scheme}:${locator.value.hashCode()}"),
+            locator = locator,
+            content = RenderContent.Html(
+                inlineHtml = "<!doctype html><html><body></body></html>"
+            ),
+            metrics = RenderMetrics(
+                renderTimeMs = 0L,
+                cacheHit = cacheHit && policy.allowCache
+            )
         )
     }
 }

@@ -6,6 +6,7 @@ import com.ireader.engines.epub.internal.readium.ReadiumLocatorMapper
 import com.ireader.engines.epub.internal.readium.ReadiumNavigatorAdapter
 import com.ireader.engines.epub.internal.readium.ReadiumOutlineProvider
 import com.ireader.engines.epub.internal.readium.ReadiumPreferencesMapper
+import com.ireader.engines.epub.internal.readium.ReadiumResourceProvider
 import com.ireader.engines.epub.internal.readium.ReadiumSearchProvider
 import com.ireader.engines.epub.internal.readium.ReadiumTextProvider
 import com.ireader.reader.api.engine.NavigatorCapableSession
@@ -85,7 +86,7 @@ internal class ReadiumEpubSession private constructor(
                     search = ReadiumSearchProvider(publication),
                     text = ReadiumTextProvider(publication),
                     annotations = EpubAnnotationProvider(),
-                    resources = null
+                    resources = ReadiumResourceProvider(publication)
                 )
             )
         }

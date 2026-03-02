@@ -45,11 +45,13 @@ internal class EpubDocument(
         val meta = publication.metadata
         val firstAuthor = meta.authors.firstOrNull()?.name
         val language = meta.languages.firstOrNull()
+        val coverPath = publication.coverPathInPackage()
 
         val extra = buildMap {
             put("layout", meta.presentation.layout?.value.orEmpty())
             put("description", meta.description.orEmpty())
             meta.numberOfPages?.let { put("numberOfPages", it.toString()) }
+            coverPath?.let { put("coverPath", it) }
         }.filterValues { it.isNotBlank() }
 
         return ReaderResult.Ok(
@@ -80,4 +82,43 @@ internal class EpubDocument(
         runCatching { publication.close() }
         runCatching { asset.close() }
     }
+}
+
+private fun Publication.coverPathInPackage(): String? {
+    val fromCoverRel = linkWithRel("cover")
+        ?.href
+        ?.toString()
+        ?.normalizeHref()
+    if (!fromCoverRel.isNullOrBlank()) {
+        return fromCoverRel
+    }
+
+    val imageLike = (resources + links + readingOrder).filter { link ->
+        val mediaType = link.mediaType
+        mediaType == null || mediaType.isBitmap || mediaType.toString().startsWith("image/")
+    }
+
+    val fromProperty = imageLike.firstOrNull { link ->
+        val properties = link.properties.otherProperties
+        properties.containsKey("cover-image") ||
+            properties.containsKey("coverImage") ||
+            properties["cover"] == true ||
+            properties["cover-image"] == true
+    }?.href?.toString()?.normalizeHref()
+    if (!fromProperty.isNullOrBlank()) {
+        return fromProperty
+    }
+
+    return imageLike.firstOrNull()
+        ?.href
+        ?.toString()
+        ?.normalizeHref()
+}
+
+private fun String.normalizeHref(): String? {
+    val value = trim()
+        .substringBefore('?')
+        .substringBefore('#')
+        .trimStart('/')
+    return value.ifBlank { null }
 }
