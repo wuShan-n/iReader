@@ -142,7 +142,12 @@ class EnrichWorker @AssistedInject constructor(
         thumbWidth: Int,
         thumbHeight: Int
     ) {
-        val parsed = EpubZipEnricher.parse(file)
+        // 统一由引擎提供元数据（包括 extra["coverPath"]）
+        val metadata = if (needMeta || needCover) {
+            readMetadataFromRuntime(book = book, file = file)
+        } else {
+            null
+        }
 
         var newTitle: String? = book.title
         var newAuthor: String? = book.author
@@ -150,30 +155,23 @@ class EnrichWorker @AssistedInject constructor(
         var newIdentifier: String? = book.identifier
         var coverPath: String? = book.coverPath
 
-        if (needMeta && parsed != null) {
-            val metadata = parsed.metadata
-            if (newTitle.isNullOrBlank()) {
-                newTitle = metadata.title
-            }
-            if (newAuthor.isNullOrBlank()) {
-                newAuthor = metadata.author
-            }
-            if (newLanguage.isNullOrBlank()) {
-                newLanguage = metadata.language
-            }
-            if (newIdentifier.isNullOrBlank()) {
-                newIdentifier = metadata.identifier
-            }
+        if (needMeta && metadata != null) {
+            if (newTitle.isNullOrBlank()) newTitle = metadata.title
+            if (newAuthor.isNullOrBlank()) newAuthor = metadata.author
+            if (newLanguage.isNullOrBlank()) newLanguage = metadata.language
+            if (newIdentifier.isNullOrBlank()) newIdentifier = metadata.identifier
         }
 
         if (needCover) {
             val coverFile = storage.coverFile(book.id)
             val titleForCover = newTitle ?: book.title ?: book.displayName ?: "Untitled"
 
-            val extracted = parsed?.coverPathInZip?.let { coverPathInZip ->
+            val coverPathInZip = metadata?.extra?.get("coverPath")
+
+            val extracted = coverPathInZip?.let { pathInZip ->
                 EpubZipEnricher.tryExtractCoverToPng(
                     file = file,
-                    coverPathInZip = coverPathInZip,
+                    coverPathInZip = pathInZip,
                     outFile = coverFile,
                     reqWidth = thumbWidth,
                     reqHeight = thumbHeight
@@ -196,7 +194,6 @@ class EnrichWorker @AssistedInject constructor(
             coverPath = coverPath
         )
     }
-
     private suspend fun enrichTxt(
         book: BookEntity,
         file: File,

@@ -21,6 +21,10 @@ internal object OpfParser {
         var identifier: String? = null
         var spineTocId: String? = null
 
+        // ---- cover detection (EPUB2 + EPUB3 common patterns) ----
+        var coverIdFromMeta: String? = null               // <meta name="cover" content="cover-image-id" />
+        var coverHrefFromProperties: String? = null       // <item properties="cover-image" ... />
+
         XmlDom.descendants(root).forEach { element ->
             when (XmlDom.localName(element).lowercase()) {
                 "title" -> if (title == null) {
@@ -39,6 +43,15 @@ internal object OpfParser {
                     identifier = XmlDom.textContentTrimmed(element)
                 }
 
+                "meta" -> {
+                    // EPUB2 cover convention: <meta name="cover" content="cover-image-id" />
+                    val metaName = XmlDom.attr(element, "name")?.trim()
+                    val metaContent = XmlDom.attr(element, "content")?.trim()
+                    if (metaName.equals("cover", ignoreCase = true) && !metaContent.isNullOrBlank()) {
+                        coverIdFromMeta = metaContent
+                    }
+                }
+
                 "spine" -> {
                     spineTocId = XmlDom.attr(element, "toc")?.trim()
                 }
@@ -48,6 +61,7 @@ internal object OpfParser {
                     val href = XmlDom.attr(element, "href")?.trim().orEmpty()
                     val mediaType = XmlDom.attr(element, "media-type")?.trim()
                     val properties = XmlDom.attr(element, "properties")?.trim()
+
                     if (id.isNotBlank() && href.isNotBlank()) {
                         manifest[id] = EpubManifestItem(
                             id = id,
@@ -55,6 +69,11 @@ internal object OpfParser {
                             mediaType = mediaType,
                             properties = properties
                         )
+                    }
+
+                    // EPUB3 cover convention: properties contains "cover-image"
+                    if (coverHrefFromProperties == null && hasCoverImageProperty(properties)) {
+                        coverHrefFromProperties = href
                     }
                 }
 
@@ -89,11 +108,29 @@ internal object OpfParser {
                 ?.let { id -> manifest[id]?.href }
                 ?.let { href -> PathResolver.resolveFrom(opfPath, href) }
 
+        // ---- resolve cover path into zip-internal normalized path ----
+        val coverHref = when {
+            !coverHrefFromProperties.isNullOrBlank() -> coverHrefFromProperties
+            !coverIdFromMeta.isNullOrBlank() -> manifest[coverIdFromMeta]?.href
+            else -> null
+        }
+
+        val coverPath = coverHref
+            ?.let(::stripQueryAndFragment)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { href -> PathResolver.resolveFrom(opfPath, href) }
+            ?.let { PathResolver.normalizePath(it) }
+
         val metadata = DocumentMetadata(
             title = title,
             author = author,
             language = language,
-            identifier = identifier
+            identifier = identifier,
+            extra = buildMap {
+                if (!coverPath.isNullOrBlank()) {
+                    put("coverPath", coverPath)
+                }
+            }
         )
 
         val mediaTypeByPath = buildMap {
@@ -123,5 +160,16 @@ internal object OpfParser {
         return properties
             .split(' ')
             .any { property -> property.equals("nav", ignoreCase = true) }
+    }
+
+    private fun hasCoverImageProperty(properties: String?): Boolean {
+        if (properties.isNullOrBlank()) return false
+        return properties
+            .split(' ')
+            .any { p -> p.equals("cover-image", ignoreCase = true) }
+    }
+
+    private fun stripQueryAndFragment(href: String): String {
+        return href.substringBefore('#').substringBefore('?')
     }
 }
