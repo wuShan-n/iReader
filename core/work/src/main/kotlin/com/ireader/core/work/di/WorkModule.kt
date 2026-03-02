@@ -2,8 +2,10 @@ package com.ireader.core.work.di
 
 import android.content.Context
 import androidx.work.WorkManager
+import com.ireader.core.data.book.BookIndexer
 import com.ireader.core.files.importing.ImportWorkScheduler
 import com.ireader.core.work.WorkImportScheduler
+import com.ireader.core.work.index.DefaultBookIndexer
 import com.ireader.reader.runtime.format.BookFormatDetector
 import com.ireader.reader.runtime.format.DefaultBookFormatDetector
 import dagger.Binds
@@ -20,6 +22,10 @@ abstract class WorkBindingsModule {
     @Binds
     @Singleton
     abstract fun bindImportWorkScheduler(impl: WorkImportScheduler): ImportWorkScheduler
+
+    @Binds
+    @Singleton
+    abstract fun bindBookIndexer(impl: DefaultBookIndexer): BookIndexer
 }
 
 @Module

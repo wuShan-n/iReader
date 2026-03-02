@@ -1,0 +1,4 @@
+interface:
+  display_name: "Context Bridge"
+  short_description: "Build and export implementation context bundles."
+  default_prompt: "Use $context-bridge to prepare a full implementation context bundle for an external AI and write it to a markdown file."

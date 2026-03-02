@@ -11,4 +11,5 @@ dependencies {
     api(project(":core:model"))
     implementation(project(":core:database"))
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.room.runtime)
 }

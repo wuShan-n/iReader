@@ -1,15 +1,15 @@
 package com.ireader.reader.runtime
 
+import com.ireader.core.files.source.DocumentSource
 import com.ireader.reader.api.engine.EngineRegistry
 import com.ireader.reader.api.engine.ReaderDocument
-import com.ireader.reader.api.engine.ReaderEngine
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
-import com.ireader.reader.model.BookFormat
-import com.ireader.reader.model.Locator
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.core.files.source.DocumentSource
+import com.ireader.reader.model.BookFormat
+import com.ireader.reader.model.DocumentMetadata
+import com.ireader.reader.model.Locator
 import com.ireader.reader.runtime.error.toReaderError
 import com.ireader.reader.runtime.format.BookFormatDetector
 import com.ireader.reader.runtime.format.DefaultBookFormatDetector
@@ -48,12 +48,41 @@ class DefaultReaderRuntime(
                 when (sessionResult) {
                     is ReaderResult.Ok -> ReaderResult.Ok(ReaderSessionHandle(document, sessionResult.value))
                     is ReaderResult.Err -> {
-                        // session 创建失败要关 document，避免泄露
                         runCatching { document.close() }
                         ReaderResult.Err(sessionResult.error)
                     }
                 }
             }
+        }
+    }
+
+    override suspend fun probe(
+        source: DocumentSource,
+        options: OpenOptions
+    ): ReaderResult<BookProbeResult> {
+        val documentResult = openDocument(source = source, options = options)
+        return when (documentResult) {
+            is ReaderResult.Err -> documentResult
+            is ReaderResult.Ok -> {
+                val document = documentResult.value
+                val metadata = readMetadataSafely(document)
+                val result = BookProbeResult(
+                    format = document.format,
+                    documentId = document.id.value,
+                    metadata = metadata,
+                    coverBytes = null,
+                    capabilities = document.capabilities
+                )
+                runCatching { document.close() }
+                ReaderResult.Ok(result)
+            }
+        }
+    }
+
+    private suspend fun readMetadataSafely(document: ReaderDocument): DocumentMetadata? {
+        return when (val metadataResult = catchingSuspend { document.metadata() }) {
+            is ReaderResult.Ok -> metadataResult.value
+            is ReaderResult.Err -> null
         }
     }
 
@@ -65,7 +94,6 @@ class DefaultReaderRuntime(
         val engine = engineRegistry.engineFor(format)
             ?: return ReaderResult.Err(ReaderError.UnsupportedFormat(detected = format.name))
 
-        // 防御：引擎实现里如果 throw，这里统一收敛成 ReaderError
         return catchingSuspend { engine.open(source, options) }
     }
 
@@ -80,5 +108,3 @@ class DefaultReaderRuntime(
         }
     }
 }
-
-

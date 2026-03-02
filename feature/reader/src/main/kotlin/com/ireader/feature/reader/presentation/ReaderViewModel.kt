@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ireader.feature.reader.domain.usecase.OpenBookResult
 import com.ireader.feature.reader.domain.usecase.OpenBookUseCase
+import com.ireader.feature.reader.domain.usecase.SaveProgressUseCase
 import com.ireader.feature.reader.web.ReaderWebViewLinkRouter
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
@@ -15,26 +16,34 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 @HiltViewModel
+@OptIn(FlowPreview::class)
 class ReaderViewModel @Inject constructor(
-    private val openBookUseCase: OpenBookUseCase
+    private val openBookUseCase: OpenBookUseCase,
+    private val saveProgressUseCase: SaveProgressUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ReaderUiState>(ReaderUiState.Loading)
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
-    private var currentBookId: String? = null
+    private var currentBookId: Long? = null
     private var sessionHandle: ReaderSessionHandle? = null
     private var layoutConstraints: LayoutConstraints? = null
     private var loadJob: Job? = null
+    private var progressJob: Job? = null
 
-    fun loadBook(bookId: String) {
-        if (bookId.isBlank()) {
+    fun loadBook(bookId: Long) {
+        if (bookId <= 0L) {
             _uiState.value = ReaderUiState.Error("缺少书籍 ID")
             return
         }
@@ -54,6 +63,7 @@ class ReaderViewModel @Inject constructor(
 
                 is OpenBookResult.Success -> {
                     sessionHandle = result.session
+                    observeProgress(bookId, result.session)
                     renderCurrentPage()
                 }
             }
@@ -98,6 +108,19 @@ class ReaderViewModel @Inject constructor(
             }
         }
         return handled
+    }
+
+    private fun observeProgress(bookId: Long, handle: ReaderSessionHandle) {
+        progressJob?.cancel()
+        progressJob = viewModelScope.launch {
+            handle.controller.state
+                .map { state -> state.locator to state.progression.percent }
+                .distinctUntilChanged()
+                .debounce(800L)
+                .collect { (locator, percent) ->
+                    saveProgressUseCase(bookId = bookId, locator = locator, progression = percent)
+                }
+        }
     }
 
     private suspend fun renderCurrentPage() {
@@ -148,12 +171,29 @@ class ReaderViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        closeSessionHandle()
+        viewModelScope.launch {
+            closeSessionHandle()
+        }
         super.onCleared()
     }
 
-    private fun closeSessionHandle() {
-        runCatching { sessionHandle?.close() }
+    private suspend fun closeSessionHandle() {
+        progressJob?.cancel()
+
+        val handle = sessionHandle
+        val bookId = currentBookId
+        if (handle != null && bookId != null) {
+            val state = handle.controller.state.value
+            runCatching {
+                saveProgressUseCase(
+                    bookId = bookId,
+                    locator = state.locator,
+                    progression = state.progression.percent
+                )
+            }
+        }
+
+        runCatching { handle?.close() }
         sessionHandle = null
     }
 }

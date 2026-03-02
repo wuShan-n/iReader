@@ -6,5 +6,5 @@ object ReaderRoute {
     const val argBookId: String = AppRoutes.ARG_BOOK_ID
     const val route: String = AppRoutes.READER
 
-    fun create(bookId: String): String = AppRoutes.reader(bookId)
+    fun create(bookId: Long): String = AppRoutes.reader(bookId)
 }

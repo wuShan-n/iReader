@@ -16,13 +16,13 @@ class ImportItemRepo @Inject constructor(
 
     suspend fun listPendingOrFailed(jobId: String) = dao.listPendingOrFailed(jobId)
 
-    suspend fun listSucceededBookIds(jobId: String): List<String> = dao.listSucceededBookIds(jobId)
+    suspend fun listSucceededBookIds(jobId: String): List<Long> = dao.listSucceededBookIds(jobId)
 
     suspend fun update(
         jobId: String,
         uri: String,
         status: ImportItemStatus,
-        bookId: String?,
+        bookId: Long?,
         fingerprint: String?,
         errorCode: String?,
         errorMessage: String?,

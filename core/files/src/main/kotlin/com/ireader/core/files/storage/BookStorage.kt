@@ -13,15 +13,15 @@ import javax.inject.Singleton
 class BookStorage @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    fun bookDir(bookId: String): File {
+    fun bookDir(bookId: Long): File {
         return File(context.filesDir, "books/$bookId").apply { mkdirs() }
     }
 
-    fun canonicalFile(bookId: String, ext: String): File {
+    fun canonicalFile(bookId: Long, ext: String): File {
         return File(bookDir(bookId), "original.$ext")
     }
 
-    fun coverFile(bookId: String): File {
+    fun coverFile(bookId: Long): File {
         return File(bookDir(bookId), "cover.png")
     }
 
@@ -46,11 +46,11 @@ class BookStorage @Inject constructor(
         }
     }
 
-    fun deleteBookFiles(bookId: String) {
+    fun deleteBookFiles(bookId: Long) {
         bookDir(bookId).deleteRecursively()
     }
 
-    fun deleteCanonical(bookId: String) {
+    fun deleteCanonical(bookId: Long) {
         val dir = bookDir(bookId)
         dir.listFiles()
             ?.filter { it.isFile && it.name.startsWith("original.") }

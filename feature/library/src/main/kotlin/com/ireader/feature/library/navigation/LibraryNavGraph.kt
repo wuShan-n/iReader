@@ -8,7 +8,7 @@ import com.ireader.feature.library.ui.LibraryScreen
 fun NavGraphBuilder.libraryNavGraph(
     onImportBooks: () -> Unit,
     importStatusText: String?,
-    onOpenBook: (String) -> Unit,
+    onOpenBook: (Long) -> Unit,
     onOpenSettings: () -> Unit
 ) {
     composable(AppRoutes.LIBRARY) {

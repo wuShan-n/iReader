@@ -30,7 +30,7 @@ interface ImportItemDao {
         jobId: String,
         uri: String,
         status: ImportItemStatus,
-        bookId: String?,
+        bookId: Long?,
         fingerprint: String?,
         errorCode: String?,
         errorMessage: String?,
@@ -44,5 +44,5 @@ interface ImportItemDao {
         "SELECT DISTINCT bookId FROM import_items " +
             "WHERE jobId = :jobId AND status = 'SUCCEEDED' AND bookId IS NOT NULL"
     )
-    suspend fun listSucceededBookIds(jobId: String): List<String>
+    suspend fun listSucceededBookIds(jobId: String): List<Long>
 }

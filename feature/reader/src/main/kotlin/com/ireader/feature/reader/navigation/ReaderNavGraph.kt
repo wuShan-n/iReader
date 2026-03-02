@@ -15,11 +15,11 @@ fun NavGraphBuilder.readerNavGraph(
         route = AppRoutes.READER,
         arguments = listOf(
             navArgument(AppRoutes.ARG_BOOK_ID) {
-                type = NavType.StringType
+                type = NavType.LongType
             }
         )
     ) { backStackEntry ->
-        val bookId = backStackEntry.arguments?.getString(AppRoutes.ARG_BOOK_ID).orEmpty()
+        val bookId = backStackEntry.arguments?.getLong(AppRoutes.ARG_BOOK_ID) ?: -1L
         ReaderScreen(
             bookId = bookId,
             onOpenAnnotations = onOpenAnnotations,

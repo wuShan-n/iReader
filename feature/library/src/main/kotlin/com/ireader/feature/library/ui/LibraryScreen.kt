@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -13,6 +14,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,7 +39,7 @@ import com.ireader.feature.library.ui.components.BookGridItem
 fun LibraryScreen(
     onImportBooks: () -> Unit,
     importStatusText: String?,
-    onOpenBook: (String) -> Unit,
+    onOpenBook: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     vm: LibraryViewModel = hiltViewModel()
 ) {
@@ -76,6 +78,16 @@ fun LibraryScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            OutlinedTextField(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                value = state.keyword,
+                onValueChange = vm::setKeyword,
+                singleLine = true,
+                label = { Text("搜索标题/作者/文件名") }
+            )
+
             if (!importStatusText.isNullOrBlank()) {
                 Text(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -101,12 +113,12 @@ fun LibraryScreen(
             ) {
                 items(
                     items = state.books,
-                    key = { book -> book.id }
-                ) { book ->
+                    key = { item -> item.book.bookId }
+                ) { item ->
                     BookGridItem(
-                        book = book,
-                        onClick = { onOpenBook(book.id) },
-                        onDelete = { vm.deleteBook(book.id) }
+                        book = item,
+                        onClick = { onOpenBook(item.book.bookId) },
+                        onDelete = { vm.deleteBook(item.book.bookId) }
                     )
                 }
             }
@@ -127,8 +139,10 @@ private fun SortMenu(
     ) {
         SortItem(label = "最近更新", sort = LibrarySort.RECENTLY_UPDATED, current = current, onSelect = onSelect)
         SortItem(label = "最近导入", sort = LibrarySort.RECENTLY_ADDED, current = current, onSelect = onSelect)
+        SortItem(label = "最近打开", sort = LibrarySort.LAST_OPENED, current = current, onSelect = onSelect)
         SortItem(label = "标题 A-Z", sort = LibrarySort.TITLE_AZ, current = current, onSelect = onSelect)
         SortItem(label = "作者 A-Z", sort = LibrarySort.AUTHOR_AZ, current = current, onSelect = onSelect)
+        SortItem(label = "阅读进度", sort = LibrarySort.PROGRESSION_DESC, current = current, onSelect = onSelect)
     }
 }
 

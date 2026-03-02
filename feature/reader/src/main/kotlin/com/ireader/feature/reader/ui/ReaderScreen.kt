@@ -37,7 +37,7 @@ import com.ireader.feature.reader.presentation.ReaderViewModel
 @Composable
 @Suppress("FunctionNaming")
 fun ReaderScreen(
-    bookId: String,
+    bookId: Long,
     onOpenAnnotations: () -> Unit,
     onOpenSearch: () -> Unit,
     vm: ReaderViewModel = hiltViewModel()

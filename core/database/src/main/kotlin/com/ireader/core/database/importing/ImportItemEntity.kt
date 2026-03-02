@@ -15,7 +15,7 @@ data class ImportItemEntity(
     val mimeType: String?,
     val sizeBytes: Long?,
     val status: ImportItemStatus,
-    val bookId: String?,
+    val bookId: Long?,
     val fingerprintSha256: String?,
     val errorCode: String?,
     val errorMessage: String?,

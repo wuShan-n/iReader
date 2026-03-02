@@ -1,7 +1,10 @@
 package com.ireader.feature.reader.domain.usecase
 
 import com.ireader.core.data.book.BookRepo
+import com.ireader.core.data.book.LocatorJsonCodec
+import com.ireader.core.data.book.ProgressRepo
 import com.ireader.core.database.book.BookEntity
+import com.ireader.core.database.book.IndexState
 import com.ireader.core.files.source.FileDocumentSource
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
@@ -24,29 +27,44 @@ sealed interface OpenBookResult {
 
 class OpenBookUseCase @Inject constructor(
     private val bookRepo: BookRepo,
+    private val progressRepo: ProgressRepo,
     private val readerRuntime: ReaderRuntime
 ) {
-    suspend operator fun invoke(bookId: String): OpenBookResult {
+    suspend operator fun invoke(bookId: Long): OpenBookResult {
+        if (bookId <= 0L) {
+            return OpenBookResult.Failure("缺少书籍 ID")
+        }
+
         val book = bookRepo.getById(bookId)
             ?: return OpenBookResult.Failure("未找到书籍记录")
 
         val file = File(book.canonicalPath)
         if (!file.exists()) {
+            bookRepo.setIndexState(bookId = bookId, state = IndexState.MISSING, error = "文件不存在")
             return OpenBookResult.Failure("书籍文件不存在")
         }
 
         val source = FileDocumentSource(
             file = file,
-            displayName = book.displayName ?: file.name,
+            displayName = book.fileName,
             mimeType = book.mimeType
         )
+
+        val progress = progressRepo.getByBookId(bookId)
+        val initialLocator = progress?.locatorJson?.let { LocatorJsonCodec.decode(it) }
+
         return when (
             val result = readerRuntime.openSession(
                 source = source,
-                options = OpenOptions(hintFormat = book.format)
+                options = OpenOptions(hintFormat = book.format),
+                initialLocator = initialLocator
             )
         ) {
-            is ReaderResult.Ok -> OpenBookResult.Success(book = book, session = result.value)
+            is ReaderResult.Ok -> {
+                bookRepo.touchLastOpened(bookId)
+                OpenBookResult.Success(book = book, session = result.value)
+            }
+
             is ReaderResult.Err -> OpenBookResult.Failure(result.error.toUserMessage())
         }
     }

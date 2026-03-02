@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,20 +22,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.ireader.core.database.book.BookEntity
-import java.io.File
+import com.ireader.core.data.book.LibraryBookItem
+import com.ireader.core.database.book.IndexState
 import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun BookGridItem(
-    book: BookEntity,
+    book: LibraryBookItem,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
-    val title = bookTitle(book)
+    val entity = book.book
+    val title = bookTitle(entity.title, entity.fileName)
 
     Column(
         modifier = modifier
@@ -45,7 +47,7 @@ internal fun BookGridItem(
             )
     ) {
         BookCover(
-            coverPath = book.coverPath,
+            coverPath = entity.coverPath,
             titleFallback = title
         )
 
@@ -58,7 +60,7 @@ internal fun BookGridItem(
             style = MaterialTheme.typography.bodyMedium
         )
 
-        val author = book.author.orEmpty().trim()
+        val author = entity.author.orEmpty().trim()
         if (author.isNotBlank()) {
             Text(
                 text = author,
@@ -70,16 +72,31 @@ internal fun BookGridItem(
             Spacer(modifier = Modifier.height(2.dp))
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        val status = statusLabel(entity.indexState)
+        if (status != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = status,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
 
+        Spacer(modifier = Modifier.height(6.dp))
+        LinearProgressIndicator(
+            progress = { book.progression.toFloat().coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = book.format.name,
+                text = entity.format.name,
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = sizeText(book.sizeBytes),
+                text = sizeText(entity.fileSizeBytes),
                 style = MaterialTheme.typography.bodySmall
             )
         }
@@ -105,14 +122,19 @@ internal fun BookGridItem(
     }
 }
 
-private fun bookTitle(book: BookEntity): String {
-    val title = book.title?.trim().orEmpty()
-    if (title.isNotBlank()) return title
+private fun statusLabel(state: IndexState): String? {
+    return when (state) {
+        IndexState.PENDING -> "待解析"
+        IndexState.ERROR -> "解析失败"
+        IndexState.MISSING -> "文件缺失"
+        IndexState.INDEXED -> null
+    }
+}
 
-    val displayName = book.displayName?.trim().orEmpty()
-    if (displayName.isNotBlank()) return displayName.substringBeforeLast('.', displayName)
-
-    return File(book.canonicalPath).nameWithoutExtension.ifBlank { "Untitled" }
+private fun bookTitle(title: String?, fileName: String): String {
+    val trimmed = title?.trim().orEmpty()
+    if (trimmed.isNotEmpty()) return trimmed
+    return fileName.substringBeforeLast('.', fileName).ifBlank { "Untitled" }
 }
 
 private fun sizeText(bytes: Long): String {

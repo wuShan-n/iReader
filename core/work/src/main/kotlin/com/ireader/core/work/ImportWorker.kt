@@ -3,10 +3,9 @@ package com.ireader.core.work
 import android.content.Context
 import android.net.Uri
 import androidx.hilt.work.HiltWorker
-import androidx.work.Constraints
+import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.Data
-import androidx.work.BackoffPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -15,6 +14,9 @@ import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.importing.ImportItemRepo
 import com.ireader.core.data.importing.ImportJobRepo
 import com.ireader.core.database.book.BookEntity
+import com.ireader.core.database.book.BookSourceType
+import com.ireader.core.database.book.IndexState
+import com.ireader.core.database.book.ReadingStatus
 import com.ireader.core.database.importing.ImportItemEntity
 import com.ireader.core.database.importing.ImportItemStatus
 import com.ireader.core.database.importing.ImportStatus
@@ -24,9 +26,9 @@ import com.ireader.core.files.scan.TreeScanner
 import com.ireader.core.files.source.ContentUriDocumentSource
 import com.ireader.core.files.source.FileDocumentSource
 import com.ireader.core.files.storage.BookStorage
-import com.ireader.core.work.notification.ImportForeground
 import com.ireader.core.work.enrich.EnrichWorker
 import com.ireader.core.work.enrich.EnrichWorkerInput
+import com.ireader.core.work.notification.ImportForeground
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.runtime.format.BookFormatDetector
@@ -36,7 +38,6 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
-import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -219,14 +220,9 @@ class ImportWorker @AssistedInject constructor(
                 now = System.currentTimeMillis()
             )
 
-            val enrichConstraints = Constraints.Builder()
-                .setRequiresBatteryNotLow(true)
-                .setRequiresStorageNotLow(true)
-                .build()
             val enrichWork = OneTimeWorkRequestBuilder<EnrichWorker>()
                 .setInputData(EnrichWorkerInput.data(jobId))
                 .addTag(WorkNames.tagEnrichForJob(jobId))
-//                .setConstraints(enrichConstraints)
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
                     10,
@@ -267,8 +263,8 @@ class ImportWorker @AssistedInject constructor(
     }
 
     private sealed interface ImportOneResult {
-        data class Ok(val bookId: String, val fingerprint: String) : ImportOneResult
-        data class Skipped(val bookId: String?, val fingerprint: String) : ImportOneResult
+        data class Ok(val bookId: Long, val fingerprint: String) : ImportOneResult
+        data class Skipped(val bookId: Long?, val fingerprint: String) : ImportOneResult
         data class Fail(val code: String, val message: String) : ImportOneResult
     }
 
@@ -277,8 +273,8 @@ class ImportWorker @AssistedInject constructor(
         duplicateStrategy: DuplicateStrategy
     ): ImportOneResult = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        val displayName = source.displayName ?: "unknown"
-        val extension = guessExtension(displayName, source.mimeType)
+        val fileName = source.displayName ?: "unknown"
+        val extension = guessExtension(fileName, source.mimeType)
         val tempFile = storage.importTempFile()
         val digest = Fingerprint.newSha256()
 
@@ -287,72 +283,92 @@ class ImportWorker @AssistedInject constructor(
             val fingerprint = Fingerprint.sha256Hex(digest.digest())
             val existing = bookRepo.findByFingerprint(fingerprint)
 
-            val targetBookId = when {
-                existing == null -> UUID.randomUUID().toString()
-                duplicateStrategy == DuplicateStrategy.SKIP -> {
-                    runCatching { tempFile.delete() }
-                    return@withContext ImportOneResult.Skipped(existing.id, fingerprint)
-                }
-
-                duplicateStrategy == DuplicateStrategy.REPLACE -> existing.id
-                else -> UUID.randomUUID().toString()
+            if (existing != null && duplicateStrategy == DuplicateStrategy.SKIP) {
+                runCatching { tempFile.delete() }
+                return@withContext ImportOneResult.Skipped(existing.bookId, fingerprint)
             }
+
+            val detectedFormat = detectFormatFromFile(tempFile, fileName)
 
             if (existing != null && duplicateStrategy == DuplicateStrategy.REPLACE) {
-                storage.deleteCanonical(targetBookId)
+                storage.deleteCanonical(existing.bookId)
+                val finalFile = storage.canonicalFile(existing.bookId, extension)
+                storage.atomicMove(tempFile, finalFile)
+
+                val updated = existing.copy(
+                    sourceUri = source.uri.toString(),
+                    sourceType = BookSourceType.IMPORTED_COPY,
+                    format = detectedFormat,
+                    fileName = fileName,
+                    mimeType = source.mimeType,
+                    fileSizeBytes = copiedBytes,
+                    lastModifiedEpochMs = finalFile.lastModified(),
+                    canonicalPath = finalFile.absolutePath,
+                    fingerprintSha256 = fingerprint,
+                    coverPath = null,
+                    indexState = IndexState.PENDING,
+                    indexError = null,
+                    updatedAtEpochMs = now
+                )
+                bookRepo.upsert(updated)
+                return@withContext ImportOneResult.Ok(existing.bookId, fingerprint)
             }
 
-            val finalFile = storage.canonicalFile(targetBookId, extension)
+            val title = fileName.substringBeforeLast('.', fileName).ifBlank { "Untitled" }
+            val placeholder = BookEntity(
+                documentId = null,
+                sourceUri = source.uri.toString(),
+                sourceType = BookSourceType.IMPORTED_COPY,
+                format = detectedFormat,
+                fileName = fileName,
+                mimeType = source.mimeType,
+                fileSizeBytes = copiedBytes,
+                lastModifiedEpochMs = null,
+                canonicalPath = "",
+                fingerprintSha256 = fingerprint,
+                title = title,
+                author = null,
+                language = null,
+                identifier = null,
+                series = null,
+                description = null,
+                coverPath = null,
+                favorite = false,
+                readingStatus = ReadingStatus.UNREAD,
+                indexState = IndexState.PENDING,
+                indexError = null,
+                capabilitiesJson = null,
+                addedAtEpochMs = now,
+                updatedAtEpochMs = now,
+                lastOpenedAtEpochMs = null
+            )
+            val insertResult = bookRepo.upsert(placeholder)
+            val insertedId = resolveInsertedBookId(insertResult, fingerprint)
+                ?: throw IllegalStateException("Cannot resolve inserted book id")
+
+            val finalFile = storage.canonicalFile(insertedId, extension)
             storage.atomicMove(tempFile, finalFile)
 
-            val detectedFormat = detectFormatFromFile(finalFile)
-            val defaultTitle = displayName.substringBeforeLast('.', displayName)
-            val title = if (existing != null && duplicateStrategy == DuplicateStrategy.REPLACE) {
-                existing.title ?: defaultTitle
-            } else {
-                defaultTitle
-            }
+            val inserted = placeholder.copy(
+                bookId = insertedId,
+                canonicalPath = finalFile.absolutePath,
+                lastModifiedEpochMs = finalFile.lastModified()
+            )
+            bookRepo.upsert(inserted)
 
-            val entity = if (existing != null && duplicateStrategy == DuplicateStrategy.REPLACE) {
-                existing.copy(
-                    format = detectedFormat,
-                    title = title,
-                    canonicalPath = finalFile.absolutePath,
-                    originalUri = source.uri.toString(),
-                    displayName = displayName,
-                    mimeType = source.mimeType,
-                    fingerprintSha256 = fingerprint,
-                    sizeBytes = copiedBytes,
-                    coverPath = null,
-                    updatedAtEpochMs = now
-                )
-            } else {
-                BookEntity(
-                    id = targetBookId,
-                    format = detectedFormat,
-                    title = title,
-                    author = null,
-                    language = null,
-                    identifier = null,
-                    canonicalPath = finalFile.absolutePath,
-                    originalUri = source.uri.toString(),
-                    displayName = displayName,
-                    mimeType = source.mimeType,
-                    fingerprintSha256 = fingerprint,
-                    sizeBytes = copiedBytes,
-                    coverPath = null,
-                    createdAtEpochMs = now,
-                    updatedAtEpochMs = now
-                )
-            }
-
-            bookRepo.upsert(entity)
-            ImportOneResult.Ok(targetBookId, fingerprint)
+            return@withContext ImportOneResult.Ok(insertedId, fingerprint)
         } catch (throwable: Throwable) {
             runCatching { tempFile.delete() }
             val (code, message) = throwable.toImportError()
             ImportOneResult.Fail(code, message)
         }
+    }
+
+    private suspend fun resolveInsertedBookId(insertResult: Long, fingerprint: String): Long? {
+        if (insertResult > 0L) {
+            return insertResult
+        }
+        return bookRepo.findByFingerprint(fingerprint)?.bookId
     }
 
     private suspend fun copyWithDigest(
@@ -384,8 +400,8 @@ class ImportWorker @AssistedInject constructor(
         return total
     }
 
-    private suspend fun detectFormatFromFile(file: File): BookFormat {
-        val source = FileDocumentSource(file, displayName = file.name)
+    private suspend fun detectFormatFromFile(file: File, displayName: String): BookFormat {
+        val source = FileDocumentSource(file, displayName = displayName)
         return when (val result = formatDetector.detect(source, hint = null)) {
             is ReaderResult.Ok -> result.value
             is ReaderResult.Err -> BookFormat.TXT
