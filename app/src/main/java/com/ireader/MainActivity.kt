@@ -20,8 +20,8 @@ import com.ireader.core.files.importing.ImportManager
 import com.ireader.core.files.importing.ImportRequest
 import com.ireader.core.navigation.AppRoutes
 import com.ireader.feature.annotations.ui.AnnotationsScreen
-import com.ireader.feature.library.ui.LibraryScreen
-import com.ireader.feature.reader.ui.ReaderScreen
+import com.ireader.feature.library.navigation.libraryNavGraph
+import com.ireader.feature.reader.navigation.readerNavGraph
 import com.ireader.feature.search.ui.SearchScreen
 import com.ireader.feature.settings.ui.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
@@ -75,20 +75,18 @@ private fun iReaderApp(importManager: ImportManager) {
     }
 
     NavHost(navController = navController, startDestination = AppRoutes.LIBRARY) {
-        composable(AppRoutes.LIBRARY) {
-            LibraryScreen(
-                onImportBooks = { launcher.launch(arrayOf("*/*")) },
-                importStatusText = importStatusText,
-                onOpenReader = { navController.navigate(AppRoutes.READER) },
-                onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) }
-            )
-        }
-        composable(AppRoutes.READER) {
-            ReaderScreen(
-                onOpenAnnotations = { navController.navigate(AppRoutes.ANNOTATIONS) },
-                onOpenSearch = { navController.navigate(AppRoutes.SEARCH) }
-            )
-        }
+        libraryNavGraph(
+            onImportBooks = { launcher.launch(arrayOf("*/*")) },
+            importStatusText = importStatusText,
+            onOpenBook = { bookId ->
+                navController.navigate(AppRoutes.reader(bookId))
+            },
+            onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) }
+        )
+        readerNavGraph(
+            onOpenAnnotations = { navController.navigate(AppRoutes.ANNOTATIONS) },
+            onOpenSearch = { navController.navigate(AppRoutes.SEARCH) }
+        )
         composable(AppRoutes.ANNOTATIONS) {
             AnnotationsScreen()
         }
