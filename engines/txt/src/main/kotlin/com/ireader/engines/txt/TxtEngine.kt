@@ -8,7 +8,7 @@ import com.ireader.reader.api.open.OpenOptions
 import com.ireader.engines.txt.internal.open.TxtCharsetDetector
 import com.ireader.engines.txt.internal.open.TxtDocument
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.concurrent.CancellationException

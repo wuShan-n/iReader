@@ -1,6 +1,6 @@
 package com.ireader.engines.txt.internal.storage
 
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import java.nio.charset.Charset
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext

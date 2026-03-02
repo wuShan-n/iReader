@@ -3,7 +3,7 @@ package com.ireader.reader.runtime.format
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import com.ireader.reader.runtime.error.toReaderError
 import java.io.BufferedInputStream
 import java.util.Locale

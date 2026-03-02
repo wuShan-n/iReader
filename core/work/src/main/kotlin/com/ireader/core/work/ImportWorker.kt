@@ -226,7 +226,7 @@ class ImportWorker @AssistedInject constructor(
             val enrichWork = OneTimeWorkRequestBuilder<EnrichWorker>()
                 .setInputData(EnrichWorkerInput.data(jobId))
                 .addTag(WorkNames.tagEnrichForJob(jobId))
-                .setConstraints(enrichConstraints)
+//                .setConstraints(enrichConstraints)
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
                     10,

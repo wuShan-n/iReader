@@ -6,7 +6,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import java.io.FileNotFoundException
 import java.io.InputStream
 import kotlinx.coroutines.CoroutineDispatcher

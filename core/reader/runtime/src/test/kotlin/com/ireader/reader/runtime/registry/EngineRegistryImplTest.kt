@@ -5,7 +5,7 @@ import com.ireader.reader.api.engine.ReaderEngine
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test

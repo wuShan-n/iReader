@@ -9,7 +9,7 @@ import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.Locator
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import com.ireader.reader.runtime.error.toReaderError
 import com.ireader.reader.runtime.format.BookFormatDetector
 import com.ireader.reader.runtime.format.DefaultBookFormatDetector

@@ -7,7 +7,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.engines.epub.internal.open.EpubOpener
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 

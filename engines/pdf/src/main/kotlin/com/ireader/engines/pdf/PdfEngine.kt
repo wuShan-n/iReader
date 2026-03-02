@@ -6,7 +6,7 @@ import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 
 class PdfEngine : ReaderEngine {
     override val supportedFormats: Set<BookFormat> = setOf(BookFormat.PDF)

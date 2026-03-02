@@ -1,7 +1,7 @@
 package com.ireader.engines.txt.internal.storage
 
 import android.os.ParcelFileDescriptor
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.CharBuffer

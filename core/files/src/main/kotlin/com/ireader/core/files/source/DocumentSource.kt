@@ -1,4 +1,4 @@
-package com.ireader.reader.source
+package com.ireader.core.files.source
 
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -13,5 +13,3 @@ interface DocumentSource {
     suspend fun openInputStream(): InputStream
     suspend fun openFileDescriptor(mode: String = "r"): ParcelFileDescriptor?
 }
-
-

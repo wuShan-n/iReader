@@ -1,6 +1,6 @@
 package com.ireader.engines.epub.internal.open
 
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream

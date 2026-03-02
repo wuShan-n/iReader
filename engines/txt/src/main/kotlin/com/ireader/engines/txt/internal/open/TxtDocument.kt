@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.open
 
+import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.txt.TxtEngineConfig
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
@@ -18,7 +19,6 @@ import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorSchemes
-import com.ireader.reader.source.DocumentSource
 import java.nio.charset.Charset
 import java.security.MessageDigest
 import kotlinx.coroutines.CoroutineDispatcher

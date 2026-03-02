@@ -5,7 +5,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.model.Locator
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.source.DocumentSource
+import com.ireader.core.files.source.DocumentSource
 
 interface ReaderRuntime {
 
