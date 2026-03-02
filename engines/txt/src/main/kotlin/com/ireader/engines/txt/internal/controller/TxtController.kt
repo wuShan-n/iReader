@@ -213,11 +213,7 @@ internal class TxtController(
             val target = locatorMapper.offsetForLocator(locator, total)
             val clampedTarget = target.coerceIn(0, total - 1)
             val destinationStart = findReasonablePageStartLocked(clampedTarget, c)
-            if (destinationStart != currentStartChar) {
-                pushHistoryLocked(currentStartChar)
-                currentStartChar = destinationStart
-                currentSlice = null
-            }
+            moveToStartLocked(destinationStart)
             renderLocked(c, policy)
         }
     }
@@ -237,11 +233,7 @@ internal class TxtController(
             val safePercent = percent.coerceIn(0.0, 1.0)
             val target = ((total - 1) * safePercent).toInt().coerceIn(0, total - 1)
             val destinationStart = findReasonablePageStartLocked(target, c)
-            if (destinationStart != currentStartChar) {
-                pushHistoryLocked(currentStartChar)
-                currentStartChar = destinationStart
-                currentSlice = null
-            }
+            moveToStartLocked(destinationStart)
             renderLocked(c, policy)
         }
     }
@@ -262,14 +254,16 @@ internal class TxtController(
             }
 
             val behind = min(count, engineConfig.prefetchBehind.coerceAtLeast(0))
-            var probe = slice.startChar - 1
-            repeat(behind) {
-                if (probe < 0) return@repeat
-                val starts = pageStarts ?: return@repeat
-                val prevStart = starts.floor(probe) ?: return@repeat
-                if (prevStart >= slice.startChar) return@repeat
-                prefetchAtLocked(prevStart, c)
-                probe = prevStart - 1
+            val starts = pageStarts
+            if (starts != null) {
+                var probe = slice.startChar - 1
+                repeat(behind) {
+                    if (probe < 0) return@repeat
+                    val prevStart = starts.floor(probe) ?: return@repeat
+                    if (prevStart >= slice.startChar) return@repeat
+                    prefetchAtLocked(prevStart, c)
+                    probe = prevStart - 1
+                }
             }
             ReaderResult.Ok(Unit)
         }
@@ -311,11 +305,7 @@ internal class TxtController(
             val total = totalCharsLocked()
             val starts = pageStarts
                 ?: return ReaderResult.Err(ReaderError.Internal("Pagination bucket not initialized"))
-            var newAdds = 0
-            if (starts.addStart(slice.startChar)) newAdds += 1
-            if (slice.endChar in 1 until total) {
-                if (starts.addStart(slice.endChar)) newAdds += 1
-            }
+            val newAdds = recordPageBoundaries(starts, slice, total)
             renderKey?.let { key ->
                 paginationStore.maybePersist(key, starts, newAdds)
             }
@@ -548,8 +538,27 @@ internal class TxtController(
         historyStarts.addLast(safe)
     }
 
+    private fun moveToStartLocked(destinationStart: Int) {
+        if (destinationStart == currentStartChar) return
+        pushHistoryLocked(currentStartChar)
+        currentStartChar = destinationStart
+        currentSlice = null
+    }
+
+    private fun recordPageBoundaries(
+        starts: PageStartsIndex,
+        slice: PageSlice,
+        totalChars: Int
+    ): Int {
+        var additions = 0
+        if (starts.addStart(slice.startChar)) additions += 1
+        if (slice.endChar in 1 until totalChars && starts.addStart(slice.endChar)) {
+            additions += 1
+        }
+        return additions
+    }
+
     private fun currentCacheNamespace(): String {
-        val key = renderKey
-        return if (key != null) key.toString() else "pending"
+        return renderKey?.toString() ?: "pending"
     }
 }

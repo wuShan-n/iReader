@@ -28,6 +28,11 @@ internal class TxtLocatorMapper(
     private val snippetWindowMaxChars: Int = 256_000,
     private val snippetWindowCapChars: Int = 1_000_000
 ) {
+    private companion object {
+        private val SEARCH_WINDOW_SCALES = intArrayOf(1, 2, 4)
+        private const val HEX_DIGITS = "0123456789abcdef"
+    }
+
     private data class SnippetSample(
         val offset: Int,
         val text: String
@@ -42,32 +47,16 @@ internal class TxtLocatorMapper(
     private var sparseIndex: SparseSnippetIndex? = null
 
     fun locatorForOffsetFast(offset: Int, totalChars: Int): Locator {
-        if (totalChars <= 0) {
-            return Locator(
-                scheme = LocatorSchemes.TXT_OFFSET,
-                value = "0",
-                extras = mapOf(
-                    TxtLocatorExtras.VERSION to TxtLocatorExtras.VERSION_VALUE,
-                    TxtLocatorExtras.PROGRESSION to "0.000000"
-                )
-            )
-        }
+        if (totalChars <= 0) return emptyLocator()
+
         val clamped = offset.coerceIn(0, totalChars - 1)
         val progression = clamped.toDouble() / totalChars.toDouble()
         return locatorWithProgression(clamped.toString(), progression)
     }
 
     fun locatorForBoundaryOffset(offset: Int, totalChars: Int): Locator {
-        if (totalChars <= 0) {
-            return Locator(
-                scheme = LocatorSchemes.TXT_OFFSET,
-                value = "0",
-                extras = mapOf(
-                    TxtLocatorExtras.VERSION to TxtLocatorExtras.VERSION_VALUE,
-                    TxtLocatorExtras.PROGRESSION to "0.000000"
-                )
-            )
-        }
+        if (totalChars <= 0) return emptyLocator()
+
         val clamped = offset.coerceIn(0, totalChars)
         val progression = clamped.toDouble() / totalChars.toDouble()
         return locatorWithProgression(clamped.toString(), progression)
@@ -107,7 +96,7 @@ internal class TxtLocatorMapper(
         if (totalChars <= 0) return 0
         if (locator == null || locator.scheme != LocatorSchemes.TXT_OFFSET) return 0
 
-        val parsed = locator.value.toIntOrNull()?.coerceIn(0, totalChars - 1) ?: 0
+        val parsed = parseOffset(locator.value, totalChars)
 
         val snippet = locator.extras[TxtLocatorExtras.SNIPPET]?.takeIf { it.isNotBlank() }
         if (snippet != null) {
@@ -138,8 +127,7 @@ internal class TxtLocatorMapper(
     ): Int? {
         val baseWindow = (snippet.length * 1024)
             .coerceIn(snippetWindowMinChars, snippetWindowMaxChars)
-        val scales = intArrayOf(1, 2, 4)
-        for (scale in scales) {
+        for (scale in SEARCH_WINDOW_SCALES) {
             val size = (baseWindow * scale).coerceAtMost(snippetWindowCapChars)
             val windowStart = (fallbackOffset - size / 2).coerceAtLeast(0)
             val windowEnd = (windowStart + size).coerceAtMost(totalChars)
@@ -242,9 +230,17 @@ internal class TxtLocatorMapper(
         return buildString(16) {
             for (i in 0 until 8) {
                 val b = digest[i].toInt() and 0xFF
-                append("0123456789abcdef"[b ushr 4])
-                append("0123456789abcdef"[b and 0x0F])
+                append(HEX_DIGITS[b ushr 4])
+                append(HEX_DIGITS[b and 0x0F])
             }
         }
+    }
+
+    private fun emptyLocator(): Locator {
+        return locatorWithProgression(value = "0", progression = 0.0)
+    }
+
+    private fun parseOffset(raw: String, totalChars: Int): Int {
+        return raw.toIntOrNull()?.coerceIn(0, totalChars - 1) ?: 0
     }
 }

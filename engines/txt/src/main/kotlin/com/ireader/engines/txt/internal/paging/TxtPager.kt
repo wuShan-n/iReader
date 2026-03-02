@@ -20,6 +20,13 @@ internal class TxtPager(
     private val store: TxtTextStore,
     private val chunkSizeChars: Int = 32 * 1024
 ) {
+    private companion object {
+        private const val DEFAULT_CHUNK_CACHE_ENTRIES = 10
+        private const val MIN_ESTIMATED_CHARS = 256
+        private const val MIN_CHUNK_CHARS = 2_000
+        private const val MIN_ALIGNMENT_CHARS = 2_048
+    }
+
     private data class ChunkLayoutKey(
         val chunkStart: Int,
         val widthPx: Int,
@@ -42,9 +49,13 @@ internal class TxtPager(
             get() = chunkStart + chunkText.length
     }
 
-    private val chunkCache = object : LinkedHashMap<ChunkLayoutKey, ChunkLayoutResult>(10, 0.75f, true) {
+    private val chunkCache = object : LinkedHashMap<ChunkLayoutKey, ChunkLayoutResult>(
+        DEFAULT_CHUNK_CACHE_ENTRIES,
+        0.75f,
+        true
+    ) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<ChunkLayoutKey, ChunkLayoutResult>?): Boolean {
-            return size > 10
+            return size > DEFAULT_CHUNK_CACHE_ENTRIES
         }
     }
 
@@ -61,9 +72,10 @@ internal class TxtPager(
         val contentWidth = max(1, constraints.viewportWidthPx - (paddingPx * 2))
         val contentHeight = max(1, constraints.viewportHeightPx - (paddingPx * 2))
 
-        val estimated = estimateCharsPerPage(constraints, config).coerceAtLeast(256)
-        val desiredChunk = max(chunkSizeChars.coerceAtLeast(2_000), estimated * 4)
-        val alignment = (estimated * 2).coerceIn(2_048, chunkSizeChars.coerceAtLeast(2_048))
+        val estimated = estimateCharsPerPage(constraints, config).coerceAtLeast(MIN_ESTIMATED_CHARS)
+        val desiredChunk = max(chunkSizeChars.coerceAtLeast(MIN_CHUNK_CHARS), estimated * 4)
+        val alignment = (estimated * 2)
+            .coerceIn(MIN_ALIGNMENT_CHARS, chunkSizeChars.coerceAtLeast(MIN_ALIGNMENT_CHARS))
         val chunkStart = alignDown(start, alignment)
         val distanceIntoChunk = (start - chunkStart).coerceAtLeast(0)
         val candidateMax = min(total - chunkStart, desiredChunk + distanceIntoChunk + estimated)
@@ -82,25 +94,20 @@ internal class TxtPager(
             fontFamily = config.fontFamilyName
         )
 
-        val chunk = synchronized(chunkCache) { chunkCache[key] } ?: buildChunkLayout(
+        val chunk = getOrBuildChunkLayout(
             key = key,
             readLen = candidateMax,
             widthPx = contentWidth,
             heightPx = contentHeight,
             constraints = constraints,
             config = config
-        ).also { built ->
-            synchronized(chunkCache) { chunkCache[key] = built }
-        }
+        )
         if (chunk.chunkText.isEmpty()) return PageSlice(start, start, "")
 
         val starts = chunk.pageStarts
         val pageIndex = floorIndex(starts, start).coerceAtLeast(0)
         val pageStart = starts.getOrElse(pageIndex) { start }.coerceIn(0, total)
-        val pageEnd = when {
-            pageIndex + 1 < starts.size -> starts[pageIndex + 1].coerceIn(pageStart, total)
-            else -> chunk.chunkEnd.coerceIn(pageStart, total)
-        }.let { if (it <= pageStart) min(total, pageStart + 1) else it }
+        val pageEnd = resolvePageEnd(starts, pageIndex, chunk.chunkEnd, total, pageStart)
         if (pageEnd <= pageStart) {
             return buildSingleCharFallback(start = start, total = total)
         }
@@ -133,6 +140,29 @@ internal class TxtPager(
         val charsPerLine = max(4, (contentWidth / avgCharWidth).toInt())
 
         return (linesPerPage * charsPerLine).coerceIn(200, 50_000)
+    }
+
+    private suspend fun getOrBuildChunkLayout(
+        key: ChunkLayoutKey,
+        readLen: Int,
+        widthPx: Int,
+        heightPx: Int,
+        constraints: LayoutConstraints,
+        config: RenderConfig.ReflowText
+    ): ChunkLayoutResult {
+        val cached = synchronized(chunkCache) { chunkCache[key] }
+        if (cached != null) return cached
+
+        val built = buildChunkLayout(
+            key = key,
+            readLen = readLen,
+            widthPx = widthPx,
+            heightPx = heightPx,
+            constraints = constraints,
+            config = config
+        )
+        synchronized(chunkCache) { chunkCache[key] = built }
+        return built
     }
 
     private suspend fun buildChunkLayout(
@@ -210,6 +240,25 @@ internal class TxtPager(
             endChar = end,
             text = text.ifEmpty { " " }
         )
+    }
+
+    private fun resolvePageEnd(
+        starts: IntArray,
+        pageIndex: Int,
+        chunkEnd: Int,
+        totalChars: Int,
+        pageStart: Int
+    ): Int {
+        val rawEnd = if (pageIndex + 1 < starts.size) {
+            starts[pageIndex + 1].coerceIn(pageStart, totalChars)
+        } else {
+            chunkEnd.coerceIn(pageStart, totalChars)
+        }
+        return if (rawEnd <= pageStart) {
+            min(totalChars, pageStart + 1)
+        } else {
+            rawEnd
+        }
     }
 
     private fun floorIndex(values: IntArray, target: Int): Int {

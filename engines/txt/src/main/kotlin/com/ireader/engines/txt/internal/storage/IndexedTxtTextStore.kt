@@ -24,6 +24,10 @@ internal class IndexedTxtTextStore(
     private val anchorEveryBytes: Long,
     private val windowCacheChars: Int
 ) : TxtTextStore {
+    private companion object {
+        private const val MIN_WINDOW_CACHE_CHARS = 8 * 1024
+    }
+
     private data class CharWindow(
         val startChar: Int,
         val endCharExclusive: Int,
@@ -56,28 +60,23 @@ internal class IndexedTxtTextStore(
                 sliceFromWindow(window, start, end)?.let { return@withLock it }
             }
 
+            val maxWindow = windowCacheChars.coerceAtLeast(MIN_WINDOW_CACHE_CHARS)
             val requestLen = end - start
-            val maxWindow = windowCacheChars.coerceAtLeast(8 * 1024)
-            if (requestLen <= maxWindow) {
-                val windowEnd = (start + maxWindow).coerceAtMost(idx.totalChars)
-                val windowText = readFromAnchorLocked(
-                    anchor = anchor,
-                    startChar = start,
-                    endChar = windowEnd
-                )
-                val window = CharWindow(
-                    startChar = start,
-                    endCharExclusive = start + windowText.length,
-                    text = windowText
-                )
-                charWindowCache = window
-                sliceFromWindow(window, start, end) ?: windowText
-            } else {
+            if (requestLen > maxWindow) {
                 readFromAnchorLocked(
                     anchor = anchor,
                     startChar = start,
                     endChar = end
                 )
+            } else {
+                val window = buildWindowLocked(
+                    anchor = anchor,
+                    startChar = start,
+                    maxWindowChars = maxWindow,
+                    totalChars = idx.totalChars
+                )
+                charWindowCache = window
+                sliceFromWindow(window, start, end) ?: window.text
             }
         }
     }
@@ -254,14 +253,14 @@ internal class IndexedTxtTextStore(
                 val produced = charBuf.position()
                 if (produced > 0) {
                     charBuf.flip()
-                    TxtTextNormalizer.appendNormalized(charBuf, state) { normalizedChar ->
-                        if (currentChar < endChar) {
-                            if (currentChar >= startChar) {
-                                builder.append(normalizedChar)
-                            }
-                            currentChar += 1
-                        }
-                    }
+                    currentChar = appendNormalizedRange(
+                        buffer = charBuf,
+                        state = state,
+                        currentChar = currentChar,
+                        startChar = startChar,
+                        endChar = endChar,
+                        out = builder
+                    )
                 }
 
                 if (currentChar >= endChar) break
@@ -279,20 +278,58 @@ internal class IndexedTxtTextStore(
                 val produced = charBuf.position()
                 if (produced > 0) {
                     charBuf.flip()
-                    TxtTextNormalizer.appendNormalized(charBuf, state) { normalizedChar ->
-                        if (currentChar < endChar) {
-                            if (currentChar >= startChar) {
-                                builder.append(normalizedChar)
-                            }
-                            currentChar += 1
-                        }
-                    }
+                    currentChar = appendNormalizedRange(
+                        buffer = charBuf,
+                        state = state,
+                        currentChar = currentChar,
+                        startChar = startChar,
+                        endChar = endChar,
+                        out = builder
+                    )
                 }
                 if (result.isUnderflow || currentChar >= endChar) break
             }
         }
 
         return builder.toString()
+    }
+
+    private suspend fun buildWindowLocked(
+        anchor: ChunkAnchor,
+        startChar: Int,
+        maxWindowChars: Int,
+        totalChars: Int
+    ): CharWindow {
+        val windowEnd = (startChar + maxWindowChars).coerceAtMost(totalChars)
+        val text = readFromAnchorLocked(
+            anchor = anchor,
+            startChar = startChar,
+            endChar = windowEnd
+        )
+        return CharWindow(
+            startChar = startChar,
+            endCharExclusive = startChar + text.length,
+            text = text
+        )
+    }
+
+    private fun appendNormalizedRange(
+        buffer: CharBuffer,
+        state: TxtTextNormalizer.StreamState,
+        currentChar: Int,
+        startChar: Int,
+        endChar: Int,
+        out: StringBuilder
+    ): Int {
+        var cursor = currentChar
+        TxtTextNormalizer.appendNormalized(buffer, state) { normalizedChar ->
+            if (cursor >= endChar) return@appendNormalized
+            if (cursor >= startChar) {
+                out.append(normalizedChar)
+            }
+            cursor += 1
+        }
+        return cursor
     }
 
     private fun sliceFromWindow(
