@@ -62,26 +62,34 @@ class DefaultBookIndexer @Inject constructor(
 
         val probe = probeResult.value
         val metadata = probe.metadata
-        val now = System.currentTimeMillis()
-        val finalCoverPath = resolveCoverPath(book = book, probe = probe, file = file, force = force)
+        val resolvedTitle = metadataField(
+            newValue = metadata?.title,
+            oldValue = book.title,
+            fallback = fallbackTitle(book.fileName)
+        )
+        val finalCoverPath = resolveCoverPath(
+            book = book,
+            probe = probe,
+            file = file,
+            force = force,
+            titleHint = resolvedTitle
+        )
 
-        val updated = book.copy(
+        bookRepo.updateMetadata(
+            bookId = book.bookId,
             documentId = probe.documentId ?: book.documentId,
             format = probe.format,
-            title = metadataField(metadata?.title, book.title, fallback = fallbackTitle(book.fileName)),
+            title = resolvedTitle,
             author = metadataField(metadata?.author, book.author, fallback = null),
             language = metadataField(metadata?.language, book.language, fallback = null),
             identifier = metadataField(metadata?.identifier, book.identifier, fallback = null),
             series = metadataField(metadata?.extra?.get("series"), book.series, fallback = null),
             description = metadataField(metadata?.extra?.get("description"), book.description, fallback = null),
             coverPath = finalCoverPath,
-            indexState = IndexState.INDEXED,
-            indexError = null,
             capabilitiesJson = encodeCapabilities(probe.capabilities),
-            updatedAtEpochMs = now
+            indexState = IndexState.INDEXED,
+            indexError = null
         )
-
-        bookRepo.upsert(updated)
         return Result.success(Unit)
     }
 
@@ -118,7 +126,8 @@ class DefaultBookIndexer @Inject constructor(
         book: BookEntity,
         probe: BookProbeResult,
         file: File,
-        force: Boolean
+        force: Boolean,
+        titleHint: String?
     ): String? {
         val existing = book.coverPath?.takeIf { path -> path.isNotBlank() && File(path).exists() }
         if (existing != null && !force) {
@@ -126,7 +135,7 @@ class DefaultBookIndexer @Inject constructor(
         }
 
         val coverFile = storage.coverFile(book.bookId)
-        val title = book.title ?: fallbackTitle(book.fileName)
+        val title = titleHint ?: book.title ?: fallbackTitle(book.fileName)
 
         val extracted = when (probe.format) {
             BookFormat.EPUB -> {

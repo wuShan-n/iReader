@@ -7,6 +7,8 @@
 
 package com.ireader.engines.txt.internal.render
 
+import com.ireader.engines.common.android.pagination.ReflowPaginationProfile
+import com.ireader.engines.common.cache.LruCache
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.link.LinkDetector
@@ -39,7 +41,6 @@ import com.ireader.reader.model.LocatorRange
 import com.ireader.reader.model.LocatorSchemes
 import com.ireader.reader.model.Progression
 import java.io.File
-import java.security.MessageDigest
 import java.util.Locale
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -76,7 +77,7 @@ internal class TxtController(
     private val mutex = Mutex()
     private var softBreakIndex: SoftBreakIndex? = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)
     private val paginator = TxtPaginator(store, meta, softBreakIndex)
-    private val pageCache = PageCache(maxPageCache)
+    private val pageCache = LruCache<Long, PageSlice>(maxPageCache)
     private var pageCompletionJob: Job? = null
 
     private val eventsMutable = MutableSharedFlow<ReaderEvent>(extraBufferCapacity = 32)
@@ -537,65 +538,10 @@ internal class TxtController(
         constraints: LayoutConstraints,
         config: RenderConfig.ReflowText
     ): String {
-        val raw = buildString {
-            append(documentKey)
-            append('|')
-            append(constraints.viewportWidthPx)
-            append('x')
-            append(constraints.viewportHeightPx)
-            append('|')
-            append(constraints.density)
-            append('|')
-            append(constraints.fontScale)
-            append('|')
-            append(config.fontSizeSp)
-            append('|')
-            append(config.lineHeightMult)
-            append('|')
-            append(config.paragraphSpacingDp)
-            append('|')
-            append(config.pagePaddingDp)
-            append('|')
-            append(config.fontFamilyName.orEmpty())
-            append('|')
-            append(config.hyphenation)
-        }
-        val digest = MessageDigest.getInstance("SHA-256")
-        val bytes = digest.digest(raw.toByteArray(Charsets.UTF_8))
-        return bytes.toHex().take(16)
-    }
-
-    private fun ByteArray.toHex(): String {
-        val chars = CharArray(size * 2)
-        var index = 0
-        for (b in this) {
-            val value = b.toInt() and 0xFF
-            chars[index++] = HEX[value ushr 4]
-            chars[index++] = HEX[value and 0x0F]
-        }
-        return String(chars)
-    }
-
-    private class PageCache(maxEntries: Int) {
-        private val maxSize = maxEntries.coerceAtLeast(1)
-        private val map = object : LinkedHashMap<Long, PageSlice>(maxSize + 1, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, PageSlice>): Boolean {
-                return size > maxSize
-            }
-        }
-
-        operator fun get(key: Long): PageSlice? = map[key]
-
-        operator fun set(key: Long, value: PageSlice) {
-            map[key] = value
-        }
-
-        fun clear() {
-            map.clear()
-        }
-    }
-
-    private companion object {
-        private val HEX = "0123456789abcdef".toCharArray()
+        return ReflowPaginationProfile.keyFor(
+            documentKey = documentKey,
+            constraints = constraints,
+            config = config
+        )
     }
 }

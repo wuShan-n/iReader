@@ -1,18 +1,18 @@
 @file:Suppress("LongParameterList")
 
-package com.ireader.engines.txt.internal.layout
+package com.ireader.engines.common.android.layout
 
 import android.os.Build
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 
-internal data class MeasureResult(
+data class MeasureResult(
     val endChar: Int,
     val lineCount: Int
 )
 
-internal object StaticLayoutMeasurer {
+object StaticLayoutMeasurer {
 
     fun measure(
         text: CharSequence,

@@ -2,6 +2,7 @@ package com.ireader.engines.epub.internal.open
 
 import android.content.Context
 import com.ireader.core.files.source.DocumentSource
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.epub.internal.readium.ReadiumEpubToolkit
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
@@ -10,10 +11,7 @@ import com.ireader.reader.api.provider.AnnotationStore
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
-import java.io.FileNotFoundException
-import java.io.IOException
 import java.util.UUID
-import java.util.zip.ZipException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -103,17 +101,7 @@ internal class EpubOpener(
                 )
             )
         } catch (t: Throwable) {
-            ReaderResult.Err(mapThrowable(t))
+            ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))
         }
     }
-
-    private fun mapThrowable(t: Throwable): ReaderError =
-        when (t) {
-            is ReaderError -> t
-            is FileNotFoundException -> ReaderError.NotFound(cause = t)
-            is SecurityException -> ReaderError.PermissionDenied(cause = t)
-            is ZipException -> ReaderError.CorruptOrInvalid(cause = t)
-            is IOException -> ReaderError.Io(cause = t)
-            else -> ReaderError.Internal(cause = t)
-        }
 }

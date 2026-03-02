@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.fragment.app.FragmentManager
 import com.ireader.core.common.android.surface.FragmentRenderSurface
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.epub.internal.locator.ReadiumLocatorSchemes
 import com.ireader.engines.epub.internal.locator.toAppLocator
 import com.ireader.engines.epub.internal.locator.toReadiumLocatorOrNull
@@ -25,10 +26,7 @@ import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.Progression
-import java.io.FileNotFoundException
-import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
-import java.util.zip.ZipException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -120,7 +118,7 @@ internal class EpubController(
 
                 ReaderResult.Ok(Unit)
             } catch (t: Throwable) {
-                ReaderResult.Err(mapThrowable(t))
+                ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))
             }
         }
     }
@@ -134,7 +132,7 @@ internal class EpubController(
                 surface = null
                 ReaderResult.Ok(Unit)
             } catch (t: Throwable) {
-                ReaderResult.Err(mapThrowable(t))
+                ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))
             }
         }
     }
@@ -153,7 +151,7 @@ internal class EpubController(
                 applyConfig(fragment, config)
                 ReaderResult.Ok(Unit)
             } catch (t: Throwable) {
-                ReaderResult.Err(mapThrowable(t))
+                ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))
             }
         }
     }
@@ -338,13 +336,4 @@ internal class EpubController(
         }
     }
 
-    private fun mapThrowable(t: Throwable): ReaderError =
-        when (t) {
-            is ReaderError -> t
-            is SecurityException -> ReaderError.PermissionDenied(cause = t)
-            is FileNotFoundException -> ReaderError.NotFound(cause = t)
-            is ZipException -> ReaderError.CorruptOrInvalid(cause = t)
-            is IOException -> ReaderError.Io(cause = t)
-            else -> ReaderError.Internal(cause = t)
-        }
 }

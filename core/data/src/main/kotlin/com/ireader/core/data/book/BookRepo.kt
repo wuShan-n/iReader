@@ -8,6 +8,7 @@ import com.ireader.core.database.collection.BookCollectionDao
 import com.ireader.core.database.collection.BookCollectionEntity
 import com.ireader.core.database.collection.CollectionDao
 import com.ireader.core.database.collection.CollectionEntity
+import com.ireader.reader.model.BookFormat
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -25,11 +26,15 @@ class BookRepo @Inject constructor(
 
     suspend fun getById(bookId: Long): BookEntity? = bookDao.getById(bookId)
 
+    suspend fun listAll(): List<BookEntity> = bookDao.listAll()
+
     suspend fun getByDocumentId(documentId: String): BookEntity? = bookDao.getByDocumentId(documentId)
 
     suspend fun deleteById(bookId: Long) = bookDao.deleteById(bookId)
 
     fun observeById(bookId: Long): Flow<BookEntity?> = bookDao.observeById(bookId)
+
+    fun observeMissingBooks(): Flow<List<BookEntity>> = bookDao.observeMissing()
 
     fun observeLibrary(query: LibraryQuery): Flow<List<LibraryBookItem>> {
         val sql = LibrarySqlBuilder.build(query)
@@ -74,6 +79,54 @@ class BookRepo @Inject constructor(
         bookDao.updateReadingStatus(
             bookId = bookId,
             status = status,
+            updatedAt = System.currentTimeMillis()
+        )
+    }
+
+    suspend fun updateBookSource(
+        bookId: Long,
+        sourceUri: String?,
+        canonicalPath: String,
+        lastModifiedEpochMs: Long?
+    ) {
+        bookDao.updateSource(
+            bookId = bookId,
+            sourceUri = sourceUri,
+            canonicalPath = canonicalPath,
+            lastModifiedEpochMs = lastModifiedEpochMs,
+            updatedAt = System.currentTimeMillis()
+        )
+    }
+
+    suspend fun updateMetadata(
+        bookId: Long,
+        documentId: String?,
+        format: BookFormat,
+        title: String?,
+        author: String?,
+        language: String?,
+        identifier: String?,
+        series: String?,
+        description: String?,
+        coverPath: String?,
+        capabilitiesJson: String?,
+        indexState: IndexState,
+        indexError: String?
+    ) {
+        bookDao.updateMetadata(
+            bookId = bookId,
+            documentId = documentId,
+            format = format,
+            title = title,
+            author = author,
+            language = language,
+            identifier = identifier,
+            series = series,
+            description = description,
+            coverPath = coverPath,
+            capabilitiesJson = capabilitiesJson,
+            indexState = indexState,
+            indexError = indexError,
             updatedAt = System.currentTimeMillis()
         )
     }

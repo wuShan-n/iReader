@@ -38,6 +38,18 @@ object LibrarySqlBuilder {
             query.statuses.forEach { args += it.name }
         }
 
+        if (query.indexStates.isNotEmpty()) {
+            val placeholders = query.indexStates.joinToString(separator = ",") { "?" }
+            sql.append(" AND books.indexState IN ($placeholders)")
+            query.indexStates.forEach { args += it.name }
+        }
+
+        if (query.formats.isNotEmpty()) {
+            val placeholders = query.formats.joinToString(separator = ",") { "?" }
+            sql.append(" AND books.format IN ($placeholders)")
+            query.formats.forEach { args += it.name }
+        }
+
         query.collectionId?.let { collectionId ->
             sql.append(
                 " AND EXISTS (SELECT 1 FROM book_collection bc WHERE bc.bookId = books.bookId AND bc.collectionId = ?)"

@@ -3,9 +3,9 @@
 package com.ireader.engines.txt.internal.open
 
 import com.ireader.core.files.source.DocumentSource
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.txt.internal.render.TxtController
 import com.ireader.engines.txt.internal.store.Utf16TextStore
-import com.ireader.engines.txt.internal.util.toReaderError
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError

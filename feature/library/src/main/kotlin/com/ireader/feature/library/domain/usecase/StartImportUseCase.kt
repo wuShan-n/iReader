@@ -4,8 +4,9 @@ import android.net.Uri
 import com.ireader.core.files.importing.DuplicateStrategy
 import com.ireader.core.files.importing.ImportManager
 import com.ireader.core.files.importing.ImportRequest
+import javax.inject.Inject
 
-class StartImportUseCase(
+class StartImportUseCase @Inject constructor(
     private val importManager: ImportManager
 ) {
     suspend operator fun invoke(

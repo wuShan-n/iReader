@@ -4,8 +4,8 @@ package com.ireader.engines.txt.internal.pagination
 
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import com.ireader.engines.txt.internal.layout.StaticLayoutMeasurer
-import com.ireader.engines.txt.internal.layout.TextPaintFactory
+import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
+import com.ireader.engines.common.android.layout.TextPaintFactory
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.render.ParagraphSpacingSpan
 import com.ireader.engines.txt.internal.render.SoftBreakProcessor

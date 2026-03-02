@@ -2,10 +2,10 @@
 
 package com.ireader.engines.txt.internal.provider
 
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.store.Utf16TextStore
-import com.ireader.engines.txt.internal.util.toReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.model.Locator

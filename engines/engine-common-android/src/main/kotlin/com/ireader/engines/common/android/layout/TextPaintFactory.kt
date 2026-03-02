@@ -1,4 +1,4 @@
-package com.ireader.engines.txt.internal.layout
+package com.ireader.engines.common.android.layout
 
 import android.graphics.Color
 import android.graphics.Typeface
@@ -6,7 +6,7 @@ import android.text.TextPaint
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 
-internal object TextPaintFactory {
+object TextPaintFactory {
 
     fun create(
         config: RenderConfig.ReflowText,
@@ -23,4 +23,3 @@ internal object TextPaintFactory {
         return paint
     }
 }
-

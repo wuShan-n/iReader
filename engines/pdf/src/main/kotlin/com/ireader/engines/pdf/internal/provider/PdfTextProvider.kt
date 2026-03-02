@@ -1,7 +1,7 @@
 package com.ireader.engines.pdf.internal.provider
 
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.pdf.internal.backend.PdfBackend
-import com.ireader.engines.pdf.internal.util.toReaderError
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.TextProvider
@@ -94,4 +94,3 @@ internal class PdfTextProvider(
         return index.coerceIn(0, pageCount.coerceAtLeast(1) - 1)
     }
 }
-

@@ -12,6 +12,7 @@ dependencies {
     implementation(project(":core:files"))
     implementation(project(":core:reader:api"))
     implementation(project(":engines:engine-common"))
+    implementation(project(":engines:engine-common-android"))
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.readium.shared)

@@ -7,7 +7,7 @@ import com.ireader.engines.pdf.internal.backend.pdfium.PdfiumBackend
 import com.ireader.engines.pdf.internal.backend.platform.PlatformPdfBackend
 import com.ireader.engines.pdf.internal.open.OpenedPdf
 import com.ireader.engines.pdf.internal.open.PdfOpener
-import com.ireader.engines.pdf.internal.util.closeQuietly
+import com.ireader.engines.common.io.closeQuietly
 import com.ireader.reader.api.error.ReaderResult
 import java.io.Closeable
 
@@ -70,4 +70,3 @@ internal class BackendFactory(
         )
     }
 }
-

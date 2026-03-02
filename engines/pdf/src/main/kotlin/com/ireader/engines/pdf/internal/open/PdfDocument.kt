@@ -1,6 +1,7 @@
 package com.ireader.engines.pdf.internal.open
 
 import com.ireader.core.files.source.DocumentSource
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.pdf.PdfEngineConfig
 import com.ireader.engines.pdf.internal.provider.EmptyPdfSelectionProvider
 import com.ireader.engines.pdf.internal.provider.InMemoryPdfAnnotationProvider
@@ -10,7 +11,6 @@ import com.ireader.engines.pdf.internal.provider.PdfTextProvider
 import com.ireader.engines.pdf.internal.render.PdfController
 import com.ireader.engines.pdf.internal.session.PdfSession
 import com.ireader.engines.pdf.internal.util.toPdfPageIndexOrNull
-import com.ireader.engines.pdf.internal.util.toReaderError
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError
@@ -23,7 +23,6 @@ import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.SessionId
-import java.io.Closeable
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.withContext

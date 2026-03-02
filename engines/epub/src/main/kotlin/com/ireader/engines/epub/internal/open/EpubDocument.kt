@@ -1,9 +1,9 @@
 package com.ireader.engines.epub.internal.open
 
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.epub.internal.session.EpubSession
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
-import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.AnnotationStore
@@ -40,13 +40,7 @@ internal class EpubDocument(
                 )
             )
         } catch (t: Throwable) {
-            ReaderResult.Err(
-                if (t is ReaderError) {
-                    t
-                } else {
-                    ReaderError.Internal(cause = t)
-                }
-            )
+            ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))
         }
     }
 
@@ -57,7 +51,7 @@ internal class EpubDocument(
         return try {
             val sessionId = SessionId(UUID.randomUUID().toString())
             ReaderResult.Ok(
-                EpubSession(
+                EpubSession.create(
                     id = sessionId,
                     documentId = id,
                     publication = publication,
@@ -67,13 +61,7 @@ internal class EpubDocument(
                 )
             )
         } catch (t: Throwable) {
-            ReaderResult.Err(
-                if (t is ReaderError) {
-                    t
-                } else {
-                    ReaderError.Internal(cause = t)
-                }
-            )
+            ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))
         }
     }
 

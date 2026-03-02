@@ -11,8 +11,10 @@
 package com.ireader.engines.txt.internal.open
 
 import com.ireader.core.files.source.DocumentSource
+import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.common.hash.Hashing
+import com.ireader.engines.common.id.DocumentIds
 import com.ireader.engines.txt.internal.encoding.EncodingDetector
-import com.ireader.engines.txt.internal.util.toReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.DocumentId
@@ -283,11 +285,10 @@ internal class TxtOpener(
                 remaining -= read
             }
         }
-        return digest.digest().toHexString()
+        return Hashing.toHexLower(digest.digest())
     }
 
     private fun computeDocumentId(source: DocumentSource, sampleHash: String): DocumentId {
-        val digest = MessageDigest.getInstance("SHA-256")
         val raw = buildString {
             append(source.uri.toString())
             append('|')
@@ -297,20 +298,7 @@ internal class TxtOpener(
             append('|')
             append(sampleHash)
         }
-        digest.update(raw.toByteArray(Charsets.UTF_8))
-        val id = digest.digest().toHexString().take(40)
-        return DocumentId(id)
-    }
-
-    private fun ByteArray.toHexString(): String {
-        val chars = CharArray(size * 2)
-        var index = 0
-        for (byte in this) {
-            val intValue = byte.toInt() and 0xFF
-            chars[index++] = HEX[intValue ushr 4]
-            chars[index++] = HEX[intValue and 0x0F]
-        }
-        return String(chars)
+        return DocumentIds.fromSha256(raw = raw, length = 40)
     }
 
     private data class LineStatsSnapshot(
@@ -371,7 +359,6 @@ internal class TxtOpener(
     }
 
     private companion object {
-        private val HEX = "0123456789abcdef".toCharArray()
         private val STRONG_END_PUNCTUATION = setOf('。', '！', '？', '.', '!', '?')
     }
 }

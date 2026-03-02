@@ -9,7 +9,7 @@
 package com.ireader.engines.txt.internal.encoding
 
 import com.ireader.core.files.source.DocumentSource
-import com.ireader.engines.txt.internal.util.toReaderError
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.reader.api.error.ReaderResult
 import java.io.BufferedInputStream
 import java.nio.ByteBuffer

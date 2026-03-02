@@ -56,4 +56,12 @@ class BookStorage @Inject constructor(
             ?.filter { it.isFile && it.name.startsWith("original.") }
             ?.forEach { file -> runCatching { file.delete() } }
     }
+
+    fun deleteCanonicalExcept(bookId: Long, keepAbsolutePath: String) {
+        val keepPath = File(keepAbsolutePath).absolutePath
+        val dir = bookDir(bookId)
+        dir.listFiles()
+            ?.filter { it.isFile && it.name.startsWith("original.") && it.absolutePath != keepPath }
+            ?.forEach { file -> runCatching { file.delete() } }
+    }
 }

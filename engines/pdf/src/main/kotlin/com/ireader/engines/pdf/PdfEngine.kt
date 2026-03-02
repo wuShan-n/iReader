@@ -2,11 +2,11 @@ package com.ireader.engines.pdf
 
 import android.content.Context
 import com.ireader.core.files.source.DocumentSource
+import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.common.android.id.SourceDocumentIds
 import com.ireader.engines.pdf.internal.backend.BackendFactory
 import com.ireader.engines.pdf.internal.open.PdfDocument
 import com.ireader.engines.pdf.internal.open.PdfOpener
-import com.ireader.engines.pdf.internal.util.sha1Hex
-import com.ireader.engines.pdf.internal.util.toReaderError
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderEngine
 import com.ireader.reader.api.error.ReaderResult
@@ -55,20 +55,15 @@ class PdfEngine(
             )
         }.fold(
             onSuccess = { it },
-            onFailure = { ReaderResult.Err(it.toReaderError()) }
+            onFailure = {
+                ReaderResult.Err(
+                    it.toReaderError(invalidPasswordKeywords = setOf("password", "encrypted"))
+                )
+            }
         )
     }
 
     private fun buildDocumentId(source: DocumentSource): DocumentId {
-        val raw = buildString {
-            append(source.uri.toString())
-            append('|')
-            append(source.displayName ?: "")
-            append('|')
-            append(source.sizeBytes ?: -1L)
-            append('|')
-            append(source.mimeType ?: "")
-        }
-        return DocumentId("pdf:${sha1Hex(raw)}")
+        return SourceDocumentIds.fromSourceSha1(prefix = "pdf", source = source)
     }
 }

@@ -291,9 +291,9 @@ class ImportWorker @AssistedInject constructor(
             val detectedFormat = detectFormatFromFile(tempFile, fileName)
 
             if (existing != null && duplicateStrategy == DuplicateStrategy.REPLACE) {
-                storage.deleteCanonical(existing.bookId)
                 val finalFile = storage.canonicalFile(existing.bookId, extension)
                 storage.atomicMove(tempFile, finalFile)
+                storage.deleteCanonicalExcept(existing.bookId, finalFile.absolutePath)
 
                 val updated = existing.copy(
                     sourceUri = source.uri.toString(),
