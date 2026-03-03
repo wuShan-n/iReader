@@ -6,7 +6,7 @@ object AppRoutes {
     const val ARG_LOCATOR = "locator"
 
     const val READER = "reader/{$ARG_BOOK_ID}?$ARG_LOCATOR={$ARG_LOCATOR}"
-    fun reader(bookId: Long): String = reader(bookId.toString())
+    fun reader(bookId: Long, locator: String? = null): String = reader(bookId.toString(), locator)
     fun reader(bookId: String, locator: String? = null): String {
         val locatorArg = locator?.takeIf { it.isNotBlank() }
         return if (locatorArg == null) {
