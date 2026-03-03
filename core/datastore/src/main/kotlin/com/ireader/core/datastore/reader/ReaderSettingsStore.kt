@@ -1,16 +1,15 @@
-package com.ireader.feature.reader.domain
+package com.ireader.core.datastore.reader
 
 import com.ireader.reader.api.render.RenderConfig
 import kotlinx.coroutines.flow.Flow
 
-interface ReaderSettingsRepository {
+interface ReaderSettingsStore {
     val reflowConfig: Flow<RenderConfig.ReflowText>
     val fixedConfig: Flow<RenderConfig.FixedPage>
 
     suspend fun getReflowConfig(): RenderConfig.ReflowText
     suspend fun getFixedConfig(): RenderConfig.FixedPage
 
-    suspend fun updateReflowConfig(config: RenderConfig.ReflowText)
-    suspend fun updateFixedConfig(config: RenderConfig.FixedPage)
+    suspend fun setReflowConfig(config: RenderConfig.ReflowText)
+    suspend fun setFixedConfig(config: RenderConfig.FixedPage)
 }
-

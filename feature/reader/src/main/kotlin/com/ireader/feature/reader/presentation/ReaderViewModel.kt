@@ -2,17 +2,19 @@ package com.ireader.feature.reader.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ireader.core.data.book.BookRepo
+import com.ireader.core.data.book.ProgressRepo
+import com.ireader.core.database.book.IndexState
+import com.ireader.core.datastore.reader.ReaderSettingsStore
+import com.ireader.feature.reader.domain.BookDocumentSourceResolver
 import com.ireader.feature.reader.domain.LocatorCodec
-import com.ireader.feature.reader.domain.ReaderBookInfo
-import com.ireader.feature.reader.domain.ReaderBookRepository
-import com.ireader.feature.reader.domain.ReaderProgressRepository
-import com.ireader.feature.reader.domain.ReaderSettingsRepository
 import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
 import com.ireader.feature.reader.domain.usecase.OpenReaderSession
 import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
 import com.ireader.feature.reader.web.ReaderWebViewLinkRouter
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.ReaderController
@@ -49,9 +51,10 @@ import kotlinx.coroutines.sync.withLock
 @HiltViewModel
 @OptIn(FlowPreview::class)
 class ReaderViewModel @Inject constructor(
-    private val bookRepository: ReaderBookRepository,
-    private val progressRepository: ReaderProgressRepository,
-    private val settingsRepository: ReaderSettingsRepository,
+    private val bookRepo: BookRepo,
+    private val progressRepo: ProgressRepo,
+    private val settingsStore: ReaderSettingsStore,
+    private val sourceResolver: BookDocumentSourceResolver,
     private val locatorCodec: LocatorCodec,
     private val openReaderSession: OpenReaderSession,
     private val observeEffectiveConfig: ObserveEffectiveConfig,
@@ -69,7 +72,7 @@ class ReaderViewModel @Inject constructor(
     private val navigationMutex = Mutex()
 
     private var handle: ReaderSessionHandle? = null
-    private var currentBook: ReaderBookInfo? = null
+    private var currentBookId: Long = -1L
     private var currentStartArgs: StartArgs? = null
     private var layoutConstraints: LayoutConstraints? = null
 
@@ -141,7 +144,7 @@ class ReaderViewModel @Inject constructor(
 
             ReaderIntent.OpenAnnotations -> {
                 val bookId = _state.value.bookId
-                if (bookId.isNotBlank()) {
+                if (bookId > 0L) {
                     _effects.tryEmit(ReaderEffect.OpenAnnotations(bookId))
                 }
             }
@@ -198,7 +201,7 @@ class ReaderViewModel @Inject constructor(
             )
         }
 
-        val book = bookRepository.resolveBook(args.bookId)
+        val book = bookRepo.getById(args.bookId)
         if (book == null) {
             _state.update {
                 it.copy(
@@ -212,25 +215,52 @@ class ReaderViewModel @Inject constructor(
             }
             return
         }
-        currentBook = book
+
+        val source = sourceResolver.resolve(book)
+        if (source == null) {
+            bookRepo.setIndexState(book.bookId, IndexState.MISSING, "File not found")
+            _state.update {
+                it.copy(
+                    isOpening = false,
+                    error = ReaderUiError(
+                        message = UiText.Dynamic("The book file is missing"),
+                        actionLabel = UiText.Dynamic("Back"),
+                        action = ReaderErrorAction.Back
+                    )
+                )
+            }
+            return
+        }
 
         val routeLocator = args.locatorArg?.let(locatorCodec::decode)
-        val historyLocator = runCatching { progressRepository.getLastLocator(book.bookId) }.getOrNull()
+        val historyLocator = runCatching {
+            progressRepo.getByBookId(book.bookId)?.locatorJson?.let(locatorCodec::decode)
+        }.getOrNull()
         val initialLocator = routeLocator ?: historyLocator
 
-        when (val result = openReaderSession(book, initialLocator, password)) {
+        when (
+            val result = openReaderSession(
+                source = source,
+                options = OpenOptions(
+                    hintFormat = book.format,
+                    password = password
+                ),
+                initialLocator = initialLocator
+            )
+        ) {
             is ReaderResult.Err -> {
                 handleOpenError(result.error, password)
             }
 
             is ReaderResult.Ok -> {
-                bookRepository.markOpened(book.bookId)
+                currentBookId = book.bookId
+                bookRepo.touchLastOpened(book.bookId)
                 handle = result.value
 
                 _state.update {
                     it.copy(
                         isOpening = false,
-                        title = book.title,
+                        title = book.title?.takeIf(String::isNotBlank) ?: book.fileName,
                         controller = result.value.controller,
                         capabilities = result.value.document.capabilities,
                         currentConfig = result.value.controller.state.value.config,
@@ -288,7 +318,7 @@ class ReaderViewModel @Inject constructor(
 
         progressJob = viewModelScope.launch {
             sessionHandle.controller.state
-                .map { state -> state.locator to state.progression.percent }
+                .map { renderState -> renderState.locator to renderState.progression.percent }
                 .distinctUntilChanged()
                 .debounce(800L)
                 .collect { (locator, progression) ->
@@ -332,20 +362,25 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun applyConfig(config: RenderConfig, persist: Boolean) {
-        val sessionHandle = handle ?: return
+        if (persist) {
+            runCatching {
+                when (config) {
+                    is RenderConfig.FixedPage -> settingsStore.setFixedConfig(config)
+                    is RenderConfig.ReflowText -> settingsStore.setReflowConfig(config)
+                }
+            }.onFailure {
+                _effects.tryEmit(ReaderEffect.Snackbar(UiText.Dynamic("Failed to save settings")))
+            }
+        }
+
+        val sessionHandle = handle ?: run {
+            _state.update { it.copy(currentConfig = config) }
+            return
+        }
+
         when (val result = sessionHandle.controller.setConfig(config)) {
             is ReaderResult.Err -> _state.update { it.copy(error = errorMapper.map(result.error)) }
             is ReaderResult.Ok -> {
-                if (persist) {
-                    runCatching {
-                        when (config) {
-                            is RenderConfig.FixedPage -> settingsRepository.updateFixedConfig(config)
-                            is RenderConfig.ReflowText -> settingsRepository.updateReflowConfig(config)
-                        }
-                    }.onFailure {
-                        _effects.tryEmit(ReaderEffect.Snackbar(UiText.Dynamic("Failed to save settings")))
-                    }
-                }
                 _state.update { it.copy(currentConfig = config) }
                 renderCurrentPage()
             }
@@ -430,6 +465,8 @@ class ReaderViewModel @Inject constructor(
                     }
                 }
             }
+
+            runCatching { sessionHandle.controller.prefetchNeighbors(count = 1) }
         }
     }
 
@@ -584,20 +621,21 @@ class ReaderViewModel @Inject constructor(
         cancelSessionCollectors()
 
         val sessionHandle = handle
-        val book = currentBook
-        if (sessionHandle != null && book != null) {
+        if (sessionHandle != null && currentBookId > 0L) {
             runCatching {
                 val renderState = sessionHandle.controller.state.value
                 saveReadingProgress(
-                    bookId = book.bookId,
+                    bookId = currentBookId,
                     locator = renderState.locator,
                     progression = renderState.progression.percent
                 )
             }
         }
 
+        runCatching { sessionHandle?.controller?.unbindSurface() }
         runCatching { sessionHandle?.close() }
         handle = null
+        currentBookId = -1L
     }
 
     override fun onCleared() {
@@ -608,7 +646,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private data class StartArgs(
-        val bookId: String,
+        val bookId: Long,
         val locatorArg: String?
     )
 }

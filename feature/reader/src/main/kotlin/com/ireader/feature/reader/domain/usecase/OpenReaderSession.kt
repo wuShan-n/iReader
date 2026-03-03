@@ -1,7 +1,7 @@
 package com.ireader.feature.reader.domain.usecase
 
-import com.ireader.feature.reader.domain.ReaderBookInfo
-import com.ireader.feature.reader.domain.ReaderSettingsRepository
+import com.ireader.core.datastore.reader.ReaderSettingsStore
+import com.ireader.core.files.source.DocumentSource
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
@@ -14,19 +14,14 @@ import kotlinx.coroutines.withContext
 
 class OpenReaderSession @Inject constructor(
     private val runtime: ReaderRuntime,
-    private val settings: ReaderSettingsRepository
+    private val settings: ReaderSettingsStore
 ) {
     suspend operator fun invoke(
-        bookInfo: ReaderBookInfo,
+        source: DocumentSource,
+        options: OpenOptions,
         initialLocator: Locator?,
-        password: String?
     ): ReaderResult<ReaderSessionHandle> = withContext(Dispatchers.IO) {
-        val options = OpenOptions(
-            hintFormat = bookInfo.format,
-            password = password
-        )
-
-        when (val documentResult = runtime.openDocument(bookInfo.source, options)) {
+        when (val documentResult = runtime.openDocument(source, options)) {
             is ReaderResult.Err -> documentResult
             is ReaderResult.Ok -> {
                 val document = documentResult.value
@@ -53,4 +48,3 @@ class OpenReaderSession @Inject constructor(
         }
     }
 }
-

@@ -23,10 +23,10 @@ import com.ireader.reader.api.render.LayoutConstraints
 @Composable
 @Suppress("FunctionNaming")
 fun ReaderScreen(
-    bookId: String,
+    bookId: Long,
     locatorArg: String?,
     onBack: () -> Unit,
-    onOpenAnnotations: (String) -> Unit,
+    onOpenAnnotations: (Long) -> Unit,
     vm: ReaderViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()

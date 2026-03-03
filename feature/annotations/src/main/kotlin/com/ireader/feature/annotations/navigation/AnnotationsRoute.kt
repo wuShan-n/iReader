@@ -5,5 +5,5 @@ import com.ireader.core.navigation.AppRoutes
 object AnnotationsRoute {
     const val route: String = AppRoutes.ANNOTATIONS
 
-    fun create(bookId: String): String = AppRoutes.annotations(bookId)
+    fun create(bookId: Long): String = AppRoutes.annotations(bookId)
 }

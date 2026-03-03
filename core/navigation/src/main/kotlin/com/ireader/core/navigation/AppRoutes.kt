@@ -17,6 +17,7 @@ object AppRoutes {
     }
 
     const val ANNOTATIONS = "annotations/{$ARG_BOOK_ID}"
+    fun annotations(bookId: Long): String = annotations(bookId.toString())
     fun annotations(bookId: String): String = "annotations/$bookId"
     const val SEARCH = "search"
     const val SETTINGS = "settings"

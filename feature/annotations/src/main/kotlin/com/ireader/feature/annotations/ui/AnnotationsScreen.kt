@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 @Suppress("FunctionNaming")
-fun AnnotationsScreen(bookId: String) {
+fun AnnotationsScreen(bookId: Long) {
     Column(
         modifier = Modifier
             .fillMaxSize()

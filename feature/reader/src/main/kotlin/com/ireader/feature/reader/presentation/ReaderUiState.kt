@@ -44,7 +44,7 @@ data class SearchState(
 )
 
 data class ReaderUiState(
-    val bookId: String = "",
+    val bookId: Long = -1L,
     val title: String? = null,
     val isOpening: Boolean = false,
     val isRenderingFinal: Boolean = false,
@@ -60,4 +60,3 @@ data class ReaderUiState(
     val passwordPrompt: PasswordPrompt? = null,
     val error: ReaderUiError? = null
 )
-

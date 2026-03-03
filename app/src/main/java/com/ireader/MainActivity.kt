@@ -38,7 +38,7 @@ private fun iReaderApp() {
     NavHost(navController = navController, startDestination = AppRoutes.LIBRARY) {
         libraryNavGraph(
             onOpenBook = { bookId ->
-                navController.navigate(AppRoutes.reader(bookId.toString()))
+                navController.navigate(AppRoutes.reader(bookId))
             },
             onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) }
         )
@@ -52,11 +52,12 @@ private fun iReaderApp() {
             route = AppRoutes.ANNOTATIONS,
             arguments = listOf(
                 navArgument(AppRoutes.ARG_BOOK_ID) {
-                    type = NavType.StringType
+                    type = NavType.LongType
                 }
             )
         ) { entry ->
-            val bookId = requireNotNull(entry.arguments?.getString(AppRoutes.ARG_BOOK_ID))
+            val bookId = entry.arguments?.getLong(AppRoutes.ARG_BOOK_ID)
+                ?: error("Missing ${AppRoutes.ARG_BOOK_ID}")
             AnnotationsScreen(bookId = bookId)
         }
         composable(AppRoutes.SEARCH) {

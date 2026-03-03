@@ -5,7 +5,7 @@ import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.model.Locator
 
 sealed interface ReaderIntent {
-    data class Start(val bookId: String, val locatorArg: String?) : ReaderIntent
+    data class Start(val bookId: Long, val locatorArg: String?) : ReaderIntent
     data object RetryOpen : ReaderIntent
     data class SubmitPassword(val password: String) : ReaderIntent
     data object CancelPassword : ReaderIntent
@@ -30,4 +30,3 @@ sealed interface ReaderIntent {
 
     data class UpdateConfig(val config: RenderConfig, val persist: Boolean) : ReaderIntent
 }
-
