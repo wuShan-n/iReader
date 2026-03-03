@@ -4,11 +4,11 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LibraryQuery
 import com.ireader.core.data.book.LibrarySort
-import com.ireader.core.database.book.IndexState
-import com.ireader.core.database.book.ReadingStatus
-import com.ireader.core.database.importing.ImportStatus
+import com.ireader.core.data.book.ReadingStatus
+import com.ireader.core.files.importing.ImportJobStatus
 import com.ireader.feature.library.domain.usecase.DeleteBookUseCase
 import com.ireader.feature.library.domain.usecase.LoadLibraryUseCase
 import com.ireader.feature.library.domain.usecase.ObserveCollectionsUseCase
@@ -214,8 +214,8 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private fun ImportStatus.isTerminal(): Boolean {
-        return this == ImportStatus.SUCCEEDED || this == ImportStatus.FAILED || this == ImportStatus.CANCELLED
+    private fun ImportJobStatus.isTerminal(): Boolean {
+        return this == ImportJobStatus.SUCCEEDED || this == ImportJobStatus.FAILED || this == ImportJobStatus.CANCELLED
     }
 
     private fun <T> Set<T>.toggle(value: T, enabled: Boolean): Set<T> {

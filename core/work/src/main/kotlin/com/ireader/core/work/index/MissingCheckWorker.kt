@@ -4,8 +4,9 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.BookRepo
-import com.ireader.core.database.book.IndexState
+import com.ireader.core.database.book.IndexState as DbIndexState
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.io.File
@@ -32,7 +33,7 @@ class MissingCheckWorker @AssistedInject constructor(
             }
 
             val exists = File(book.canonicalPath).exists()
-            if (!exists && book.indexState != IndexState.MISSING) {
+            if (!exists && book.indexState != DbIndexState.MISSING) {
                 bookRepo.setIndexState(
                     bookId = book.bookId,
                     state = IndexState.MISSING,

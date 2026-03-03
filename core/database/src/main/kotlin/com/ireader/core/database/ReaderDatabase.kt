@@ -7,6 +7,7 @@ import com.ireader.core.database.annotation.AnnotationDao
 import com.ireader.core.database.annotation.AnnotationEntity
 import com.ireader.core.database.book.BookDao
 import com.ireader.core.database.book.BookEntity
+import com.ireader.core.database.book.BookFtsEntity
 import com.ireader.core.database.collection.BookCollectionDao
 import com.ireader.core.database.collection.BookCollectionEntity
 import com.ireader.core.database.collection.CollectionDao
@@ -21,6 +22,7 @@ import com.ireader.core.database.progress.ProgressEntity
 @Database(
     entities = [
         BookEntity::class,
+        BookFtsEntity::class,
         ProgressEntity::class,
         CollectionEntity::class,
         BookCollectionEntity::class,
@@ -28,7 +30,7 @@ import com.ireader.core.database.progress.ProgressEntity
         ImportItemEntity::class,
         AnnotationEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(DbConverters::class)

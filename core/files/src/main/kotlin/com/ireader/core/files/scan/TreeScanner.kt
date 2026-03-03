@@ -6,25 +6,31 @@ import androidx.documentfile.provider.DocumentFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Singleton
 class TreeScanner @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    fun scan(treeUri: Uri): List<Uri> {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+    suspend fun scan(treeUri: Uri): List<Uri> {
         val out = ArrayList<Uri>(128)
-        traverse(root, out)
+        scan(treeUri) { out += it }
         return out
     }
 
-    private fun traverse(node: DocumentFile, out: MutableList<Uri>) {
+    suspend fun scan(treeUri: Uri, onFile: suspend (Uri) -> Unit) = withContext(Dispatchers.IO) {
+        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext
+        traverse(node = root, onFile = onFile)
+    }
+
+    private suspend fun traverse(node: DocumentFile, onFile: suspend (Uri) -> Unit) {
         val children = node.listFiles()
         for (child in children) {
             if (child.isDirectory) {
-                traverse(child, out)
+                traverse(child, onFile)
             } else if (child.isFile && isSupported(child.name)) {
-                out += child.uri
+                onFile(child.uri)
             }
         }
     }

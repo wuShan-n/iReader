@@ -2,7 +2,7 @@ package com.ireader.core.files.source
 
 import android.content.Context
 import android.net.Uri
-import com.ireader.core.database.book.BookEntity
+import com.ireader.core.data.book.BookRecord
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -12,7 +12,7 @@ import javax.inject.Singleton
 class DefaultBookSourceResolver @Inject constructor(
     @ApplicationContext private val context: Context
 ) : BookSourceResolver {
-    override fun resolve(book: BookEntity): DocumentSource? {
+    override fun resolve(book: BookRecord): DocumentSource? {
         val sourceUri = book.sourceUri
         if (!sourceUri.isNullOrBlank()) {
             val uri = Uri.parse(sourceUri)
@@ -40,4 +40,3 @@ class DefaultBookSourceResolver @Inject constructor(
         )
     }
 }
-

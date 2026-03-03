@@ -1,5 +1,6 @@
 plugins {
     id("com.ireader.android.library")
+    id("com.ireader.android.hilt")
 }
 
 android {

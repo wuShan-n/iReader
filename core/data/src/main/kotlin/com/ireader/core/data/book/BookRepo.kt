@@ -2,8 +2,6 @@ package com.ireader.core.data.book
 
 import com.ireader.core.database.book.BookDao
 import com.ireader.core.database.book.BookEntity
-import com.ireader.core.database.book.IndexState
-import com.ireader.core.database.book.ReadingStatus
 import com.ireader.core.database.collection.BookCollectionDao
 import com.ireader.core.database.collection.BookCollectionEntity
 import com.ireader.core.database.collection.CollectionDao
@@ -26,6 +24,8 @@ class BookRepo @Inject constructor(
 
     suspend fun getById(bookId: Long): BookEntity? = bookDao.getById(bookId)
 
+    suspend fun getRecordById(bookId: Long): BookRecord? = bookDao.getById(bookId)?.toRecord()
+
     suspend fun listAll(): List<BookEntity> = bookDao.listAll()
 
     suspend fun getByDocumentId(documentId: String): BookEntity? = bookDao.getByDocumentId(documentId)
@@ -41,7 +41,7 @@ class BookRepo @Inject constructor(
         return bookDao.observeLibrary(sql).map { rows ->
             rows.map { row ->
                 LibraryBookItem(
-                    book = row.book,
+                    book = row.book.toRecord(),
                     progression = (row.progression ?: 0.0).coerceIn(0.0, 1.0),
                     progressUpdatedAtEpochMs = row.progressUpdatedAtEpochMs
                 )
@@ -52,7 +52,7 @@ class BookRepo @Inject constructor(
     suspend fun setIndexState(bookId: Long, state: IndexState, error: String? = null) {
         bookDao.updateIndexState(
             bookId = bookId,
-            state = state,
+            state = state.toDb(),
             error = error,
             updatedAt = System.currentTimeMillis()
         )
@@ -78,7 +78,7 @@ class BookRepo @Inject constructor(
     suspend fun setReadingStatus(bookId: Long, status: ReadingStatus) {
         bookDao.updateReadingStatus(
             bookId = bookId,
-            status = status,
+            status = status.toDb(),
             updatedAt = System.currentTimeMillis()
         )
     }
@@ -125,13 +125,15 @@ class BookRepo @Inject constructor(
             description = description,
             coverPath = coverPath,
             capabilitiesJson = capabilitiesJson,
-            indexState = indexState,
+            indexState = indexState.toDb(),
             indexError = indexError,
             updatedAt = System.currentTimeMillis()
         )
     }
 
-    fun observeCollections(): Flow<List<CollectionEntity>> = collectionDao.observeAll()
+    fun observeCollections(): Flow<List<CollectionItem>> = collectionDao.observeAll().map { list ->
+        list.map(CollectionEntity::toData)
+    }
 
     suspend fun createCollection(name: String): Long {
         val normalized = name.trim()

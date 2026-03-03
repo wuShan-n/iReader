@@ -2,6 +2,7 @@ package com.ireader.engines.pdf.internal.cache
 
 import com.ireader.engines.pdf.internal.render.zoomBucketMilli
 import com.ireader.reader.api.render.RenderPolicy
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
@@ -13,7 +14,7 @@ class TileCacheKeyTest {
         val b = zoomBucketMilli(1.0004f)
         val c = zoomBucketMilli(1.1f)
 
-        assert(a == b)
+        assertEquals(a, b)
         assertNotEquals(a, c)
     }
 
@@ -34,4 +35,3 @@ class TileCacheKeyTest {
         assertNotEquals(base, final)
     }
 }
-

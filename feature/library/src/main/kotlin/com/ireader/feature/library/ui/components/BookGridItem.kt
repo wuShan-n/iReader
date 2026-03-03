@@ -16,8 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LibraryBookItem
-import com.ireader.core.database.book.IndexState
 import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)

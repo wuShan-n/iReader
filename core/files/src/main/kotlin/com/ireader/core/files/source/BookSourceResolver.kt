@@ -1,8 +1,7 @@
 package com.ireader.core.files.source
 
-import com.ireader.core.database.book.BookEntity
+import com.ireader.core.data.book.BookRecord
 
 interface BookSourceResolver {
-    fun resolve(book: BookEntity): DocumentSource?
+    fun resolve(book: BookRecord): DocumentSource?
 }
-

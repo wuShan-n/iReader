@@ -1,6 +1,7 @@
 package com.ireader.core.files.importing
 
 import android.content.Context
+import android.net.Uri
 import com.ireader.core.data.importing.ImportItemRepo
 import com.ireader.core.data.importing.ImportJobRepo
 import com.ireader.core.database.importing.ImportItemEntity
@@ -34,8 +35,8 @@ class DefaultImportManager @Inject constructor(
         val now = System.currentTimeMillis()
         val jobId = UUID.randomUUID().toString()
 
-        request.treeUri?.let { permissionStore.takePersistableRead(it) }
-        request.uris.forEach { permissionStore.takePersistableRead(it) }
+        request.treeUri?.let(::requirePersistedRead)
+        request.uris.forEach(::requirePersistedRead)
 
         val items = request.uris.map { uri ->
             val source = ContentUriDocumentSource(appContext, uri)
@@ -82,7 +83,7 @@ class DefaultImportManager @Inject constructor(
             .map { entity ->
                 ImportJobState(
                     jobId = entity.jobId,
-                    status = entity.status,
+                    status = entity.status.toImportJobStatus(),
                     total = entity.total,
                     done = entity.done,
                     currentTitle = entity.currentTitle,
@@ -102,4 +103,21 @@ class DefaultImportManager @Inject constructor(
             )
         )
     }
+
+    private fun requirePersistedRead(uri: Uri) {
+        val result = permissionStore.takePersistableRead(uri)
+        if (!result.granted) {
+            val message = "Cannot persist read permission for $uri: ${result.message ?: result.code.orEmpty()}"
+            throw SecurityException(message)
+        }
+    }
+
+    private fun ImportStatus.toImportJobStatus(): ImportJobStatus =
+        when (this) {
+            ImportStatus.QUEUED -> ImportJobStatus.QUEUED
+            ImportStatus.RUNNING -> ImportJobStatus.RUNNING
+            ImportStatus.SUCCEEDED -> ImportJobStatus.SUCCEEDED
+            ImportStatus.FAILED -> ImportJobStatus.FAILED
+            ImportStatus.CANCELLED -> ImportJobStatus.CANCELLED
+        }
 }

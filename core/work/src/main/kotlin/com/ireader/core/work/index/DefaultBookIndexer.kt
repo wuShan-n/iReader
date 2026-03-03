@@ -1,9 +1,9 @@
 package com.ireader.core.work.index
 
 import com.ireader.core.data.book.BookIndexer
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.BookRepo
 import com.ireader.core.database.book.BookEntity
-import com.ireader.core.database.book.IndexState
 import com.ireader.core.files.source.FileDocumentSource
 import com.ireader.core.files.storage.BookStorage
 import com.ireader.core.work.enrich.BitmapIO

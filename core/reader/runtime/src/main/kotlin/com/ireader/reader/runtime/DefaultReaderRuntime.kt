@@ -8,6 +8,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.model.BookFormat
+import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
 import com.ireader.reader.runtime.error.toReaderError
@@ -35,14 +36,17 @@ class DefaultReaderRuntime(
         source: DocumentSource,
         options: OpenOptions,
         initialLocator: Locator?,
-        initialConfig: RenderConfig?
+        initialConfig: RenderConfig?,
+        resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)?
     ): ReaderResult<ReaderSessionHandle> {
         val docResult = openDocument(source, options)
         return when (docResult) {
             is ReaderResult.Err -> docResult
             is ReaderResult.Ok -> {
                 val document = docResult.value
-                val config = initialConfig ?: RenderDefaults.configFor(document.capabilities)
+                val config = initialConfig
+                    ?: resolveInitialConfig?.invoke(document.capabilities)
+                    ?: RenderDefaults.configFor(document.capabilities)
 
                 val sessionResult = catchingSuspend { document.createSession(initialLocator, config) }
                 when (sessionResult) {

@@ -13,7 +13,6 @@ dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:files"))
     implementation(project(":core:data"))
-    implementation(project(":core:database"))
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)

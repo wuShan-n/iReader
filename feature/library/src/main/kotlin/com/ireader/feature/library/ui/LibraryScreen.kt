@@ -37,10 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LibraryBookItem
 import com.ireader.core.data.book.LibrarySort
-import com.ireader.core.database.book.IndexState
-import com.ireader.core.database.book.ReadingStatus
+import com.ireader.core.data.book.ReadingStatus
 import com.ireader.feature.library.presentation.LibraryViewModel
 import com.ireader.feature.library.ui.components.BookGridItem
 

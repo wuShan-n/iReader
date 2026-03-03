@@ -1,7 +1,5 @@
 package com.ireader.core.data.book
 
-import com.ireader.core.database.book.IndexState
-import com.ireader.core.database.book.ReadingStatus
 import com.ireader.reader.model.BookFormat
 
 data class LibraryQuery(

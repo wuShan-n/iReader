@@ -32,7 +32,9 @@ import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.Progression
 import com.ireader.reader.model.SessionId
+import com.ireader.reader.runtime.BookProbeResult
 import com.ireader.reader.runtime.ReaderRuntime
+import com.ireader.reader.runtime.ReaderSessionHandle
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import kotlinx.coroutines.flow.Flow
@@ -47,9 +49,10 @@ import org.junit.Test
 class OpenReaderSessionTest {
 
     @Test
-    fun `openDocument error should be returned`() = runTest {
+    fun `runtime error should be returned`() = runTest {
         val runtime = FakeRuntime(
-            openDocumentResult = ReaderResult.Err(ReaderError.UnsupportedFormat())
+            openSessionResult = ReaderResult.Err(ReaderError.UnsupportedFormat()),
+            capabilitiesForConfig = reflowCapabilities()
         )
         val store = FakeReaderSettingsStore()
         val useCase = OpenReaderSession(runtime = runtime, settings = store)
@@ -61,37 +64,16 @@ class OpenReaderSessionTest {
         )
 
         assertTrue(result is ReaderResult.Err)
-    }
-
-    @Test
-    fun `session creation error should close document`() = runTest {
-        val document = FakeDocument(
-            capabilities = reflowCapabilities(),
-            sessionResult = ReaderResult.Err(ReaderError.Internal())
-        )
-        val runtime = FakeRuntime(openDocumentResult = ReaderResult.Ok(document))
-        val store = FakeReaderSettingsStore()
-        val useCase = OpenReaderSession(runtime = runtime, settings = store)
-
-        val result = useCase(
-            source = FakeDocumentSource(),
-            options = OpenOptions(),
-            initialLocator = null
-        )
-
-        assertTrue(result is ReaderResult.Err)
-        assertTrue(document.closed)
     }
 
     @Test
     fun `fixed layout should load fixed config from settings`() = runTest {
         val fixedConfig = RenderConfig.FixedPage(zoom = 2.0f)
         val store = FakeReaderSettingsStore(fixed = fixedConfig)
-        val document = FakeDocument(
-            capabilities = fixedCapabilities(),
-            sessionResult = ReaderResult.Ok(FakeSession())
+        val runtime = FakeRuntime(
+            openSessionResult = ReaderResult.Ok(ReaderSessionHandle(FakeDocument(), FakeSession())),
+            capabilitiesForConfig = fixedCapabilities()
         )
-        val runtime = FakeRuntime(openDocumentResult = ReaderResult.Ok(document))
         val useCase = OpenReaderSession(runtime = runtime, settings = store)
 
         val result = useCase(
@@ -103,7 +85,29 @@ class OpenReaderSessionTest {
         assertTrue(result is ReaderResult.Ok)
         assertEquals(1, store.fixedGetCount)
         assertEquals(0, store.reflowGetCount)
-        assertEquals(fixedConfig, document.lastConfig)
+        assertEquals(fixedConfig, runtime.lastResolvedConfig)
+    }
+
+    @Test
+    fun `reflow layout should load reflow config from settings`() = runTest {
+        val reflowConfig = RenderConfig.ReflowText(fontSizeSp = 22f)
+        val store = FakeReaderSettingsStore(reflow = reflowConfig)
+        val runtime = FakeRuntime(
+            openSessionResult = ReaderResult.Ok(ReaderSessionHandle(FakeDocument(), FakeSession())),
+            capabilitiesForConfig = reflowCapabilities()
+        )
+        val useCase = OpenReaderSession(runtime = runtime, settings = store)
+
+        val result = useCase(
+            source = FakeDocumentSource(),
+            options = OpenOptions(),
+            initialLocator = null
+        )
+
+        assertTrue(result is ReaderResult.Ok)
+        assertEquals(0, store.fixedGetCount)
+        assertEquals(1, store.reflowGetCount)
+        assertEquals(reflowConfig, runtime.lastResolvedConfig)
     }
 
     private fun fixedCapabilities() = DocumentCapabilities(
@@ -148,34 +152,49 @@ private class FakeReaderSettingsStore(
 }
 
 private class FakeRuntime(
-    private val openDocumentResult: ReaderResult<ReaderDocument>
+    private val openSessionResult: ReaderResult<ReaderSessionHandle>,
+    private val capabilitiesForConfig: DocumentCapabilities
 ) : ReaderRuntime {
+    var lastResolvedConfig: RenderConfig? = null
+
     override suspend fun openDocument(
         source: DocumentSource,
         options: OpenOptions
-    ): ReaderResult<ReaderDocument> = openDocumentResult
+    ): ReaderResult<ReaderDocument> = ReaderResult.Err(ReaderError.Internal("unused"))
 
     override suspend fun openSession(
         source: DocumentSource,
         options: OpenOptions,
         initialLocator: Locator?,
-        initialConfig: RenderConfig?
-    ) = error("Not used by OpenReaderSession use case")
+        initialConfig: RenderConfig?,
+        resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)?
+    ): ReaderResult<ReaderSessionHandle> {
+        lastResolvedConfig = when {
+            initialConfig != null -> initialConfig
+            resolveInitialConfig != null -> resolveInitialConfig(capabilitiesForConfig)
+            else -> null
+        }
+        return openSessionResult
+    }
 
     override suspend fun probe(
         source: DocumentSource,
         options: OpenOptions
-    ) = error("Not used by OpenReaderSession use case")
+    ): ReaderResult<BookProbeResult> = ReaderResult.Err(ReaderError.Internal("unused"))
 }
 
-private class FakeDocument(
-    override val capabilities: DocumentCapabilities,
-    private val sessionResult: ReaderResult<ReaderSession>
-) : ReaderDocument {
-    var closed = false
-    var lastConfig: RenderConfig? = null
+private class FakeDocument : ReaderDocument {
     override val id: DocumentId = DocumentId("doc")
     override val format: BookFormat = BookFormat.TXT
+    override val capabilities: DocumentCapabilities = DocumentCapabilities(
+        reflowable = true,
+        fixedLayout = false,
+        outline = false,
+        search = false,
+        textExtraction = false,
+        annotations = false,
+        links = false
+    )
     override val openOptions: OpenOptions = OpenOptions()
 
     override suspend fun metadata(): ReaderResult<DocumentMetadata> = ReaderResult.Ok(DocumentMetadata())
@@ -183,14 +202,9 @@ private class FakeDocument(
     override suspend fun createSession(
         initialLocator: Locator?,
         initialConfig: RenderConfig
-    ): ReaderResult<ReaderSession> {
-        lastConfig = initialConfig
-        return sessionResult
-    }
+    ): ReaderResult<ReaderSession> = ReaderResult.Ok(FakeSession())
 
-    override fun close() {
-        closed = true
-    }
+    override fun close() = Unit
 }
 
 private class FakeSession : ReaderSession {
@@ -223,9 +237,7 @@ private class FakeController : ReaderController {
 
     override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-    override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> {
-        return ReaderResult.Err(ReaderError.Internal("unused"))
-    }
+    override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))
 
     override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))
 
@@ -246,7 +258,7 @@ private class FakeController : ReaderController {
 
 private class FakeDocumentSource : DocumentSource {
     override val uri: Uri
-        get() = error("Unused by this unit test")
+        get() = Uri.EMPTY
     override val displayName: String? = "book"
     override val mimeType: String? = "text/plain"
     override val sizeBytes: Long? = 1

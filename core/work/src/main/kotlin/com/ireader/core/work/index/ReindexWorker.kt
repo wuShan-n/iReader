@@ -5,8 +5,8 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.ireader.core.data.book.BookIndexer
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.BookRepo
-import com.ireader.core.database.book.IndexState
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers

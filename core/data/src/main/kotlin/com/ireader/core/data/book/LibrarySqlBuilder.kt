@@ -19,13 +19,19 @@ object LibrarySqlBuilder {
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
             ?.let { keyword ->
-                sql.append(
-                    " AND (COALESCE(books.title, '') LIKE ? OR COALESCE(books.author, '') LIKE ? OR books.fileName LIKE ?)"
-                )
-                val pattern = "%$keyword%"
-                args += pattern
-                args += pattern
-                args += pattern
+                val ftsQuery = keyword.toFtsQueryOrNull()
+                if (ftsQuery != null) {
+                    sql.append(" AND books.bookId IN (SELECT rowid FROM books_fts WHERE books_fts MATCH ?)")
+                    args += ftsQuery
+                } else {
+                    sql.append(
+                        " AND (COALESCE(books.title, '') LIKE ? OR COALESCE(books.author, '') LIKE ? OR books.fileName LIKE ?)"
+                    )
+                    val pattern = "%$keyword%"
+                    args += pattern
+                    args += pattern
+                    args += pattern
+                }
             }
 
         if (query.onlyFavorites) {
@@ -70,5 +76,17 @@ object LibrarySqlBuilder {
         )
 
         return SimpleSQLiteQuery(sql.toString(), args.toTypedArray())
+    }
+
+    private fun String.toFtsQueryOrNull(): String? {
+        val terms = trim()
+            .split(Regex("\\s+"))
+            .map { token -> token.trim().replace("\"", "\"\"") }
+            .filter { it.isNotEmpty() }
+            .map { token -> "$token*" }
+        if (terms.isEmpty()) {
+            return null
+        }
+        return terms.joinToString(separator = " AND ")
     }
 }

@@ -63,11 +63,15 @@ class ImportWorker @AssistedInject constructor(
         if (currentJob.sourceTreeUri != null) {
             val existingItems = itemRepo.list(jobId)
             if (existingItems.isEmpty()) {
-                val uris = treeScanner.scan(Uri.parse(currentJob.sourceTreeUri))
-                val now = System.currentTimeMillis()
-                val scannedItems = uris.map { uri ->
+                val treeUri = Uri.parse(currentJob.sourceTreeUri)
+                val batch = ArrayList<ImportItemEntity>(SCAN_BATCH_SIZE)
+                var scannedCount = 0
+
+                treeScanner.scan(treeUri) { uri ->
+                    currentCoroutineContext().ensureActive()
+                    val now = System.currentTimeMillis()
                     val source = ContentUriDocumentSource(applicationContext, uri)
-                    ImportItemEntity(
+                    batch += ImportItemEntity(
                         jobId = jobId,
                         uri = uri.toString(),
                         displayName = source.displayName,
@@ -80,16 +84,24 @@ class ImportWorker @AssistedInject constructor(
                         errorMessage = null,
                         updatedAtEpochMs = now
                     )
+                    scannedCount += 1
+                    if (batch.size >= SCAN_BATCH_SIZE) {
+                        itemRepo.upsertAll(batch.toList())
+                        batch.clear()
+                    }
                 }
-                itemRepo.upsertAll(scannedItems)
+                if (batch.isNotEmpty()) {
+                    itemRepo.upsertAll(batch.toList())
+                    batch.clear()
+                }
                 jobRepo.updateProgress(
                     jobId = jobId,
                     status = ImportStatus.QUEUED,
-                    total = scannedItems.size,
+                    total = scannedCount,
                     done = 0,
                     currentTitle = null,
                     errorMessage = null,
-                    now = now
+                    now = System.currentTimeMillis()
                 )
             }
         }
@@ -101,6 +113,8 @@ class ImportWorker @AssistedInject constructor(
         val initial = jobRepo.get(jobId) ?: currentJob
         var done = initial.done
         var total = initial.total
+        var lastRunningProgressAtMs = 0L
+        val fingerprintCache = mutableMapOf<String, BookEntity?>()
 
         jobRepo.updateProgress(
             jobId = jobId,
@@ -111,6 +125,7 @@ class ImportWorker @AssistedInject constructor(
             errorMessage = null,
             now = System.currentTimeMillis()
         )
+        lastRunningProgressAtMs = System.currentTimeMillis()
 
         val pendingItems = itemRepo.listPendingOrFailed(jobId)
         if (total == 0) {
@@ -136,19 +151,16 @@ class ImportWorker @AssistedInject constructor(
                     errorMessage = null,
                     now = now
                 )
-                jobRepo.updateProgress(
-                    jobId = jobId,
-                    status = ImportStatus.RUNNING,
-                    total = total,
-                    done = done,
-                    currentTitle = title,
-                    errorMessage = null,
-                    now = now
-                )
                 setForegroundSafe(done, total, title)
 
                 val source = ContentUriDocumentSource(applicationContext, Uri.parse(item.uri))
-                val outcome = runCatching { importOne(source, duplicateStrategy) }
+                val outcome = runCatching {
+                    importOne(
+                        source = source,
+                        duplicateStrategy = duplicateStrategy,
+                        fingerprintCache = fingerprintCache
+                    )
+                }
                     .getOrElse { throwable ->
                         val (code, message) = throwable.toImportError()
                         ImportOneResult.Fail(code, message)
@@ -198,15 +210,19 @@ class ImportWorker @AssistedInject constructor(
                     }
                 }
 
-                jobRepo.updateProgress(
-                    jobId = jobId,
-                    status = ImportStatus.RUNNING,
-                    total = total,
-                    done = done,
-                    currentTitle = null,
-                    errorMessage = null,
-                    now = System.currentTimeMillis()
-                )
+                val progressNow = System.currentTimeMillis()
+                if (done == total || progressNow - lastRunningProgressAtMs >= PROGRESS_UPDATE_INTERVAL_MS) {
+                    lastRunningProgressAtMs = progressNow
+                    jobRepo.updateProgress(
+                        jobId = jobId,
+                        status = ImportStatus.RUNNING,
+                        total = total,
+                        done = done,
+                        currentTitle = null,
+                        errorMessage = null,
+                        now = progressNow
+                    )
+                }
                 setForegroundSafe(done, total, null)
             }
 
@@ -270,25 +286,41 @@ class ImportWorker @AssistedInject constructor(
 
     private suspend fun importOne(
         source: ContentUriDocumentSource,
-        duplicateStrategy: DuplicateStrategy
+        duplicateStrategy: DuplicateStrategy,
+        fingerprintCache: MutableMap<String, BookEntity?>
     ): ImportOneResult = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val fileName = source.displayName ?: "unknown"
-        val extension = guessExtension(fileName, source.mimeType)
         val tempFile = storage.importTempFile()
         val digest = Fingerprint.newSha256()
 
         try {
             val copiedBytes = copyWithDigest(source, tempFile, digest)
             val fingerprint = Fingerprint.sha256Hex(digest.digest())
-            val existing = bookRepo.findByFingerprint(fingerprint)
+            val existing = if (fingerprintCache.containsKey(fingerprint)) {
+                fingerprintCache[fingerprint]
+            } else {
+                val found = bookRepo.findByFingerprint(fingerprint)
+                fingerprintCache[fingerprint] = found
+                found
+            }
 
             if (existing != null && duplicateStrategy == DuplicateStrategy.SKIP) {
                 runCatching { tempFile.delete() }
                 return@withContext ImportOneResult.Skipped(existing.bookId, fingerprint)
             }
 
-            val detectedFormat = detectFormatFromFile(tempFile, fileName)
+            val detectedFormat = when (val result = detectFormatFromFile(tempFile, fileName)) {
+                is ReaderResult.Ok -> result.value
+                is ReaderResult.Err -> {
+                    runCatching { tempFile.delete() }
+                    return@withContext ImportOneResult.Fail(
+                        code = result.error.code,
+                        message = result.error.message ?: result.error.code
+                    )
+                }
+            }
+            val extension = extensionFor(detectedFormat)
 
             if (existing != null && duplicateStrategy == DuplicateStrategy.REPLACE) {
                 val finalFile = storage.canonicalFile(existing.bookId, extension)
@@ -311,6 +343,7 @@ class ImportWorker @AssistedInject constructor(
                     updatedAtEpochMs = now
                 )
                 bookRepo.upsert(updated)
+                fingerprintCache[fingerprint] = updated
                 return@withContext ImportOneResult.Ok(existing.bookId, fingerprint)
             }
 
@@ -355,6 +388,7 @@ class ImportWorker @AssistedInject constructor(
                 lastModifiedEpochMs = finalFile.lastModified()
             )
             bookRepo.upsert(inserted)
+            fingerprintCache[fingerprint] = inserted
 
             return@withContext ImportOneResult.Ok(insertedId, fingerprint)
         } catch (throwable: Throwable) {
@@ -400,22 +434,15 @@ class ImportWorker @AssistedInject constructor(
         return total
     }
 
-    private suspend fun detectFormatFromFile(file: File, displayName: String): BookFormat {
+    private suspend fun detectFormatFromFile(file: File, displayName: String): ReaderResult<BookFormat> {
         val source = FileDocumentSource(file, displayName = displayName)
-        return when (val result = formatDetector.detect(source, hint = null)) {
-            is ReaderResult.Ok -> result.value
-            is ReaderResult.Err -> BookFormat.TXT
-        }
+        return formatDetector.detect(source, hint = null)
     }
 
-    private fun guessExtension(displayName: String, mimeType: String?): String {
-        val lowerName = displayName.lowercase()
+    private fun extensionFor(format: BookFormat): String {
         return when {
-            lowerName.endsWith(".epub") -> "epub"
-            lowerName.endsWith(".pdf") -> "pdf"
-            lowerName.endsWith(".txt") -> "txt"
-            mimeType == "application/epub+zip" -> "epub"
-            mimeType == "application/pdf" -> "pdf"
+            format == BookFormat.EPUB -> "epub"
+            format == BookFormat.PDF -> "pdf"
             else -> "txt"
         }
     }
@@ -429,6 +456,8 @@ class ImportWorker @AssistedInject constructor(
     companion object {
         private const val KEY_JOB_ID = "job_id"
         private const val BUFFER_SIZE = 128 * 1024
+        private const val SCAN_BATCH_SIZE = 128
+        private const val PROGRESS_UPDATE_INTERVAL_MS = 500L
 
         fun input(jobId: String): Data {
             return Data.Builder()

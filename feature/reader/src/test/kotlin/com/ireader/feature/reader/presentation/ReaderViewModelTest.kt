@@ -1,6 +1,7 @@
 package com.ireader.feature.reader.presentation
 
 import com.ireader.core.data.book.BookRepo
+import com.ireader.core.data.book.BookRecord
 import com.ireader.core.data.book.LocatorCodec
 import com.ireader.core.data.book.ProgressRepo
 import com.ireader.core.database.book.BookDao
@@ -23,6 +24,7 @@ import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.Locator
 import com.ireader.reader.runtime.BookProbeResult
 import com.ireader.reader.runtime.ReaderRuntime
@@ -93,7 +95,8 @@ class ReaderViewModelTest {
                 source: DocumentSource,
                 options: OpenOptions,
                 initialLocator: Locator?,
-                initialConfig: RenderConfig?
+                initialConfig: RenderConfig?,
+                resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)?
             ) = ReaderResult.Err(ReaderError.NotFound())
 
             override suspend fun probe(source: DocumentSource, options: OpenOptions): ReaderResult<BookProbeResult> {
@@ -106,7 +109,7 @@ class ReaderViewModelTest {
             progressRepo = progressRepo,
             settingsStore = settingsStore,
             sourceResolver = object : BookSourceResolver {
-                override fun resolve(book: BookEntity) = null
+                override fun resolve(book: BookRecord) = null
             },
             locatorCodec = locatorCodec,
             openReaderSession = OpenReaderSession(runtime = runtime, settings = settingsStore),

@@ -3,9 +3,9 @@ package com.ireader.feature.reader.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ireader.core.data.book.BookRepo
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LocatorCodec
 import com.ireader.core.data.book.ProgressRepo
-import com.ireader.core.database.book.IndexState
 import com.ireader.core.datastore.reader.ReaderSettingsStore
 import com.ireader.core.files.source.BookSourceResolver
 import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
@@ -28,9 +28,12 @@ import com.ireader.reader.runtime.ReaderSessionHandle
 import com.ireader.reader.runtime.flow.asReaderResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -43,7 +46,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -74,6 +76,7 @@ class ReaderViewModel @Inject constructor(
     private val intents = Channel<ReaderIntent>(capacity = Channel.UNLIMITED)
     private var currentStartArgs: StartArgs? = null
     private var searchJob: Job? = null
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
         viewModelScope.launch {
@@ -197,7 +200,7 @@ class ReaderViewModel @Inject constructor(
             )
         }
 
-        val book = bookRepo.getById(args.bookId)
+        val book = bookRepo.getRecordById(args.bookId)
         if (book == null) {
             ui.update {
                 it.copy(
@@ -395,17 +398,59 @@ class ReaderViewModel @Inject constructor(
         val twoPass = sessionHandle.document.capabilities.fixedLayout
 
         if (!twoPass) {
-            when (val result = controller.render()) {
-                is ReaderResult.Ok -> ui.update { it.copy(page = result.value, error = null) }
-                is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
-            }
+            applyRenderResult(controller.render())
             return
         }
 
-        when (val draft = controller.render(RenderPolicy(quality = RenderPolicy.Quality.DRAFT))) {
+        renderWithFinalPass(
+            controller = controller,
+            draft = controller.render(RenderPolicy(quality = RenderPolicy.Quality.DRAFT))
+        )
+    }
+
+    private suspend fun navigate(
+        block: suspend (ReaderController, RenderPolicy) -> ReaderResult<RenderPage>
+    ) {
+        val sessionHandle = session.currentHandle() ?: return
+        render.withNavigationLock {
+            val fixed = sessionHandle.document.capabilities.fixedLayout
+            val actionPolicy = if (fixed) {
+                RenderPolicy(quality = RenderPolicy.Quality.DRAFT)
+            } else {
+                RenderPolicy.Default
+            }
+
+            when (val result = block(sessionHandle.controller, actionPolicy)) {
+                is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
+                is ReaderResult.Ok -> if (fixed) {
+                    renderWithFinalPass(
+                        controller = sessionHandle.controller,
+                        draft = result
+                    )
+                } else {
+                    applyRenderResult(result)
+                }
+            }
+
+            runCatching { sessionHandle.controller.prefetchNeighbors(count = 1) }
+        }
+    }
+
+    private fun applyRenderResult(result: ReaderResult<RenderPage>) {
+        when (result) {
+            is ReaderResult.Ok -> ui.update { it.copy(page = result.value, error = null) }
+            is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
+        }
+    }
+
+    private suspend fun renderWithFinalPass(
+        controller: ReaderController,
+        draft: ReaderResult<RenderPage>
+    ) {
+        when (draft) {
             is ReaderResult.Ok -> ui.update { it.copy(page = draft.value, error = null) }
             is ReaderResult.Err -> {
-                ui.update { it.copy(error = errorMapper.map(draft.error)) }
+                ui.update { it.copy(error = errorMapper.map(draft.error), isRenderingFinal = false) }
                 return
             }
         }
@@ -426,52 +471,6 @@ class ReaderViewModel @Inject constructor(
                     isRenderingFinal = false
                 )
             }
-        }
-    }
-
-    private suspend fun navigate(
-        block: suspend (ReaderController, RenderPolicy) -> ReaderResult<RenderPage>
-    ) {
-        val sessionHandle = session.currentHandle() ?: return
-        render.withNavigationLock {
-            val fixed = sessionHandle.document.capabilities.fixedLayout
-            val actionPolicy = if (fixed) {
-                RenderPolicy(quality = RenderPolicy.Quality.DRAFT)
-            } else {
-                RenderPolicy.Default
-            }
-
-            when (val result = block(sessionHandle.controller, actionPolicy)) {
-                is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
-                is ReaderResult.Ok -> {
-                    ui.update { it.copy(page = result.value, error = null) }
-                    if (fixed) {
-                        ui.update { it.copy(isRenderingFinal = true) }
-                        when (
-                            val final = sessionHandle.controller.render(
-                                RenderPolicy(quality = RenderPolicy.Quality.FINAL)
-                            )
-                        ) {
-                            is ReaderResult.Ok -> ui.update {
-                                it.copy(
-                                    page = final.value,
-                                    error = null,
-                                    isRenderingFinal = false
-                                )
-                            }
-
-                            is ReaderResult.Err -> ui.update {
-                                it.copy(
-                                    error = errorMapper.map(final.error),
-                                    isRenderingFinal = false
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            runCatching { sessionHandle.controller.prefetchNeighbors(count = 1) }
         }
     }
 
@@ -653,7 +652,7 @@ class ReaderViewModel @Inject constructor(
 
     override fun onCleared() {
         render.cancel()
-        runBlocking {
+        cleanupScope.launch {
             closeSession()
         }
         super.onCleared()

@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.ireader.core.data.book.BookMaintenanceScheduler
 import com.ireader.core.data.book.BookRepo
-import com.ireader.core.database.book.IndexState
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.files.permission.UriPermissionStore
 import com.ireader.core.files.source.ContentUriDocumentSource
 import com.ireader.core.files.storage.BookStorage
@@ -25,9 +25,14 @@ class RelinkBookUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(bookId: Long, uri: Uri) = withContext(Dispatchers.IO) {
         if (bookId <= 0L) return@withContext
-        val book = bookRepo.getById(bookId) ?: return@withContext
+        val book = bookRepo.getRecordById(bookId) ?: return@withContext
 
-        permissionStore.takePersistableRead(uri)
+        val permission = permissionStore.takePersistableRead(uri)
+        if (!permission.granted) {
+            throw SecurityException(
+                "Cannot persist read permission for $uri: ${permission.message ?: permission.code.orEmpty()}"
+            )
+        }
 
         val source = ContentUriDocumentSource(context, uri)
         val tempFile = storage.importTempFile()

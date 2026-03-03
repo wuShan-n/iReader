@@ -29,7 +29,8 @@ interface ReaderRuntime {
         source: DocumentSource,
         options: OpenOptions = OpenOptions(),
         initialLocator: Locator? = null,
-        initialConfig: RenderConfig? = null
+        initialConfig: RenderConfig? = null,
+        resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)? = null
     ): ReaderResult<ReaderSessionHandle>
 
     suspend fun probe(

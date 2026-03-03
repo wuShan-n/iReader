@@ -40,7 +40,7 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE indexState = 'MISSING' ORDER BY updatedAtEpochMs DESC")
     fun observeMissing(): Flow<List<BookEntity>>
 
-    @RawQuery(observedEntities = [BookEntity::class, ProgressEntity::class, BookCollectionEntity::class])
+    @RawQuery(observedEntities = [BookEntity::class, BookFtsEntity::class, ProgressEntity::class, BookCollectionEntity::class])
     fun observeLibrary(query: SupportSQLiteQuery): Flow<List<LibraryBookRow>>
 
     @Query(

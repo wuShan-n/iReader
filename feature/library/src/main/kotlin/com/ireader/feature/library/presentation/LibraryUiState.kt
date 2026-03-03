@@ -1,10 +1,10 @@
 package com.ireader.feature.library.presentation
 
 import com.ireader.core.data.book.LibraryBookItem
+import com.ireader.core.data.book.CollectionItem
+import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LibrarySort
-import com.ireader.core.database.book.IndexState
-import com.ireader.core.database.book.ReadingStatus
-import com.ireader.core.database.collection.CollectionEntity
+import com.ireader.core.data.book.ReadingStatus
 
 data class LibraryUiState(
     val books: List<LibraryBookItem> = emptyList(),
@@ -14,7 +14,7 @@ data class LibraryUiState(
     val indexStates: Set<IndexState> = emptySet(),
     val onlyFavorites: Boolean = false,
     val selectedCollectionId: Long? = null,
-    val collections: List<CollectionEntity> = emptyList(),
+    val collections: List<CollectionItem> = emptyList(),
     val activeImportJobId: String? = null,
     val importStatusText: String? = null
 )
