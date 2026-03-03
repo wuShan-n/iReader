@@ -103,6 +103,8 @@ class DefaultReaderRuntime(
     ): ReaderResult<T> {
         return try {
             block()
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            throw ce // ✅ 取消必须继续抛出
         } catch (t: Throwable) {
             ReaderResult.Err(t.toReaderError())
         }

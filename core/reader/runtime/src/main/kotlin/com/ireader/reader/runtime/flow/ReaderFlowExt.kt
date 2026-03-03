@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.map
 fun <T> Flow<T>.asReaderResult(
     mapper: (Throwable) -> ReaderError = { it.toReaderError() }
 ): Flow<ReaderResult<T>> =
-    this
-        .map<T, ReaderResult<T>> { ReaderResult.Ok(it) }
-        .catch { emit(ReaderResult.Err(mapper(it))) }
-
+    map<T, ReaderResult<T>> { ReaderResult.Ok(it) }
+        .catch { e ->
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            emit(ReaderResult.Err(mapper(e)))
+        }
