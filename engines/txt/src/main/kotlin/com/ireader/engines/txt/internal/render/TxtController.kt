@@ -9,6 +9,7 @@ package com.ireader.engines.txt.internal.render
 
 import com.ireader.engines.common.android.pagination.ReflowPaginationProfile
 import com.ireader.engines.common.cache.LruCache
+import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.link.LinkDetector
@@ -37,8 +38,6 @@ import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorRange
-import com.ireader.reader.model.LocatorSchemes
 import com.ireader.reader.model.Progression
 import java.io.File
 import java.util.Locale
@@ -198,11 +197,8 @@ internal class TxtController(
     }
 
     override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> {
-        if (locator.scheme != LocatorSchemes.TXT_OFFSET) {
-            return ReaderResult.Err(ReaderError.Internal("Unsupported locator for TXT: ${locator.scheme}"))
-        }
-        val offset = locator.value.toLongOrNull()
-            ?: return ReaderResult.Err(ReaderError.Internal("Invalid TXT offset: ${locator.value}"))
+        val offset = TxtBlockLocatorCodec.parseOffset(locator, store.lengthChars)
+            ?: return ReaderResult.Err(ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}"))
         return mutex.withLock {
             currentStart = offset.coerceIn(0L, store.lengthChars)
             renderLocked(policy)
@@ -324,9 +320,10 @@ internal class TxtController(
         avgCharsPerPage = ((avgCharsPerPage * 3) + consumed) / 4
 
         updateStateLocked()
-        val pageRange = LocatorRange(
-            start = Locator(LocatorSchemes.TXT_OFFSET, slice.startOffset.toString()),
-            end = Locator(LocatorSchemes.TXT_OFFSET, slice.endOffset.toString())
+        val pageRange = TxtBlockLocatorCodec.rangeForOffsets(
+            startOffset = slice.startOffset,
+            endOffset = slice.endOffset,
+            maxOffset = store.lengthChars
         )
         val decorations = annotationProvider
             ?.decorationsFor(AnnotationQuery(range = pageRange))
@@ -431,9 +428,9 @@ internal class TxtController(
         } else {
             offset.toDouble() / store.lengthChars.toDouble()
         }.coerceIn(0.0, 1.0)
-        return Locator(
-            scheme = LocatorSchemes.TXT_OFFSET,
-            value = offset.coerceIn(0L, store.lengthChars).toString(),
+        return TxtBlockLocatorCodec.locatorForOffset(
+            offset = offset.coerceIn(0L, store.lengthChars),
+            maxOffset = store.lengthChars,
             extras = mapOf("progression" to String.format(Locale.US, "%.6f", percent))
         )
     }
@@ -488,11 +485,11 @@ internal class TxtController(
     }
 
     private fun profileFile(profile: String): File {
-        return File(paginationDir, "pagemap_$profile.bin")
+        return File(paginationDir, "pagemap_v2_$profile.bin")
     }
 
     private fun legacyProfileFile(profile: String): File {
-        return File(paginationDir, "pagemap_$profile.txt")
+        return File(paginationDir, "pagemap_v2_$profile.txt")
     }
 
     private fun maybeSchedulePageCompletionLocked() {

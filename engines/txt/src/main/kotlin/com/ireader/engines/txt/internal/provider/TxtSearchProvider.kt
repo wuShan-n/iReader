@@ -7,13 +7,11 @@
 
 package com.ireader.engines.txt.internal.provider
 
+import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.provider.SearchProvider
-import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorRange
-import com.ireader.reader.model.LocatorSchemes
 import kotlin.coroutines.coroutineContext
 import kotlin.math.min
 import kotlinx.coroutines.CoroutineDispatcher
@@ -36,10 +34,7 @@ internal class TxtSearchProvider(
         val overlap = (pattern.size - 1).coerceAtLeast(0)
         val chunkSize = 64_000
         val startOffset = options.startFrom
-            ?.takeIf { it.scheme == LocatorSchemes.TXT_OFFSET }
-            ?.value
-            ?.toLongOrNull()
-            ?.coerceIn(0L, store.lengthChars)
+            ?.let { TxtBlockLocatorCodec.parseOffset(it, store.lengthChars) }
             ?: 0L
 
         var carry = CharArray(0)
@@ -78,9 +73,10 @@ internal class TxtSearchProvider(
 
                 emit(
                     SearchHit(
-                        range = LocatorRange(
-                            start = Locator(LocatorSchemes.TXT_OFFSET, globalStart.toString()),
-                            end = Locator(LocatorSchemes.TXT_OFFSET, globalEnd.toString())
+                        range = TxtBlockLocatorCodec.rangeForOffsets(
+                            startOffset = globalStart,
+                            endOffset = globalEnd,
+                            maxOffset = store.lengthChars
                         ),
                         excerpt = buildExcerpt(globalStart, pattern.size),
                         sectionTitle = null

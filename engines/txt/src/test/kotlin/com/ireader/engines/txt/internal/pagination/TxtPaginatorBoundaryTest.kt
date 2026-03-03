@@ -1,0 +1,41 @@
+package com.ireader.engines.txt.internal.pagination
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class TxtPaginatorBoundaryTest {
+
+    @Test
+    fun `adjustMeasuredEndForParagraphTail should rewind short paragraph tail`() {
+        val raw = buildString {
+            append("First paragraph is intentionally long enough to trigger boundary rewind. ")
+            append("First paragraph is intentionally long enough to trigger boundary rewind. ")
+            append('\n')
+            append("tail")
+            append("123456")
+        }
+        val measuredEnd = raw.length - 1
+
+        val adjusted = TxtPaginator.adjustMeasuredEndForParagraphTail(
+            raw = raw,
+            measuredEnd = measuredEnd,
+            rawLength = raw.length
+        )
+
+        assertEquals(raw.indexOf('\n') + 1, adjusted)
+    }
+
+    @Test
+    fun `adjustMeasuredEndForParagraphTail should keep end when there is no line break`() {
+        val raw = "This is a single paragraph without line breaks and should not rewind."
+        val measuredEnd = raw.length - 1
+
+        val adjusted = TxtPaginator.adjustMeasuredEndForParagraphTail(
+            raw = raw,
+            measuredEnd = measuredEnd,
+            rawLength = raw.length
+        )
+
+        assertEquals(measuredEnd, adjusted)
+    }
+}

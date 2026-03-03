@@ -7,7 +7,11 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.ireader.reader.api.render.BreakStrategyMode
+import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.PageInsetMode
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.TextAlignMode
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -25,9 +29,19 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val fontSizeSp = floatPreferencesKey("reader.reflow.fontSizeSp")
             val lineHeightMult = floatPreferencesKey("reader.reflow.lineHeightMult")
             val paragraphSpacingDp = floatPreferencesKey("reader.reflow.paragraphSpacingDp")
+            val paragraphIndentEm = floatPreferencesKey("reader.reflow.paragraphIndentEm")
             val pagePaddingDp = floatPreferencesKey("reader.reflow.pagePaddingDp")
             val fontFamilyName = stringPreferencesKey("reader.reflow.fontFamilyName")
-            val hyphenation = booleanPreferencesKey("reader.reflow.hyphenation")
+            val textAlign = stringPreferencesKey("reader.reflow.textAlign")
+            val breakStrategy = stringPreferencesKey("reader.reflow.breakStrategy")
+            val hyphenationMode = stringPreferencesKey("reader.reflow.hyphenationMode")
+            val includeFontPadding = booleanPreferencesKey("reader.reflow.includeFontPadding")
+            val cjkLineBreakStrict = booleanPreferencesKey("reader.reflow.cjkLineBreakStrict")
+            val hangingPunctuation = booleanPreferencesKey("reader.reflow.hangingPunctuation")
+            val pageInsetMode = stringPreferencesKey("reader.reflow.pageInsetMode")
+
+            // Backward-compat key. Removed after all users migrate to hyphenationMode.
+            val legacyHyphenation = booleanPreferencesKey("reader.reflow.hyphenation")
         }
 
         object Fixed {
@@ -42,13 +56,37 @@ class DatastoreReaderSettingsStore @Inject constructor(
 
     override val reflowConfig: Flow<RenderConfig.ReflowText> =
         dataStore.data.map { prefs ->
+            val textAlign = prefs[Keys.Reflow.textAlign]
+                ?.let(::parseTextAlignMode)
+                ?: defaultReflow.textAlign
+            val breakStrategy = prefs[Keys.Reflow.breakStrategy]
+                ?.let(::parseBreakStrategyMode)
+                ?: defaultReflow.breakStrategy
+            val hyphenationMode = prefs[Keys.Reflow.hyphenationMode]
+                ?.let(::parseHyphenationMode)
+                ?: prefs[Keys.Reflow.legacyHyphenation]
+                    ?.let { if (it) HyphenationMode.NORMAL else HyphenationMode.NONE }
+                ?: defaultReflow.hyphenationMode
+            val includeFontPadding = prefs[Keys.Reflow.includeFontPadding]
+                ?: defaultReflow.includeFontPadding
+            val pageInsetMode = prefs[Keys.Reflow.pageInsetMode]
+                ?.let(::parsePageInsetMode)
+                ?: defaultReflow.pageInsetMode
+
             defaultReflow.copy(
                 fontSizeSp = prefs[Keys.Reflow.fontSizeSp] ?: defaultReflow.fontSizeSp,
                 lineHeightMult = prefs[Keys.Reflow.lineHeightMult] ?: defaultReflow.lineHeightMult,
                 paragraphSpacingDp = prefs[Keys.Reflow.paragraphSpacingDp] ?: defaultReflow.paragraphSpacingDp,
+                paragraphIndentEm = prefs[Keys.Reflow.paragraphIndentEm] ?: defaultReflow.paragraphIndentEm,
                 pagePaddingDp = prefs[Keys.Reflow.pagePaddingDp] ?: defaultReflow.pagePaddingDp,
                 fontFamilyName = prefs[Keys.Reflow.fontFamilyName] ?: defaultReflow.fontFamilyName,
-                hyphenation = prefs[Keys.Reflow.hyphenation] ?: defaultReflow.hyphenation
+                textAlign = textAlign,
+                breakStrategy = breakStrategy,
+                hyphenationMode = hyphenationMode,
+                includeFontPadding = includeFontPadding,
+                cjkLineBreakStrict = prefs[Keys.Reflow.cjkLineBreakStrict] ?: defaultReflow.cjkLineBreakStrict,
+                hangingPunctuation = prefs[Keys.Reflow.hangingPunctuation] ?: defaultReflow.hangingPunctuation,
+                pageInsetMode = pageInsetMode
             )
         }.distinctUntilChanged()
 
@@ -74,6 +112,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Reflow.fontSizeSp] = config.fontSizeSp
             prefs[Keys.Reflow.lineHeightMult] = config.lineHeightMult
             prefs[Keys.Reflow.paragraphSpacingDp] = config.paragraphSpacingDp
+            prefs[Keys.Reflow.paragraphIndentEm] = config.paragraphIndentEm
             prefs[Keys.Reflow.pagePaddingDp] = config.pagePaddingDp
             val fontFamilyName = config.fontFamilyName
             if (fontFamilyName.isNullOrBlank()) {
@@ -81,7 +120,14 @@ class DatastoreReaderSettingsStore @Inject constructor(
             } else {
                 prefs[Keys.Reflow.fontFamilyName] = fontFamilyName
             }
-            prefs[Keys.Reflow.hyphenation] = config.hyphenation
+            prefs[Keys.Reflow.textAlign] = config.textAlign.name
+            prefs[Keys.Reflow.breakStrategy] = config.breakStrategy.name
+            prefs[Keys.Reflow.hyphenationMode] = config.hyphenationMode.name
+            prefs[Keys.Reflow.includeFontPadding] = config.includeFontPadding
+            prefs[Keys.Reflow.cjkLineBreakStrict] = config.cjkLineBreakStrict
+            prefs[Keys.Reflow.hangingPunctuation] = config.hangingPunctuation
+            prefs[Keys.Reflow.pageInsetMode] = config.pageInsetMode.name
+            prefs[Keys.Reflow.legacyHyphenation] = config.hyphenationMode != HyphenationMode.NONE
         }
     }
 
@@ -91,5 +137,25 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Fixed.zoom] = config.zoom
             prefs[Keys.Fixed.rotationDegrees] = config.rotationDegrees
         }
+    }
+
+    private fun parseTextAlignMode(raw: String): TextAlignMode {
+        return runCatching { TextAlignMode.valueOf(raw) }
+            .getOrElse { defaultReflow.textAlign }
+    }
+
+    private fun parseBreakStrategyMode(raw: String): BreakStrategyMode {
+        return runCatching { BreakStrategyMode.valueOf(raw) }
+            .getOrElse { defaultReflow.breakStrategy }
+    }
+
+    private fun parseHyphenationMode(raw: String): HyphenationMode {
+        return runCatching { HyphenationMode.valueOf(raw) }
+            .getOrElse { defaultReflow.hyphenationMode }
+    }
+
+    private fun parsePageInsetMode(raw: String): PageInsetMode {
+        return runCatching { PageInsetMode.valueOf(raw) }
+            .getOrElse { defaultReflow.pageInsetMode }
     }
 }

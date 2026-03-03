@@ -47,7 +47,11 @@ fun PageRenderer(
         modifier = containerModifier
     ) {
         when (content) {
-            is RenderContent.Text -> TextPage(content = content, modifier = Modifier.fillMaxSize())
+            is RenderContent.Text -> TextPage(
+                content = content,
+                reflowConfig = state.currentConfig as? RenderConfig.ReflowText,
+                modifier = Modifier.fillMaxSize()
+            )
             is RenderContent.BitmapPage -> BitmapPage(content = content, modifier = Modifier.fillMaxSize())
             is RenderContent.Html -> HtmlPage(
                 pageId = page.id.value,

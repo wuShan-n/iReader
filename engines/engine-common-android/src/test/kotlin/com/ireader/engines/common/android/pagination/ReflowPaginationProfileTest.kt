@@ -1,0 +1,105 @@
+package com.ireader.engines.common.android.pagination
+
+import com.ireader.reader.api.render.BreakStrategyMode
+import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.LayoutConstraints
+import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.TextAlignMode
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Test
+
+class ReflowPaginationProfileTest {
+
+    private val constraints = LayoutConstraints(
+        viewportWidthPx = 1080,
+        viewportHeightPx = 2400,
+        density = 3f,
+        fontScale = 1f
+    )
+
+    @Test
+    fun `same config should produce stable key`() {
+        val config = RenderConfig.ReflowText()
+        val left = ReflowPaginationProfile.keyFor("doc-a", constraints, config)
+        val right = ReflowPaginationProfile.keyFor("doc-a", constraints, config)
+        assertEquals(left, right)
+    }
+
+    @Test
+    fun `typography toggles should change key`() {
+        val base = RenderConfig.ReflowText()
+        val baseKey = ReflowPaginationProfile.keyFor("doc-a", constraints, base)
+
+        val alignKey = ReflowPaginationProfile.keyFor(
+            "doc-a",
+            constraints,
+            base.copy(textAlign = TextAlignMode.START)
+        )
+        val breakStrategyKey = ReflowPaginationProfile.keyFor(
+            "doc-a",
+            constraints,
+            base.copy(breakStrategy = BreakStrategyMode.HIGH_QUALITY)
+        )
+        val hyphenationKey = ReflowPaginationProfile.keyFor(
+            "doc-a",
+            constraints,
+            base.copy(hyphenationMode = HyphenationMode.NONE)
+        )
+        val indentKey = ReflowPaginationProfile.keyFor(
+            "doc-a",
+            constraints,
+            base.copy(paragraphIndentEm = 2.4f)
+        )
+        val cjkKey = ReflowPaginationProfile.keyFor(
+            "doc-a",
+            constraints,
+            base.copy(cjkLineBreakStrict = !base.cjkLineBreakStrict)
+        )
+
+        assertNotEquals(baseKey, alignKey)
+        assertNotEquals(baseKey, breakStrategyKey)
+        assertNotEquals(baseKey, hyphenationKey)
+        assertNotEquals(baseKey, indentKey)
+        assertNotEquals(baseKey, cjkKey)
+    }
+
+    @Test
+    fun `schema version marker should invalidate legacy profile key`() {
+        val base = RenderConfig.ReflowText()
+        val v2Key = ReflowPaginationProfile.keyFor("doc-a", constraints, base)
+        val legacyRaw = buildString {
+            append("doc-a")
+            append('|')
+            append(constraints.viewportWidthPx)
+            append('x')
+            append(constraints.viewportHeightPx)
+            append('|')
+            append(constraints.density)
+            append('|')
+            append(constraints.fontScale)
+            append('|')
+            append(base.fontSizeSp)
+            append('|')
+            append(base.lineHeightMult)
+            append('|')
+            append(base.paragraphSpacingDp)
+            append('|')
+            append(base.pagePaddingDp)
+            append('|')
+            append(base.fontFamilyName.orEmpty())
+            append('|')
+            append(base.textAlign)
+            append('|')
+            append(base.breakStrategy)
+            append('|')
+            append(base.hyphenationMode)
+            append('|')
+            append(base.includeFontPadding)
+            append('|')
+            append(base.pageInsetMode)
+        }
+        val legacyKey = com.ireader.engines.common.hash.Hashing.sha256Hex(legacyRaw).take(16)
+        assertNotEquals(legacyKey, v2Key)
+    }
+}

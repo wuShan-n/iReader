@@ -2,10 +2,10 @@
 
 package com.ireader.engines.txt.internal.render
 
+import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.reader.api.render.TextMapping
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
-import com.ireader.reader.model.LocatorSchemes
 
 internal class TxtTextMapping(
     private val pageStart: Long,
@@ -15,10 +15,7 @@ internal class TxtTextMapping(
     override fun locatorAt(charIndex: Int): Locator {
         val clamped = charIndex.toLong().coerceAtLeast(0L)
         val global = (pageStart + clamped).coerceAtMost(pageEnd)
-        return Locator(
-            scheme = LocatorSchemes.TXT_OFFSET,
-            value = global.toString()
-        )
+        return TxtBlockLocatorCodec.locatorForOffset(global, pageEnd)
     }
 
     override fun rangeFor(startChar: Int, endChar: Int): LocatorRange {
@@ -28,18 +25,16 @@ internal class TxtTextMapping(
         val maxLocal = maxOf(localStart, localEnd)
         val startGlobal = (pageStart + minLocal.toLong()).coerceAtMost(pageEnd)
         val endGlobal = (pageStart + maxLocal.toLong()).coerceAtMost(pageEnd)
-        return LocatorRange(
-            start = Locator(LocatorSchemes.TXT_OFFSET, startGlobal.toString()),
-            end = Locator(LocatorSchemes.TXT_OFFSET, endGlobal.toString())
+        return TxtBlockLocatorCodec.rangeForOffsets(
+            startOffset = startGlobal,
+            endOffset = endGlobal,
+            maxOffset = pageEnd
         )
     }
 
     override fun charRangeFor(range: LocatorRange): IntRange? {
-        if (range.start.scheme != LocatorSchemes.TXT_OFFSET || range.end.scheme != LocatorSchemes.TXT_OFFSET) {
-            return null
-        }
-        val startGlobal = range.start.value.toLongOrNull() ?: return null
-        val endGlobal = range.end.value.toLongOrNull() ?: return null
+        val startGlobal = TxtBlockLocatorCodec.parseOffset(range.start) ?: return null
+        val endGlobal = TxtBlockLocatorCodec.parseOffset(range.end) ?: return null
         val minGlobal = minOf(startGlobal, endGlobal)
         val maxGlobal = maxOf(startGlobal, endGlobal)
         if (minGlobal < pageStart || maxGlobal > pageEnd) {

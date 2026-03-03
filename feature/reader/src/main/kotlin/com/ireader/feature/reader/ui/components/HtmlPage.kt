@@ -11,8 +11,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.ResourceProvider
+import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
+import com.ireader.reader.api.render.TextAlignMode
+import com.ireader.reader.api.render.effectivePagePaddingDp
+import com.ireader.reader.api.render.effectiveParagraphIndentEm
+import com.ireader.reader.api.render.effectiveParagraphSpacingDp
+import java.util.Locale
 import kotlinx.coroutines.runBlocking
 
 @Composable
@@ -42,21 +48,29 @@ fun HtmlPage(
                 onWebSchemeUrl = onWebSchemeUrl
             )
 
-            if (webView.tag == pageId) return@AndroidView
-            if (content.contentUri != null) {
-                val url = buildInitialPageUrl(content, resourceProvider)
-                webView.loadUrl(url)
-            } else {
-                webView.loadDataWithBaseURL(
-                    buildBaseUrl(content, resourceProvider),
-                    content.inlineHtml.orEmpty(),
-                    "text/html",
-                    "utf-8",
-                    null
-                )
+            val themeKey = buildThemeKey(content, reflowConfig)
+            val previous = webView.tag as? HtmlViewState
+            val samePage = previous?.pageId == pageId
+
+            if (!samePage) {
+                if (content.contentUri != null) {
+                    val url = buildInitialPageUrl(content, resourceProvider)
+                    webView.loadUrl(url)
+                } else {
+                    webView.loadDataWithBaseURL(
+                        buildBaseUrl(content, resourceProvider),
+                        content.inlineHtml.orEmpty(),
+                        "text/html",
+                        "utf-8",
+                        null
+                    )
+                }
             }
-            webView.tag = pageId
-            injectTheme(webView, content, reflowConfig)
+
+            if (!samePage || previous.themeKey != themeKey) {
+                injectTheme(webView, content, reflowConfig)
+            }
+            webView.tag = HtmlViewState(pageId = pageId, themeKey = themeKey)
         }
     )
 }
@@ -178,22 +192,75 @@ private fun injectTheme(
 
 private fun buildReflowCss(config: RenderConfig.ReflowText?): String {
     if (config == null) return ""
+    val textAlign = when (config.textAlign) {
+        TextAlignMode.START -> "start"
+        TextAlignMode.JUSTIFY -> "justify"
+    }
+    val hyphens = if (config.hyphenationMode == HyphenationMode.NONE) {
+        "manual"
+    } else {
+        "auto"
+    }
+    val lineBreak = if (config.cjkLineBreakStrict) "strict" else "auto"
+    val hangingPunctuation = if (config.hangingPunctuation) "first allow-end last" else "none"
     val family = config.fontFamilyName?.takeIf { it.isNotBlank() }
         ?.let { "font-family: '${it.replace("'", "\\'")}';" }
         .orEmpty()
+    val fontSizePx = formatCssNumber(config.fontSizeSp)
+    val lineHeight = formatCssNumber(config.lineHeightMult)
+    val pagePaddingPx = formatCssNumber(config.effectivePagePaddingDp())
+    val paragraphSpacingPx = formatCssNumber(config.effectiveParagraphSpacingDp())
+    val paragraphIndentEm = formatCssNumber(config.effectiveParagraphIndentEm())
     return """
+        :root {
+            --ireader-font-size: ${fontSizePx}px;
+            --ireader-line-height: $lineHeight;
+            --ireader-page-padding: ${pagePaddingPx}px;
+            --ireader-paragraph-spacing: ${paragraphSpacingPx}px;
+            --ireader-paragraph-indent: ${paragraphIndentEm}em;
+        }
         html, body {
-            font-size: ${config.fontSizeSp}px !important;
-            line-height: ${config.lineHeightMult} !important;
-            padding: ${config.pagePaddingDp}px !important;
+            font-size: var(--ireader-font-size) !important;
+            line-height: var(--ireader-line-height) !important;
+            padding: var(--ireader-page-padding) !important;
             margin: 0 !important;
+            text-align: ${textAlign} !important;
+            line-break: $lineBreak !important;
+            word-break: normal !important;
+            overflow-wrap: break-word !important;
+            hyphens: $hyphens !important;
+            -webkit-hyphens: $hyphens !important;
+            hanging-punctuation: $hangingPunctuation !important;
             $family
         }
         p {
             margin-top: 0 !important;
-            margin-bottom: ${config.paragraphSpacingDp}px !important;
+            margin-bottom: var(--ireader-paragraph-spacing) !important;
+            text-indent: var(--ireader-paragraph-indent) !important;
+        }
+        h1, h2, h3, h4, h5, h6, blockquote, pre, li, figcaption, td, th {
+            text-indent: 0 !important;
         }
     """.trimIndent()
+}
+
+private fun buildThemeKey(
+    content: RenderContent.Html,
+    reflowConfig: RenderConfig.ReflowText?
+): String {
+    return buildString {
+        append(buildReflowCss(reflowConfig).hashCode())
+        append(':')
+        append(content.themeInjection?.css.orEmpty().hashCode())
+        append(':')
+        append(content.themeInjection?.javascript.orEmpty().hashCode())
+    }
+}
+
+private fun formatCssNumber(value: Float): String {
+    return String.format(Locale.US, "%.3f", value)
+        .trimEnd('0')
+        .trimEnd('.')
 }
 
 private fun toReaderBaseUrl(path: String): String {
@@ -280,3 +347,8 @@ private fun normalizeBasePath(path: String): String? {
 
 private const val READER_SCHEME = "reader"
 private const val READER_HOST = "book"
+
+private data class HtmlViewState(
+    val pageId: String,
+    val themeKey: String
+)

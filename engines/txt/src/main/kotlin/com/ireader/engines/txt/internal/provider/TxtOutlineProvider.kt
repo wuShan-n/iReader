@@ -3,13 +3,12 @@
 package com.ireader.engines.txt.internal.provider
 
 import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.OutlineProvider
-import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorSchemes
 import com.ireader.reader.model.OutlineNode
 import kotlin.coroutines.coroutineContext
 import kotlin.math.min
@@ -74,7 +73,7 @@ internal class TxtOutlineProvider(
             out.add(
                 OutlineNode(
                     title = title,
-                    locator = Locator(LocatorSchemes.TXT_OFFSET, offset.toString())
+                    locator = TxtBlockLocatorCodec.locatorForOffset(offset, store.lengthChars)
                 )
             )
         }
@@ -84,7 +83,7 @@ internal class TxtOutlineProvider(
     private fun saveToCache(outline: List<OutlineNode>) {
         val items = JSONArray()
         for (node in outline) {
-            val offset = node.locator.value.toLongOrNull() ?: continue
+            val offset = TxtBlockLocatorCodec.parseOffset(node.locator, store.lengthChars) ?: continue
             items.put(
                 JSONObject().apply {
                     put("title", node.title)
@@ -127,7 +126,7 @@ internal class TxtOutlineProvider(
                     out.add(
                         OutlineNode(
                             title = line,
-                            locator = Locator(LocatorSchemes.TXT_OFFSET, offset.toString())
+                            locator = TxtBlockLocatorCodec.locatorForOffset(offset, store.lengthChars)
                         )
                     )
                     if (out.size >= MAX_OUTLINE_ITEMS) {

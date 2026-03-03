@@ -4,6 +4,7 @@ package com.ireader.engines.txt.internal.open
 
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.render.TxtController
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.engine.ReaderDocument
@@ -18,7 +19,6 @@ import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorSchemes
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
@@ -76,9 +76,7 @@ internal class TxtDocument(
                     )
                 val initialOffset = when {
                     initialLocator == null -> 0L
-                    initialLocator.scheme == LocatorSchemes.TXT_OFFSET ->
-                        initialLocator.value.toLongOrNull() ?: 0L
-                    else -> 0L
+                    else -> TxtBlockLocatorCodec.parseOffset(initialLocator, store.lengthChars) ?: 0L
                 }.coerceIn(0L, store.lengthChars)
                 val annotationProvider = annotationProviderFactory?.invoke(id)
 

@@ -43,8 +43,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ireader.reader.api.render.BreakStrategyMode
+import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.core.designsystem.ReaderTokens
+import com.ireader.reader.api.render.PageInsetMode
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.TextAlignMode
 import com.ireader.reader.model.DocumentCapabilities
 import kotlin.math.roundToInt
 
@@ -336,9 +340,49 @@ private fun SpacingPanel(
     onBack: () -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
+    val defaults = remember { RenderConfig.ReflowText() }
     var lineHeight by remember(current.lineHeightMult) { mutableFloatStateOf(current.lineHeightMult) }
     var paragraph by remember(current.paragraphSpacingDp) { mutableFloatStateOf(current.paragraphSpacingDp) }
+    var paragraphIndent by remember(current.paragraphIndentEm) { mutableFloatStateOf(current.paragraphIndentEm) }
     var padding by remember(current.pagePaddingDp) { mutableFloatStateOf(current.pagePaddingDp) }
+    var textAlign by remember(current.textAlign) { mutableStateOf(current.textAlign) }
+    var breakStrategy by remember(current.breakStrategy) { mutableStateOf(current.breakStrategy) }
+    var hyphenationMode by remember(current.hyphenationMode) { mutableStateOf(current.hyphenationMode) }
+    var includeFontPadding by remember(current.includeFontPadding) { mutableStateOf(current.includeFontPadding) }
+    var cjkLineBreakStrict by remember(current.cjkLineBreakStrict) { mutableStateOf(current.cjkLineBreakStrict) }
+    var hangingPunctuation by remember(current.hangingPunctuation) { mutableStateOf(current.hangingPunctuation) }
+    var pageInsetMode by remember(current.pageInsetMode) { mutableStateOf(current.pageInsetMode) }
+
+    fun draftConfig(): RenderConfig.ReflowText {
+        return current.copy(
+            lineHeightMult = lineHeight,
+            paragraphSpacingDp = paragraph,
+            paragraphIndentEm = paragraphIndent,
+            pagePaddingDp = padding,
+            textAlign = textAlign,
+            breakStrategy = breakStrategy,
+            hyphenationMode = hyphenationMode,
+            includeFontPadding = includeFontPadding,
+            cjkLineBreakStrict = cjkLineBreakStrict,
+            hangingPunctuation = hangingPunctuation,
+            pageInsetMode = pageInsetMode
+        )
+    }
+
+    fun resetToDefaults() {
+        lineHeight = defaults.lineHeightMult
+        paragraph = defaults.paragraphSpacingDp
+        paragraphIndent = defaults.paragraphIndentEm
+        padding = defaults.pagePaddingDp
+        textAlign = defaults.textAlign
+        breakStrategy = defaults.breakStrategy
+        hyphenationMode = defaults.hyphenationMode
+        includeFontPadding = defaults.includeFontPadding
+        cjkLineBreakStrict = defaults.cjkLineBreakStrict
+        hangingPunctuation = defaults.hangingPunctuation
+        pageInsetMode = defaults.pageInsetMode
+        onApply(draftConfig(), false)
+    }
 
     Column(
         modifier = Modifier
@@ -347,7 +391,12 @@ private fun SpacingPanel(
             .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SheetHeader(title = "间距设置", onBack = onBack, actionText = "恢复默认")
+        SheetHeader(
+            title = "间距设置",
+            onBack = onBack,
+            actionText = "恢复默认",
+            onActionClick = ::resetToDefaults
+        )
         SettingSliderRow(
             label = "行间距",
             valueLabel = "%.2f".format(lineHeight),
@@ -355,14 +404,17 @@ private fun SpacingPanel(
             range = 1.1f..2.4f,
             onChange = {
                 lineHeight = it
-                onApply(
-                    current.copy(
-                        lineHeightMult = it,
-                        paragraphSpacingDp = paragraph,
-                        pagePaddingDp = padding
-                    ),
-                    false
-                )
+                onApply(draftConfig(), false)
+            }
+        )
+        SettingSliderRow(
+            label = "首行缩进",
+            valueLabel = "${"%.1f".format(paragraphIndent)}em",
+            value = paragraphIndent,
+            range = 0f..3.2f,
+            onChange = {
+                paragraphIndent = it
+                onApply(draftConfig(), false)
             }
         )
         SettingSliderRow(
@@ -372,14 +424,7 @@ private fun SpacingPanel(
             range = 0f..24f,
             onChange = {
                 paragraph = it
-                onApply(
-                    current.copy(
-                        lineHeightMult = lineHeight,
-                        paragraphSpacingDp = it,
-                        pagePaddingDp = padding
-                    ),
-                    false
-                )
+                onApply(draftConfig(), false)
             }
         )
         SettingSliderRow(
@@ -389,16 +434,148 @@ private fun SpacingPanel(
             range = 8f..42f,
             onChange = {
                 padding = it
-                onApply(
-                    current.copy(
-                        lineHeightMult = lineHeight,
-                        paragraphSpacingDp = paragraph,
-                        pagePaddingDp = it
-                    ),
-                    false
-                )
+                onApply(draftConfig(), false)
             }
         )
+
+        Text("对齐方式")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoiceButton(
+                label = "左对齐",
+                selected = textAlign == TextAlignMode.START,
+                onClick = {
+                    textAlign = TextAlignMode.START
+                    onApply(draftConfig(), false)
+                }
+            )
+            ChoiceButton(
+                label = "两端对齐",
+                selected = textAlign == TextAlignMode.JUSTIFY,
+                onClick = {
+                    textAlign = TextAlignMode.JUSTIFY
+                    onApply(draftConfig(), false)
+                }
+            )
+        }
+
+        Text("断行策略")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoiceButton(
+                label = "快速",
+                selected = breakStrategy == BreakStrategyMode.SIMPLE,
+                onClick = {
+                    breakStrategy = BreakStrategyMode.SIMPLE
+                    onApply(draftConfig(), false)
+                }
+            )
+            ChoiceButton(
+                label = "平衡",
+                selected = breakStrategy == BreakStrategyMode.BALANCED,
+                onClick = {
+                    breakStrategy = BreakStrategyMode.BALANCED
+                    onApply(draftConfig(), false)
+                }
+            )
+            ChoiceButton(
+                label = "高质量",
+                selected = breakStrategy == BreakStrategyMode.HIGH_QUALITY,
+                onClick = {
+                    breakStrategy = BreakStrategyMode.HIGH_QUALITY
+                    onApply(draftConfig(), false)
+                }
+            )
+        }
+
+        Text("断词")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoiceButton(
+                label = "关闭",
+                selected = hyphenationMode == HyphenationMode.NONE,
+                onClick = {
+                    hyphenationMode = HyphenationMode.NONE
+                    onApply(draftConfig(), false)
+                }
+            )
+            ChoiceButton(
+                label = "普通",
+                selected = hyphenationMode == HyphenationMode.NORMAL,
+                onClick = {
+                    hyphenationMode = HyphenationMode.NORMAL
+                    onApply(draftConfig(), false)
+                }
+            )
+            ChoiceButton(
+                label = "增强",
+                selected = hyphenationMode == HyphenationMode.FULL,
+                onClick = {
+                    hyphenationMode = HyphenationMode.FULL
+                    onApply(draftConfig(), false)
+                }
+            )
+        }
+
+        Text("页面留白")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChoiceButton(
+                label = "舒适",
+                selected = pageInsetMode == PageInsetMode.RELAXED,
+                onClick = {
+                    pageInsetMode = PageInsetMode.RELAXED
+                    onApply(draftConfig(), false)
+                }
+            )
+            ChoiceButton(
+                label = "紧凑",
+                selected = pageInsetMode == PageInsetMode.COMPACT,
+                onClick = {
+                    pageInsetMode = PageInsetMode.COMPACT
+                    onApply(draftConfig(), false)
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("字体安全留白")
+            Switch(
+                checked = includeFontPadding,
+                onCheckedChange = {
+                    includeFontPadding = it
+                    onApply(draftConfig(), false)
+                }
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("CJK 严格换行")
+            Switch(
+                checked = cjkLineBreakStrict,
+                onCheckedChange = {
+                    cjkLineBreakStrict = it
+                    onApply(draftConfig(), false)
+                }
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("标点悬挂")
+            Switch(
+                checked = hangingPunctuation,
+                onCheckedChange = {
+                    hangingPunctuation = it
+                    onApply(draftConfig(), false)
+                }
+            )
+        }
     }
 }
 
@@ -583,7 +760,8 @@ private fun FixedLayoutSettings(
 private fun SheetHeader(
     title: String,
     onBack: () -> Unit,
-    actionText: String = ""
+    actionText: String = "",
+    onActionClick: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -597,7 +775,7 @@ private fun SheetHeader(
         if (actionText.isBlank()) {
             Box(modifier = Modifier.width(42.dp))
         } else {
-            TextButton(onClick = { }) {
+            TextButton(onClick = onActionClick ?: {}) {
                 Text(actionText)
             }
         }
@@ -622,5 +800,22 @@ private fun SettingSliderRow(
             Text(valueLabel, color = Color.Gray)
         }
         Slider(value = value, valueRange = range, onValueChange = onChange)
+    }
+}
+
+@Composable
+private fun ChoiceButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    if (selected) {
+        Button(onClick = onClick) {
+            Text(label)
+        }
+    } else {
+        OutlinedButton(onClick = onClick) {
+            Text(label)
+        }
     }
 }

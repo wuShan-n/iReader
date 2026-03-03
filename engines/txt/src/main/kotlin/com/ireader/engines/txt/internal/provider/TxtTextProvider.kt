@@ -3,13 +3,13 @@
 package com.ireader.engines.txt.internal.provider
 
 import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
-import com.ireader.reader.model.LocatorSchemes
 import kotlin.math.min
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -57,10 +57,7 @@ internal class TxtTextProvider(
     }
 
     private fun parseOffset(locator: Locator): Long? {
-        if (locator.scheme != LocatorSchemes.TXT_OFFSET) {
-            return null
-        }
-        return locator.value.toLongOrNull()
+        return TxtBlockLocatorCodec.parseOffset(locator, store.lengthChars)
     }
 
     private companion object {

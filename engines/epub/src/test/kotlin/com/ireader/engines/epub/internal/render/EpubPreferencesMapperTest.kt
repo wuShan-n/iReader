@@ -1,5 +1,6 @@
 package com.ireader.engines.epub.internal.render
 
+import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.RenderConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -7,6 +8,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.navigator.preferences.FontFamily
 
 @OptIn(ExperimentalReadiumApi::class)
 class EpubPreferencesMapperTest {
@@ -19,7 +21,7 @@ class EpubPreferencesMapperTest {
             paragraphSpacingDp = 200f,
             pagePaddingDp = 200f,
             fontFamilyName = "sans",
-            hyphenation = true
+            hyphenationMode = HyphenationMode.FULL
         ).toEpubPreferences()
 
         assertNotNull(prefs.fontSize)
@@ -37,5 +39,17 @@ class EpubPreferencesMapperTest {
     fun `fixed page config should map to defaults`() {
         val prefs = RenderConfig.FixedPage().toEpubPreferences()
         assertNull(prefs.fontSize)
+    }
+
+    @Test
+    fun `system font should map to null family`() {
+        val prefs = RenderConfig.ReflowText(fontFamilyName = "系统字体").toEpubPreferences()
+        assertNull(prefs.fontFamily)
+    }
+
+    @Test
+    fun `known chinese font names should map to serif family`() {
+        val prefs = RenderConfig.ReflowText(fontFamilyName = "思源宋体").toEpubPreferences()
+        assertEquals(FontFamily.SERIF, prefs.fontFamily)
     }
 }

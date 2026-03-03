@@ -6,6 +6,8 @@ import com.ireader.reader.api.render.RenderConfig
 
 object ReflowPaginationProfile {
 
+    private const val PROFILE_SCHEMA_VERSION = 3
+
     fun keyFor(
         documentKey: String,
         constraints: LayoutConstraints,
@@ -13,6 +15,9 @@ object ReflowPaginationProfile {
         keyLength: Int = 16
     ): String {
         val raw = buildString {
+            append("v")
+            append(PROFILE_SCHEMA_VERSION)
+            append('|')
             append(documentKey)
             append('|')
             append(constraints.viewportWidthPx)
@@ -29,11 +34,25 @@ object ReflowPaginationProfile {
             append('|')
             append(config.paragraphSpacingDp)
             append('|')
+            append(config.paragraphIndentEm)
+            append('|')
             append(config.pagePaddingDp)
             append('|')
             append(config.fontFamilyName.orEmpty())
             append('|')
-            append(config.hyphenation)
+            append(config.textAlign)
+            append('|')
+            append(config.breakStrategy)
+            append('|')
+            append(config.hyphenationMode)
+            append('|')
+            append(config.includeFontPadding)
+            append('|')
+            append(config.cjkLineBreakStrict)
+            append('|')
+            append(config.hangingPunctuation)
+            append('|')
+            append(config.pageInsetMode)
         }
         return Hashing.sha256Hex(raw).take(keyLength.coerceAtLeast(1))
     }

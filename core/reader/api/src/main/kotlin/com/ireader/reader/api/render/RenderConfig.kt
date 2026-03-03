@@ -1,14 +1,43 @@
 package com.ireader.reader.api.render
 
+enum class TextAlignMode {
+    START,
+    JUSTIFY
+}
+
+enum class BreakStrategyMode {
+    SIMPLE,
+    BALANCED,
+    HIGH_QUALITY
+}
+
+enum class HyphenationMode {
+    NONE,
+    NORMAL,
+    FULL
+}
+
+enum class PageInsetMode {
+    RELAXED,
+    COMPACT
+}
+
 sealed interface RenderConfig {
 
     data class ReflowText(
         val fontSizeSp: Float = 18f,
         val lineHeightMult: Float = 1.5f,
         val paragraphSpacingDp: Float = 6f,
+        val paragraphIndentEm: Float = 1.8f,
         val pagePaddingDp: Float = 16f,
         val fontFamilyName: String? = null,
-        val hyphenation: Boolean = false,
+        val textAlign: TextAlignMode = TextAlignMode.JUSTIFY,
+        val breakStrategy: BreakStrategyMode = BreakStrategyMode.BALANCED,
+        val hyphenationMode: HyphenationMode = HyphenationMode.NORMAL,
+        val includeFontPadding: Boolean = true,
+        val cjkLineBreakStrict: Boolean = true,
+        val hangingPunctuation: Boolean = false,
+        val pageInsetMode: PageInsetMode = PageInsetMode.RELAXED,
         val extra: Map<String, String> = emptyMap()
     ) : RenderConfig
 

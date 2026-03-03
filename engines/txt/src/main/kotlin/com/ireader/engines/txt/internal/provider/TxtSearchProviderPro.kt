@@ -2,6 +2,7 @@
 
 package com.ireader.engines.txt.internal.provider
 
+import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.search.TrigramBloomIndex
@@ -9,9 +10,6 @@ import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.provider.SearchProvider
-import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorRange
-import com.ireader.reader.model.LocatorSchemes
 import java.io.RandomAccessFile
 import kotlin.math.min
 import kotlin.coroutines.coroutineContext
@@ -36,10 +34,7 @@ internal class TxtSearchProviderPro(
             return@channelFlow
         }
         val startOffset = options.startFrom
-            ?.takeIf { it.scheme == LocatorSchemes.TXT_OFFSET }
-            ?.value
-            ?.toLongOrNull()
-            ?.coerceIn(0L, store.lengthChars)
+            ?.let { TxtBlockLocatorCodec.parseOffset(it, store.lengthChars) }
             ?: 0L
 
         var bloom = TrigramBloomIndex.openIfValid(files.bloomIdx, meta)
@@ -126,9 +121,10 @@ internal class TxtSearchProviderPro(
                     }
                     trySend(
                         SearchHit(
-                            range = LocatorRange(
-                                start = Locator(LocatorSchemes.TXT_OFFSET, globalStart.toString()),
-                                end = Locator(LocatorSchemes.TXT_OFFSET, globalEnd.toString())
+                            range = TxtBlockLocatorCodec.rangeForOffsets(
+                                startOffset = globalStart,
+                                endOffset = globalEnd,
+                                maxOffset = store.lengthChars
                             ),
                             excerpt = buildExcerpt(globalStart, pattern.size),
                             sectionTitle = null
@@ -188,9 +184,10 @@ internal class TxtSearchProviderPro(
 
                 trySend(
                     SearchHit(
-                        range = LocatorRange(
-                            start = Locator(LocatorSchemes.TXT_OFFSET, globalStart.toString()),
-                            end = Locator(LocatorSchemes.TXT_OFFSET, globalEnd.toString())
+                        range = TxtBlockLocatorCodec.rangeForOffsets(
+                            startOffset = globalStart,
+                            endOffset = globalEnd,
+                            maxOffset = store.lengthChars
                         ),
                         excerpt = buildExcerpt(globalStart, pattern.size),
                         sectionTitle = null

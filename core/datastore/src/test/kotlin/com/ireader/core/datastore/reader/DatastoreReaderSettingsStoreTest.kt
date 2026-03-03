@@ -3,9 +3,11 @@ package com.ireader.core.datastore.reader
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.RenderConfig
 import java.io.File
 import kotlinx.coroutines.flow.first
@@ -33,14 +35,39 @@ class DatastoreReaderSettingsStoreTest {
             fontSizeSp = 21f,
             lineHeightMult = 1.7f,
             paragraphSpacingDp = 8f,
-            pagePaddingDp = 14f
+            paragraphIndentEm = 2f,
+            pagePaddingDp = 14f,
+            cjkLineBreakStrict = false,
+            hangingPunctuation = true,
+            hyphenationMode = HyphenationMode.FULL
         )
 
         store.setReflowConfig(config)
 
         val prefs = dataStore.data.first()
         assertEquals(21f, prefs[floatPreferencesKey("reader.reflow.fontSizeSp")])
+        assertEquals(2f, prefs[floatPreferencesKey("reader.reflow.paragraphIndentEm")])
+        assertEquals("FULL", prefs[stringPreferencesKey("reader.reflow.hyphenationMode")])
+        assertEquals(false, prefs[booleanPreferencesKey("reader.reflow.cjkLineBreakStrict")])
+        assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.hangingPunctuation")])
+        assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.hyphenation")])
         assertNull(prefs[floatPreferencesKey("reader.reflow.font_size_sp")])
+    }
+
+    @Test
+    fun `legacy hyphenation key should map to hyphenation mode`() = runTest {
+        val dataStore = createDataStore(
+            scope = this,
+            testFile = File(temporaryFolder.root, "reader_settings_legacy_hyphenation.preferences_pb")
+        )
+        val store = DatastoreReaderSettingsStore(dataStore)
+
+        dataStore.edit { prefs ->
+            prefs[booleanPreferencesKey("reader.reflow.hyphenation")] = false
+        }
+
+        val config = store.getReflowConfig()
+        assertEquals(HyphenationMode.NONE, config.hyphenationMode)
     }
 
     @Test

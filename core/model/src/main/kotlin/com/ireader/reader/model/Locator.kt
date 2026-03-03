@@ -2,7 +2,8 @@ package com.ireader.reader.model
 
 /**
  * scheme + value 统一表达位置。
- * - TXT: txt.offset -> value=字符偏移(建议) 或字节偏移(需固定编码策略)
+ * - TXT: txt.block  -> value=块起点偏移:块内偏移（稳定定位）
+ * - TXT(legacy): txt.offset -> value=字符偏移(建议) 或字节偏移(需固定编码策略)
  * - EPUB: epub.cfi  -> value=CFI 字符串
  * - PDF: pdf.page   -> value=页索引(0-based 建议) 或 1-based(需统一)
  */
@@ -19,6 +20,7 @@ data class LocatorRange(
 )
 
 object LocatorSchemes {
+    const val TXT_BLOCK = "txt.block"
     const val TXT_OFFSET = "txt.offset"
     const val EPUB_CFI = "epub.cfi"
     const val PDF_PAGE = "pdf.page"
