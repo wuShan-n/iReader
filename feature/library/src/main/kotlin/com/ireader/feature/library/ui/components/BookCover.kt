@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,9 +16,14 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,11 +34,12 @@ internal fun BookCover(
     titleFallback: String,
     modifier: Modifier = Modifier
 ) {
+    val placeholder = coverGradient(titleFallback)
     BoxWithConstraints(
         modifier = modifier
             .aspectRatio(3f / 4f)
             .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(placeholder)
     ) {
         val density = LocalDensity.current
         val reqWidth = with(density) { maxWidth.roundToPx() }.coerceAtLeast(1)
@@ -51,8 +59,12 @@ internal fun BookCover(
                 )
             } else {
                 Text(
-                    text = titleFallback.take(1).ifBlank { "?" },
-                    style = MaterialTheme.typography.headlineMedium
+                    text = titleFallback.ifBlank { "未命名" }.take(12),
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    color = Color.White
                 )
             }
         }
@@ -80,4 +92,14 @@ private fun rememberCoverBitmap(path: String?, reqWidth: Int, reqHeight: Int): B
         }
     }
     return state.value
+}
+
+private fun coverGradient(seed: String): Brush {
+    val normalized = seed.trim().ifBlank { "?" }
+    val hash = normalized.hashCode().toUInt().toLong()
+    val hueA = (hash % 360L).toFloat()
+    val hueB = ((hash / 7L) % 360L).toFloat()
+    val colorA = Color.hsv(hue = hueA, saturation = 0.42f, value = 0.85f)
+    val colorB = Color.hsv(hue = hueB, saturation = 0.62f, value = 0.58f)
+    return Brush.linearGradient(listOf(colorA, colorB))
 }

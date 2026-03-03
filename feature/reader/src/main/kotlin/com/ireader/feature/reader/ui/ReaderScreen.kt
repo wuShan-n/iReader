@@ -65,7 +65,7 @@ fun ReaderScreen(
     }
 
     BackHandler(enabled = state.sheet != ReaderSheet.None) {
-        vm.dispatch(ReaderIntent.CloseSheet)
+        vm.dispatch(ReaderIntent.BackInSheetHierarchy)
     }
     BackHandler(enabled = state.sheet == ReaderSheet.None && !state.chromeVisible) {
         vm.dispatch(ReaderIntent.ToggleChrome)

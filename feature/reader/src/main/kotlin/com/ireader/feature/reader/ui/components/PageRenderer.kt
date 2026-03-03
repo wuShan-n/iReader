@@ -7,7 +7,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntSize
 import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.ui.ReaderSurface
 import com.ireader.reader.api.render.RenderConfig
@@ -17,7 +19,7 @@ import com.ireader.reader.model.DocumentLink
 @Composable
 fun PageRenderer(
     state: ReaderUiState,
-    onToggleChrome: () -> Unit,
+    onBackgroundTap: (Offset, IntSize) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
     onWebSchemeUrl: (String) -> Boolean,
     modifier: Modifier = Modifier
@@ -37,7 +39,7 @@ fun PageRenderer(
         modifier
             .fillMaxSize()
             .pointerInput(page.id.value) {
-                detectTapGestures(onTap = { onToggleChrome() })
+                detectTapGestures(onTap = { tap -> onBackgroundTap(tap, size) })
             }
     }
 
@@ -60,7 +62,7 @@ fun PageRenderer(
                 pageId = page.id.value,
                 content = content,
                 links = page.links,
-                onToggleChrome = onToggleChrome,
+                onBackgroundTap = onBackgroundTap,
                 onLinkActivated = onLinkActivated,
                 modifier = Modifier.fillMaxSize()
             )

@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":core:files"))
     implementation(project(":core:reader:runtime"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)

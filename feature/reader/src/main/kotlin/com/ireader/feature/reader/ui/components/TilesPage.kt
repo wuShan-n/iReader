@@ -42,7 +42,7 @@ fun TilesPage(
     pageId: String,
     content: RenderContent.Tiles,
     links: List<DocumentLink>,
-    onToggleChrome: () -> Unit,
+    onBackgroundTap: (Offset, IntSize) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -182,7 +182,7 @@ fun TilesPage(
                         if (link != null) {
                             onLinkActivated(link)
                         } else {
-                            onToggleChrome()
+                            onBackgroundTap(tap, size)
                         }
                     }
                 }

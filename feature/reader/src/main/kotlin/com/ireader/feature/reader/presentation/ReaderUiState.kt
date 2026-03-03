@@ -11,7 +11,14 @@ enum class ReaderSheet {
     None,
     Toc,
     Search,
-    Settings
+    Brightness,
+    Settings,
+    SettingsFont,
+    SettingsSpacing,
+    SettingsPageTurn,
+    SettingsMoreBackground,
+    ReaderMore,
+    FullSettings
 }
 
 data class PasswordPrompt(
@@ -59,6 +66,7 @@ data class ReaderUiState(
     val toc: TocState = TocState(),
     val search: SearchState = SearchState(),
     val currentConfig: RenderConfig? = null,
+    val isNightMode: Boolean = false,
     val passwordPrompt: PasswordPrompt? = null,
     val error: ReaderUiError? = null
 )

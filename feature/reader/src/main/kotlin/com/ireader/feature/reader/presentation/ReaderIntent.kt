@@ -18,8 +18,14 @@ sealed interface ReaderIntent {
     data object OpenAnnotations : ReaderIntent
     data object OpenToc : ReaderIntent
     data object OpenSearch : ReaderIntent
+    data object OpenBrightness : ReaderIntent
     data object OpenSettings : ReaderIntent
+    data class OpenSettingsSub(val sheet: ReaderSheet) : ReaderIntent
+    data object OpenReaderMore : ReaderIntent
+    data object OpenFullSettings : ReaderIntent
+    data object ToggleNightMode : ReaderIntent
     data object CloseSheet : ReaderIntent
+    data object BackInSheetHierarchy : ReaderIntent
 
     data object Next : ReaderIntent
     data object Prev : ReaderIntent

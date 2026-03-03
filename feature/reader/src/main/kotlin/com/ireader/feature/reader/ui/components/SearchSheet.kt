@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,7 +28,7 @@ fun SearchSheet(
     state: SearchState,
     onClose: () -> Unit,
     onQueryChange: (String) -> Unit,
-    onSearch: (String) -> Unit,
+    onSearch: () -> Unit,
     onClickResult: (locatorEncoded: String) -> Unit
 ) {
     var query by remember(state.query) { mutableStateOf(state.query) }
@@ -40,29 +40,29 @@ fun SearchSheet(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Search in book")
+            Text("全文搜索")
             OutlinedTextField(
                 value = query,
                 onValueChange = {
                     query = it
                     onQueryChange(it)
                 },
-                label = { Text("Keyword") },
+                label = { Text("关键词") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
             TextButton(
-                onClick = { onSearch(query) },
+                onClick = onSearch,
                 enabled = query.isNotBlank() && !state.isSearching
             ) {
-                Text(if (state.isSearching) "Searching..." else "Search")
+                Text(if (state.isSearching) "搜索中..." else "搜索")
             }
 
             if (state.error != null) {
                 Text(state.error.asString())
             }
 
-            Divider()
+            HorizontalDivider()
             LazyColumn {
                 items(state.results) { item ->
                     TextButton(
@@ -81,4 +81,3 @@ fun SearchSheet(
         }
     }
 }
-

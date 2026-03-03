@@ -151,8 +151,16 @@ class ReaderViewModel @Inject constructor(
             }
 
             ReaderIntent.OpenSearch -> ui.update { it.copy(sheet = ReaderSheet.Search) }
+            ReaderIntent.OpenBrightness -> ui.update { it.copy(sheet = ReaderSheet.Brightness) }
             ReaderIntent.OpenSettings -> ui.update { it.copy(sheet = ReaderSheet.Settings) }
+            is ReaderIntent.OpenSettingsSub -> openSubSheet(intent.sheet)
+            ReaderIntent.OpenReaderMore -> ui.update { it.copy(sheet = ReaderSheet.ReaderMore) }
+            ReaderIntent.OpenFullSettings -> ui.update { it.copy(sheet = ReaderSheet.FullSettings) }
+            ReaderIntent.ToggleNightMode -> ui.update { it.copy(isNightMode = !it.isNightMode) }
             ReaderIntent.CloseSheet -> ui.update { it.copy(sheet = ReaderSheet.None) }
+            ReaderIntent.BackInSheetHierarchy -> ui.update { current ->
+                current.copy(sheet = current.sheet.parentOrNone())
+            }
 
             ReaderIntent.Next -> navigate { controller, policy -> controller.next(policy) }
             ReaderIntent.Prev -> navigate { controller, policy -> controller.prev(policy) }
@@ -187,6 +195,7 @@ class ReaderViewModel @Inject constructor(
                 bookId = args.bookId,
                 isOpening = true,
                 title = null,
+                sheet = ReaderSheet.None,
                 page = null,
                 controller = null,
                 resources = null,
@@ -647,6 +656,32 @@ class ReaderViewModel @Inject constructor(
                 locator = locator,
                 progression = progression
             )
+        }
+    }
+
+    private fun openSubSheet(sheet: ReaderSheet) {
+        val supported = sheet == ReaderSheet.SettingsFont ||
+            sheet == ReaderSheet.SettingsSpacing ||
+            sheet == ReaderSheet.SettingsPageTurn ||
+            sheet == ReaderSheet.SettingsMoreBackground
+        if (!supported) return
+        ui.update { it.copy(sheet = sheet) }
+    }
+
+    private fun ReaderSheet.parentOrNone(): ReaderSheet {
+        return when (this) {
+            ReaderSheet.SettingsFont,
+            ReaderSheet.SettingsSpacing,
+            ReaderSheet.SettingsPageTurn,
+            ReaderSheet.SettingsMoreBackground,
+            ReaderSheet.FullSettings -> ReaderSheet.Settings
+
+            ReaderSheet.None -> ReaderSheet.None
+            ReaderSheet.Toc,
+            ReaderSheet.Search,
+            ReaderSheet.Brightness,
+            ReaderSheet.Settings,
+            ReaderSheet.ReaderMore -> ReaderSheet.None
         }
     }
 

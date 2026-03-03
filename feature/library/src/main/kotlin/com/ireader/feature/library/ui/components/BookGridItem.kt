@@ -1,24 +1,36 @@
 package com.ireader.feature.library.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LibraryBookItem
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -26,10 +38,13 @@ internal fun BookGridItem(
     book: LibraryBookItem,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEditMode: Boolean = false,
+    isSelected: Boolean = false
 ) {
     val entity = book.book
     val title = bookTitle(entity.title, entity.fileName)
+    val progressText = progressionText(book.progression)
 
     Column(
         modifier = modifier
@@ -39,31 +54,58 @@ internal fun BookGridItem(
                 onLongClick = onLongClick
             )
     ) {
-        BookCover(
-            coverPath = entity.coverPath,
-            titleFallback = title
-        )
+        Box {
+            BookCover(
+                coverPath = entity.coverPath,
+                titleFallback = title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation = if (isEditMode && isSelected) 8.dp else 4.dp,
+                        shape = MaterialTheme.shapes.medium,
+                        clip = false
+                    )
+            )
+            if (isEditMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(22.dp)
+                        .background(
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0x78000000),
+                            shape = CircleShape
+                        )
+                        .border(width = 1.dp, color = Color.White, shape = CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
-
         Text(
             text = title,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold
         )
 
-        val author = entity.author.orEmpty().trim()
-        if (author.isNotBlank()) {
-            Text(
-                text = author,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall
-            )
-        } else {
-            Spacer(modifier = Modifier.height(2.dp))
-        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = progressText,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
         val status = statusLabel(entity.indexState)
         if (status != null) {
@@ -73,12 +115,16 @@ internal fun BookGridItem(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.secondary
             )
+        } else {
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
         Spacer(modifier = Modifier.height(6.dp))
         LinearProgressIndicator(
             progress = { book.progression.toFloat().coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
         )
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -103,6 +149,12 @@ internal fun BookGridItem(
     }
 }
 
+private fun progressionText(progression: Double): String {
+    if (progression <= 0.0) return "未读"
+    val percent = (progression.coerceIn(0.0, 1.0) * 100.0).roundToInt()
+    return "已读$percent%"
+}
+
 private fun statusLabel(state: IndexState): String? {
     return when (state) {
         IndexState.PENDING -> "待解析"
@@ -115,7 +167,7 @@ private fun statusLabel(state: IndexState): String? {
 private fun bookTitle(title: String?, fileName: String): String {
     val trimmed = title?.trim().orEmpty()
     if (trimmed.isNotEmpty()) return trimmed
-    return fileName.substringBeforeLast('.', fileName).ifBlank { "Untitled" }
+    return fileName.substringBeforeLast('.', fileName).ifBlank { "未命名" }
 }
 
 private fun sizeText(bytes: Long): String {
