@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 @Suppress("FunctionNaming")
-fun AnnotationsScreen() {
+fun AnnotationsScreen(bookId: String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -20,6 +20,6 @@ fun AnnotationsScreen() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Annotations")
+        Text(text = "Annotations for book=$bookId")
     }
 }

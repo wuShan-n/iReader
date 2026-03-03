@@ -6,9 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.fragment.app.FragmentActivity
 import com.ireader.core.designsystem.IReaderTheme
 import com.ireader.core.navigation.AppRoutes
+import com.ireader.feature.annotations.navigation.AnnotationsRoute
 import com.ireader.feature.annotations.ui.AnnotationsScreen
 import com.ireader.feature.library.navigation.libraryNavGraph
 import com.ireader.feature.reader.navigation.readerNavGraph
@@ -35,16 +38,26 @@ private fun iReaderApp() {
     NavHost(navController = navController, startDestination = AppRoutes.LIBRARY) {
         libraryNavGraph(
             onOpenBook = { bookId ->
-                navController.navigate(AppRoutes.reader(bookId))
+                navController.navigate(AppRoutes.reader(bookId.toString()))
             },
             onOpenSettings = { navController.navigate(AppRoutes.SETTINGS) }
         )
         readerNavGraph(
-            onOpenAnnotations = { navController.navigate(AppRoutes.ANNOTATIONS) },
-            onOpenSearch = { navController.navigate(AppRoutes.SEARCH) }
+            onBack = { navController.popBackStack() },
+            onOpenAnnotations = { bookId ->
+                navController.navigate(AnnotationsRoute.create(bookId))
+            }
         )
-        composable(AppRoutes.ANNOTATIONS) {
-            AnnotationsScreen()
+        composable(
+            route = AppRoutes.ANNOTATIONS,
+            arguments = listOf(
+                navArgument(AppRoutes.ARG_BOOK_ID) {
+                    type = NavType.StringType
+                }
+            )
+        ) { entry ->
+            val bookId = requireNotNull(entry.arguments?.getString(AppRoutes.ARG_BOOK_ID))
+            AnnotationsScreen(bookId = bookId)
         }
         composable(AppRoutes.SEARCH) {
             SearchScreen()
