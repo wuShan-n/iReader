@@ -2,6 +2,7 @@ package com.ireader.feature.reader.ui.components
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +26,8 @@ import androidx.compose.ui.unit.IntSize
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.TileRequest
+import com.ireader.reader.model.DocumentLink
+import com.ireader.reader.model.NormalizedPoint
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -38,6 +41,9 @@ import kotlinx.coroutines.withContext
 fun TilesPage(
     pageId: String,
     content: RenderContent.Tiles,
+    links: List<DocumentLink>,
+    onToggleChrome: () -> Unit,
+    onLinkActivated: (DocumentLink) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -71,16 +77,19 @@ fun TilesPage(
 
         val pageWidth = content.pageWidthPx.toFloat().coerceAtLeast(1f)
         val pageHeight = content.pageHeightPx.toFloat().coerceAtLeast(1f)
-        val baseScale = min(viewportWidth / pageWidth, viewportHeight / pageHeight).coerceAtLeast(0.05f)
-        val drawScale = baseScale * zoom
+        val drawScale = zoom
+        val drawWidth = pageWidth * drawScale
+        val drawHeight = pageHeight * drawScale
+        val pageLeft = (viewportWidth - drawWidth) / 2f + offset.x
+        val pageTop = (viewportHeight - drawHeight) / 2f + offset.y
         val normalizedScale = (drawScale * 100f).roundToInt() / 100f
         val quality = if (isGesturing) RenderPolicy.Quality.DRAFT else RenderPolicy.Quality.FINAL
 
         val tilePageSize = (512f / drawScale).coerceIn(96f, 2048f)
-        val leftPage = ((-offset.x) / drawScale).coerceIn(0f, pageWidth)
-        val topPage = ((-offset.y) / drawScale).coerceIn(0f, pageHeight)
-        val rightPage = ((viewportWidth - offset.x) / drawScale).coerceIn(0f, pageWidth)
-        val bottomPage = ((viewportHeight - offset.y) / drawScale).coerceIn(0f, pageHeight)
+        val leftPage = ((0f - pageLeft) / drawScale).coerceIn(0f, pageWidth)
+        val topPage = ((0f - pageTop) / drawScale).coerceIn(0f, pageHeight)
+        val rightPage = ((viewportWidth - pageLeft) / drawScale).coerceIn(0f, pageWidth)
+        val bottomPage = ((viewportHeight - pageTop) / drawScale).coerceIn(0f, pageHeight)
 
         val startX = (leftPage / tilePageSize).toInt().coerceAtLeast(0)
         val endX = ceil(rightPage / tilePageSize).toInt().coerceAtLeast(startX)
@@ -159,16 +168,41 @@ fun TilesPage(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
+                .pointerInput(pageId, links, pageWidth, pageHeight, drawScale, pageLeft, pageTop) {
+                    detectTapGestures { tap ->
+                        val link = hitTestLink(
+                            tap = tap,
+                            links = links,
+                            pageWidth = pageWidth,
+                            pageHeight = pageHeight,
+                            drawScale = drawScale,
+                            pageLeft = pageLeft,
+                            pageTop = pageTop
+                        )
+                        if (link != null) {
+                            onLinkActivated(link)
+                        } else {
+                            onToggleChrome()
+                        }
+                    }
+                }
                 .pointerInput(pageId) {
                     detectTransformGestures { centroid, pan, gestureZoom, _ ->
                         val oldZoom = zoom
                         val nextZoom = (zoom * gestureZoom).coerceIn(0.7f, 6.0f)
-
-                        val oldScale = baseScale * oldZoom
-                        val nextScale = baseScale * nextZoom
-                        val before = (centroid - offset) / oldScale
+                        val oldCenteredX = (viewportWidth - pageWidth * oldZoom) / 2f
+                        val oldCenteredY = (viewportHeight - pageHeight * oldZoom) / 2f
+                        val before = Offset(
+                            x = (centroid.x - (oldCenteredX + offset.x)) / oldZoom,
+                            y = (centroid.y - (oldCenteredY + offset.y)) / oldZoom
+                        )
+                        val nextCenteredX = (viewportWidth - pageWidth * nextZoom) / 2f
+                        val nextCenteredY = (viewportHeight - pageHeight * nextZoom) / 2f
                         zoom = nextZoom
-                        offset = (centroid - before * nextScale) + pan
+                        offset = Offset(
+                            x = centroid.x - nextCenteredX - before.x * nextZoom + pan.x,
+                            y = centroid.y - nextCenteredY - before.y * nextZoom + pan.y
+                        )
 
                         isGesturing = true
                         settleJob?.cancel()
@@ -179,17 +213,12 @@ fun TilesPage(
                     }
                 }
         ) {
-            val drawWidth = pageWidth * drawScale
-            val drawHeight = pageHeight * drawScale
-            val centerOffsetX = (size.width - drawWidth) / 2f
-            val centerOffsetY = (size.height - drawHeight) / 2f
-
             needed.forEach { key ->
                 val bitmap = bitmaps[key] ?: return@forEach
                 if (bitmap.isRecycled) return@forEach
 
-                val dstLeft = (centerOffsetX + offset.x + key.leftPx * drawScale).roundToInt()
-                val dstTop = (centerOffsetY + offset.y + key.topPx * drawScale).roundToInt()
+                val dstLeft = (pageLeft + key.leftPx * drawScale).roundToInt()
+                val dstTop = (pageTop + key.topPx * drawScale).roundToInt()
                 val dstWidth = (key.widthPx * drawScale).roundToInt().coerceAtLeast(1)
                 val dstHeight = (key.heightPx * drawScale).roundToInt().coerceAtLeast(1)
 
@@ -205,6 +234,28 @@ fun TilesPage(
     }
 }
 
+private fun hitTestLink(
+    tap: Offset,
+    links: List<DocumentLink>,
+    pageWidth: Float,
+    pageHeight: Float,
+    drawScale: Float,
+    pageLeft: Float,
+    pageTop: Float
+): DocumentLink? {
+    val pageX = (tap.x - pageLeft) / drawScale
+    val pageY = (tap.y - pageTop) / drawScale
+    if (pageX !in 0f..pageWidth || pageY !in 0f..pageHeight) return null
+
+    val point = NormalizedPoint(
+        x = (pageX / pageWidth).coerceIn(0f, 1f),
+        y = (pageY / pageHeight).coerceIn(0f, 1f)
+    )
+    return links.firstOrNull { link ->
+        link.bounds.orEmpty().any { rect -> rect.contains(point) }
+    }
+}
+
 private data class TileKey(
     val leftPx: Int,
     val topPx: Int,
@@ -213,4 +264,3 @@ private data class TileKey(
     val scale: Float,
     val quality: RenderPolicy.Quality
 )
-

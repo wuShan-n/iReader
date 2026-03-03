@@ -27,8 +27,10 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.api.render.RenderState
+import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorSchemes
+import com.ireader.reader.model.NormalizedRect
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -188,7 +190,9 @@ internal class PdfController(
 
         val pageLocator = pageLocator(currentPage, pageCount)
         val links = if (backend.capabilities.links) {
-            runCatching { backend.pageLinks(currentPage) }.getOrDefault(emptyList())
+            runCatching { backend.pageLinks(currentPage) }
+                .getOrDefault(emptyList())
+                .rotateBy(currentConfig.rotationDegrees)
         } else {
             emptyList()
         }
@@ -268,5 +272,42 @@ internal class PdfController(
             prefetchNeighbors(count)
         }
     }
-}
 
+    private fun List<DocumentLink>.rotateBy(rotationDegrees: Int): List<DocumentLink> {
+        val normalized = ((rotationDegrees % 360) + 360) % 360
+        if (normalized == 0) return this
+        return map { link ->
+            val bounds = link.bounds
+                ?.map { rect -> rotateRect(rect, normalized) }
+                ?.takeIf { it.isNotEmpty() }
+            link.copy(bounds = bounds)
+        }
+    }
+
+    private fun rotateRect(rect: NormalizedRect, rotationDegrees: Int): NormalizedRect {
+        val points = listOf(
+            rect.left to rect.top,
+            rect.right to rect.top,
+            rect.right to rect.bottom,
+            rect.left to rect.bottom
+        ).map { (x, y) ->
+            when (rotationDegrees) {
+                90 -> (1f - y) to x
+                180 -> (1f - x) to (1f - y)
+                270 -> y to (1f - x)
+                else -> x to y
+            }
+        }
+
+        val minX = points.minOf { it.first }.coerceIn(0f, 1f)
+        val maxX = points.maxOf { it.first }.coerceIn(0f, 1f)
+        val minY = points.minOf { it.second }.coerceIn(0f, 1f)
+        val maxY = points.maxOf { it.second }.coerceIn(0f, 1f)
+        return NormalizedRect(
+            left = minX,
+            top = minY,
+            right = maxX,
+            bottom = maxY
+        )
+    }
+}

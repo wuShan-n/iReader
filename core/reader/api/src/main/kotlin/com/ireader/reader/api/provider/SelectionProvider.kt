@@ -11,7 +11,12 @@ interface SelectionProvider {
 
     data class Selection(
         val locator: Locator,
-        val bounds: NormalizedRect? = null
+        val bounds: NormalizedRect? = null,
+        val start: Locator? = null,
+        val end: Locator? = null,
+        val selectedText: String? = null,
+        val rects: List<NormalizedRect> = emptyList(),
+        val extras: Map<String, String> = emptyMap()
     )
 
     suspend fun currentSelection(): ReaderResult<Selection?>

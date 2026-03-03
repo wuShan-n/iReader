@@ -2,6 +2,7 @@ package com.ireader.feature.reader.presentation
 
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
 
 sealed interface ReaderIntent {
@@ -24,6 +25,7 @@ sealed interface ReaderIntent {
     data object Prev : ReaderIntent
     data class GoTo(val locator: Locator) : ReaderIntent
     data class GoToProgress(val percent: Double) : ReaderIntent
+    data class ActivateLink(val link: DocumentLink) : ReaderIntent
 
     data class SearchQueryChanged(val query: String) : ReaderIntent
     data object ExecuteSearch : ReaderIntent

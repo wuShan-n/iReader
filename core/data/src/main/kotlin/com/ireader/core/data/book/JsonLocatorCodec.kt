@@ -1,7 +1,5 @@
-package com.ireader.feature.reader.domain.impl
+package com.ireader.core.data.book
 
-import com.ireader.core.data.book.LocatorJsonCodec
-import com.ireader.feature.reader.domain.LocatorCodec
 import com.ireader.reader.model.Locator
 import javax.inject.Inject
 import javax.inject.Singleton

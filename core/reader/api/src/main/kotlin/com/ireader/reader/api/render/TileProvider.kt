@@ -4,11 +4,13 @@ import android.graphics.Bitmap
 import java.io.Closeable
 
 data class TileRequest(
+    // Region in rendered page-space pixels (already includes fit/rotation/config zoom).
     val leftPx: Int,
     val topPx: Int,
     val widthPx: Int,
     val heightPx: Int,
-    val scale: Float = 1.0f,          // 缩放倍率（例如 2x）
+    // Additional sampling scale for current viewport gesture scale (for example 2x).
+    val scale: Float = 1.0f,
     val quality: RenderPolicy.Quality = RenderPolicy.Quality.FINAL
 )
 

@@ -10,12 +10,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.ui.ReaderSurface
+import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
+import com.ireader.reader.model.DocumentLink
 
 @Composable
 fun PageRenderer(
     state: ReaderUiState,
     onToggleChrome: () -> Unit,
+    onLinkActivated: (DocumentLink) -> Unit,
     onWebSchemeUrl: (String) -> Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -27,19 +30,28 @@ fun PageRenderer(
         return
     }
 
-    Box(
-        modifier = modifier
+    val content = page.content
+    val containerModifier = if (content is RenderContent.Tiles) {
+        modifier.fillMaxSize()
+    } else {
+        modifier
             .fillMaxSize()
             .pointerInput(page.id.value) {
                 detectTapGestures(onTap = { onToggleChrome() })
             }
+    }
+
+    Box(
+        modifier = containerModifier
     ) {
-        when (val content = page.content) {
+        when (content) {
             is RenderContent.Text -> TextPage(content = content, modifier = Modifier.fillMaxSize())
             is RenderContent.BitmapPage -> BitmapPage(content = content, modifier = Modifier.fillMaxSize())
             is RenderContent.Html -> HtmlPage(
                 pageId = page.id.value,
                 content = content,
+                resourceProvider = state.resources,
+                reflowConfig = state.currentConfig as? RenderConfig.ReflowText,
                 onWebSchemeUrl = onWebSchemeUrl,
                 modifier = Modifier.fillMaxSize()
             )
@@ -47,6 +59,9 @@ fun PageRenderer(
             is RenderContent.Tiles -> TilesPage(
                 pageId = page.id.value,
                 content = content,
+                links = page.links,
+                onToggleChrome = onToggleChrome,
+                onLinkActivated = onLinkActivated,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -66,4 +81,3 @@ fun PageRenderer(
         }
     }
 }
-

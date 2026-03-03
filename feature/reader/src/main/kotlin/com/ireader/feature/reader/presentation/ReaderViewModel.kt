@@ -3,11 +3,11 @@ package com.ireader.feature.reader.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ireader.core.data.book.BookRepo
+import com.ireader.core.data.book.LocatorCodec
 import com.ireader.core.data.book.ProgressRepo
 import com.ireader.core.database.book.IndexState
 import com.ireader.core.datastore.reader.ReaderSettingsStore
-import com.ireader.feature.reader.domain.BookDocumentSourceResolver
-import com.ireader.feature.reader.domain.LocatorCodec
+import com.ireader.core.files.source.BookSourceResolver
 import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
 import com.ireader.feature.reader.domain.usecase.OpenReaderSession
 import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
@@ -22,7 +22,7 @@ import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
-import com.ireader.reader.model.Locator
+import com.ireader.reader.model.LinkTarget
 import com.ireader.reader.model.OutlineNode
 import com.ireader.reader.runtime.ReaderSessionHandle
 import com.ireader.reader.runtime.flow.asReaderResult
@@ -42,11 +42,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -54,7 +51,7 @@ class ReaderViewModel @Inject constructor(
     private val bookRepo: BookRepo,
     private val progressRepo: ProgressRepo,
     private val settingsStore: ReaderSettingsStore,
-    private val sourceResolver: BookDocumentSourceResolver,
+    private val sourceResolver: BookSourceResolver,
     private val locatorCodec: LocatorCodec,
     private val openReaderSession: OpenReaderSession,
     private val observeEffectiveConfig: ObserveEffectiveConfig,
@@ -62,24 +59,20 @@ class ReaderViewModel @Inject constructor(
     private val errorMapper: ReaderUiErrorMapper
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(ReaderUiState())
-    val state = _state.asStateFlow()
+    private val stateStore = MutableStateFlow(ReaderUiState())
+    val state = stateStore.asStateFlow()
 
-    private val _effects = MutableSharedFlow<ReaderEffect>(extraBufferCapacity = 16)
-    val effects = _effects.asSharedFlow()
+    private val effectStore = MutableSharedFlow<ReaderEffect>(extraBufferCapacity = 16)
+    val effects = effectStore.asSharedFlow()
+
+    private val ui = ReaderUiReducer(stateStore = stateStore, effectStore = effectStore)
+    private val session = SessionCoordinator()
+    private val render = RenderCoordinator(scope = viewModelScope) {
+        renderCurrentPageImmediate()
+    }
 
     private val intents = Channel<ReaderIntent>(capacity = Channel.UNLIMITED)
-    private val navigationMutex = Mutex()
-
-    private var handle: ReaderSessionHandle? = null
-    private var currentBookId: Long = -1L
     private var currentStartArgs: StartArgs? = null
-    private var layoutConstraints: LayoutConstraints? = null
-
-    private var progressJob: Job? = null
-    private var stateJob: Job? = null
-    private var eventJob: Job? = null
-    private var settingsJob: Job? = null
     private var searchJob: Job? = null
 
     init {
@@ -95,7 +88,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun onWebSchemeUrl(url: String): Boolean {
-        val controller = handle?.controller ?: return false
+        val controller = session.currentHandle()?.controller ?: return false
         val handled = ReaderWebViewLinkRouter.tryHandle(
             url = url,
             controller = controller,
@@ -134,29 +127,29 @@ class ReaderViewModel @Inject constructor(
             }
 
             ReaderIntent.CancelPassword -> {
-                _state.update { it.copy(passwordPrompt = null) }
-                _effects.tryEmit(ReaderEffect.Back)
+                ui.update { it.copy(passwordPrompt = null) }
+                ui.emit(ReaderEffect.Back)
             }
 
             is ReaderIntent.LayoutChanged -> applyLayout(intent.constraints)
-            ReaderIntent.RefreshPage -> renderCurrentPage()
-            ReaderIntent.ToggleChrome -> _state.update { it.copy(chromeVisible = !it.chromeVisible) }
+            ReaderIntent.RefreshPage -> render.requestRender(RenderRequest.REFRESH)
+            ReaderIntent.ToggleChrome -> ui.update { it.copy(chromeVisible = !it.chromeVisible) }
 
             ReaderIntent.OpenAnnotations -> {
-                val bookId = _state.value.bookId
+                val bookId = ui.state.value.bookId
                 if (bookId > 0L) {
-                    _effects.tryEmit(ReaderEffect.OpenAnnotations(bookId))
+                    ui.emit(ReaderEffect.OpenAnnotations(bookId))
                 }
             }
 
             ReaderIntent.OpenToc -> {
-                _state.update { it.copy(sheet = ReaderSheet.Toc) }
+                ui.update { it.copy(sheet = ReaderSheet.Toc) }
                 loadTocIfNeeded()
             }
 
-            ReaderIntent.OpenSearch -> _state.update { it.copy(sheet = ReaderSheet.Search) }
-            ReaderIntent.OpenSettings -> _state.update { it.copy(sheet = ReaderSheet.Settings) }
-            ReaderIntent.CloseSheet -> _state.update { it.copy(sheet = ReaderSheet.None) }
+            ReaderIntent.OpenSearch -> ui.update { it.copy(sheet = ReaderSheet.Search) }
+            ReaderIntent.OpenSettings -> ui.update { it.copy(sheet = ReaderSheet.Settings) }
+            ReaderIntent.CloseSheet -> ui.update { it.copy(sheet = ReaderSheet.None) }
 
             ReaderIntent.Next -> navigate { controller, policy -> controller.next(policy) }
             ReaderIntent.Prev -> navigate { controller, policy -> controller.prev(policy) }
@@ -164,18 +157,20 @@ class ReaderViewModel @Inject constructor(
             is ReaderIntent.GoToProgress -> navigate { controller, policy ->
                 controller.goToProgress(intent.percent, policy)
             }
+            is ReaderIntent.ActivateLink -> handleLink(intent.link.target)
 
             is ReaderIntent.SearchQueryChanged -> {
-                _state.update { current ->
+                ui.update { current ->
                     current.copy(search = current.search.copy(query = intent.query))
                 }
             }
 
             ReaderIntent.ExecuteSearch -> executeSearch()
 
-            is ReaderIntent.UpdateConfig -> {
-                applyConfig(config = intent.config, persist = intent.persist)
-            }
+            is ReaderIntent.UpdateConfig -> applyConfig(
+                config = intent.config,
+                persist = intent.persist
+            )
         }
     }
 
@@ -184,13 +179,14 @@ class ReaderViewModel @Inject constructor(
         searchJob?.cancel()
         searchJob = null
 
-        _state.update {
+        ui.update {
             it.copy(
                 bookId = args.bookId,
                 isOpening = true,
                 title = null,
                 page = null,
                 controller = null,
+                resources = null,
                 capabilities = null,
                 renderState = null,
                 currentConfig = null,
@@ -203,7 +199,7 @@ class ReaderViewModel @Inject constructor(
 
         val book = bookRepo.getById(args.bookId)
         if (book == null) {
-            _state.update {
+            ui.update {
                 it.copy(
                     isOpening = false,
                     error = ReaderUiError(
@@ -219,7 +215,7 @@ class ReaderViewModel @Inject constructor(
         val source = sourceResolver.resolve(book)
         if (source == null) {
             bookRepo.setIndexState(book.bookId, IndexState.MISSING, "File not found")
-            _state.update {
+            ui.update {
                 it.copy(
                     isOpening = false,
                     error = ReaderUiError(
@@ -253,15 +249,15 @@ class ReaderViewModel @Inject constructor(
             }
 
             is ReaderResult.Ok -> {
-                currentBookId = book.bookId
+                session.attach(bookId = book.bookId, handle = result.value)
                 bookRepo.touchLastOpened(book.bookId)
-                handle = result.value
 
-                _state.update {
+                ui.update {
                     it.copy(
                         isOpening = false,
                         title = book.title?.takeIf(String::isNotBlank) ?: book.fileName,
                         controller = result.value.controller,
+                        resources = result.value.resources,
                         capabilities = result.value.document.capabilities,
                         currentConfig = result.value.controller.state.value.config,
                         passwordPrompt = null,
@@ -270,11 +266,11 @@ class ReaderViewModel @Inject constructor(
                 }
 
                 startSessionCollectors(result.value, book.bookId)
-                val constraints = layoutConstraints
+                val constraints = render.currentLayout()
                 if (constraints != null) {
                     applyLayout(constraints)
                 } else {
-                    renderCurrentPage()
+                    render.requestRender(RenderRequest.OPEN)
                 }
             }
         }
@@ -282,7 +278,7 @@ class ReaderViewModel @Inject constructor(
 
     private suspend fun handleOpenError(error: ReaderError, lastTriedPassword: String?) {
         if (error is ReaderError.InvalidPassword) {
-            _state.update {
+            ui.update {
                 it.copy(
                     isOpening = false,
                     passwordPrompt = PasswordPrompt(lastTried = lastTriedPassword),
@@ -292,7 +288,7 @@ class ReaderViewModel @Inject constructor(
             return
         }
 
-        _state.update {
+        ui.update {
             it.copy(
                 isOpening = false,
                 passwordPrompt = null,
@@ -302,11 +298,9 @@ class ReaderViewModel @Inject constructor(
     }
 
     private fun startSessionCollectors(sessionHandle: ReaderSessionHandle, bookId: Long) {
-        cancelSessionCollectors()
-
-        stateJob = viewModelScope.launch {
+        val stateJob = viewModelScope.launch {
             sessionHandle.controller.state.collect { renderState ->
-                _state.update {
+                ui.update {
                     it.copy(
                         renderState = renderState,
                         currentConfig = renderState.config,
@@ -316,7 +310,7 @@ class ReaderViewModel @Inject constructor(
             }
         }
 
-        progressJob = viewModelScope.launch {
+        val progressJob = viewModelScope.launch {
             sessionHandle.controller.state
                 .map { renderState -> renderState.locator to renderState.progression.percent }
                 .distinctUntilChanged()
@@ -326,38 +320,45 @@ class ReaderViewModel @Inject constructor(
                 }
         }
 
-        eventJob = viewModelScope.launch {
+        val eventJob = viewModelScope.launch {
             sessionHandle.controller.events
                 .filterIsInstance<ReaderEvent.Error>()
                 .collect {
-                    _effects.tryEmit(ReaderEffect.Snackbar(UiText.Dynamic("Render error")))
+                    ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("Render error")))
                 }
         }
 
-        settingsJob = viewModelScope.launch {
+        val settingsJob = viewModelScope.launch {
             observeEffectiveConfig(sessionHandle.document.capabilities)
                 .distinctUntilChanged()
                 .collect { config ->
                     when (sessionHandle.controller.setConfig(config)) {
                         is ReaderResult.Ok -> {
-                            _state.update { it.copy(currentConfig = config) }
-                            renderCurrentPage()
+                            ui.update { it.copy(currentConfig = config) }
+                            render.requestRender(RenderRequest.SETTINGS)
                         }
 
                         is ReaderResult.Err -> {
-                            _effects.tryEmit(ReaderEffect.Snackbar(UiText.Dynamic("Failed to apply settings")))
+                            ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("Failed to apply settings")))
                         }
                     }
                 }
         }
+
+        session.bindCollectors(
+            progressJob = progressJob,
+            stateJob = stateJob,
+            eventJob = eventJob,
+            settingsJob = settingsJob
+        )
     }
 
     private suspend fun applyLayout(constraints: LayoutConstraints) {
-        layoutConstraints = constraints
-        val sessionHandle = handle ?: return
+        render.updateLayout(constraints)
+        val sessionHandle = session.currentHandle() ?: return
         when (val result = sessionHandle.controller.setLayoutConstraints(constraints)) {
-            is ReaderResult.Ok -> renderCurrentPage()
-            is ReaderResult.Err -> _state.update { it.copy(error = errorMapper.map(result.error)) }
+            is ReaderResult.Ok -> render.requestRender(RenderRequest.LAYOUT)
+            is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
         }
     }
 
@@ -369,49 +370,49 @@ class ReaderViewModel @Inject constructor(
                     is RenderConfig.ReflowText -> settingsStore.setReflowConfig(config)
                 }
             }.onFailure {
-                _effects.tryEmit(ReaderEffect.Snackbar(UiText.Dynamic("Failed to save settings")))
+                ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("Failed to save settings")))
             }
         }
 
-        val sessionHandle = handle ?: run {
-            _state.update { it.copy(currentConfig = config) }
+        val sessionHandle = session.currentHandle() ?: run {
+            ui.update { it.copy(currentConfig = config) }
             return
         }
 
         when (val result = sessionHandle.controller.setConfig(config)) {
-            is ReaderResult.Err -> _state.update { it.copy(error = errorMapper.map(result.error)) }
+            is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
             is ReaderResult.Ok -> {
-                _state.update { it.copy(currentConfig = config) }
-                renderCurrentPage()
+                ui.update { it.copy(currentConfig = config) }
+                render.requestRender(RenderRequest.CONFIG)
             }
         }
     }
 
-    private suspend fun renderCurrentPage() {
-        val sessionHandle = handle ?: return
-        if (layoutConstraints == null) return
+    private suspend fun renderCurrentPageImmediate() {
+        val sessionHandle = session.currentHandle() ?: return
+        if (render.currentLayout() == null) return
         val controller = sessionHandle.controller
         val twoPass = sessionHandle.document.capabilities.fixedLayout
 
         if (!twoPass) {
             when (val result = controller.render()) {
-                is ReaderResult.Ok -> _state.update { it.copy(page = result.value, error = null) }
-                is ReaderResult.Err -> _state.update { it.copy(error = errorMapper.map(result.error)) }
+                is ReaderResult.Ok -> ui.update { it.copy(page = result.value, error = null) }
+                is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
             }
             return
         }
 
         when (val draft = controller.render(RenderPolicy(quality = RenderPolicy.Quality.DRAFT))) {
-            is ReaderResult.Ok -> _state.update { it.copy(page = draft.value, error = null) }
+            is ReaderResult.Ok -> ui.update { it.copy(page = draft.value, error = null) }
             is ReaderResult.Err -> {
-                _state.update { it.copy(error = errorMapper.map(draft.error)) }
+                ui.update { it.copy(error = errorMapper.map(draft.error)) }
                 return
             }
         }
 
-        _state.update { it.copy(isRenderingFinal = true) }
+        ui.update { it.copy(isRenderingFinal = true) }
         when (val final = controller.render(RenderPolicy(quality = RenderPolicy.Quality.FINAL))) {
-            is ReaderResult.Ok -> _state.update {
+            is ReaderResult.Ok -> ui.update {
                 it.copy(
                     page = final.value,
                     error = null,
@@ -419,7 +420,7 @@ class ReaderViewModel @Inject constructor(
                 )
             }
 
-            is ReaderResult.Err -> _state.update {
+            is ReaderResult.Err -> ui.update {
                 it.copy(
                     error = errorMapper.map(final.error),
                     isRenderingFinal = false
@@ -431,8 +432,8 @@ class ReaderViewModel @Inject constructor(
     private suspend fun navigate(
         block: suspend (ReaderController, RenderPolicy) -> ReaderResult<RenderPage>
     ) {
-        val sessionHandle = handle ?: return
-        navigationMutex.withLock {
+        val sessionHandle = session.currentHandle() ?: return
+        render.withNavigationLock {
             val fixed = sessionHandle.document.capabilities.fixedLayout
             val actionPolicy = if (fixed) {
                 RenderPolicy(quality = RenderPolicy.Quality.DRAFT)
@@ -441,13 +442,17 @@ class ReaderViewModel @Inject constructor(
             }
 
             when (val result = block(sessionHandle.controller, actionPolicy)) {
-                is ReaderResult.Err -> _state.update { it.copy(error = errorMapper.map(result.error)) }
+                is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
                 is ReaderResult.Ok -> {
-                    _state.update { it.copy(page = result.value, error = null) }
+                    ui.update { it.copy(page = result.value, error = null) }
                     if (fixed) {
-                        _state.update { it.copy(isRenderingFinal = true) }
-                        when (val final = sessionHandle.controller.render(RenderPolicy(quality = RenderPolicy.Quality.FINAL))) {
-                            is ReaderResult.Ok -> _state.update {
+                        ui.update { it.copy(isRenderingFinal = true) }
+                        when (
+                            val final = sessionHandle.controller.render(
+                                RenderPolicy(quality = RenderPolicy.Quality.FINAL)
+                            )
+                        ) {
+                            is ReaderResult.Ok -> ui.update {
                                 it.copy(
                                     page = final.value,
                                     error = null,
@@ -455,7 +460,7 @@ class ReaderViewModel @Inject constructor(
                                 )
                             }
 
-                            is ReaderResult.Err -> _state.update {
+                            is ReaderResult.Err -> ui.update {
                                 it.copy(
                                     error = errorMapper.map(final.error),
                                     isRenderingFinal = false
@@ -470,11 +475,25 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    private suspend fun handleLink(target: LinkTarget) {
+        when (target) {
+            is LinkTarget.Internal -> {
+                navigate { controller, policy ->
+                    controller.goTo(target.locator, policy)
+                }
+            }
+
+            is LinkTarget.External -> {
+                ui.emit(ReaderEffect.OpenExternalUrl(target.url))
+            }
+        }
+    }
+
     private suspend fun loadTocIfNeeded() {
-        val sessionHandle = handle ?: return
+        val sessionHandle = session.currentHandle() ?: return
         val outline = sessionHandle.outline
         if (outline == null) {
-            _state.update {
+            ui.update {
                 it.copy(
                     toc = TocState(
                         isLoading = false,
@@ -485,12 +504,12 @@ class ReaderViewModel @Inject constructor(
             }
             return
         }
-        if (_state.value.toc.items.isNotEmpty()) return
+        if (ui.state.value.toc.items.isNotEmpty()) return
 
-        _state.update { it.copy(toc = it.toc.copy(isLoading = true, error = null)) }
+        ui.update { it.copy(toc = it.toc.copy(isLoading = true, error = null)) }
         when (val result = outline.getOutline()) {
             is ReaderResult.Err -> {
-                _state.update {
+                ui.update {
                     it.copy(
                         toc = TocState(
                             isLoading = false,
@@ -502,24 +521,23 @@ class ReaderViewModel @Inject constructor(
             }
 
             is ReaderResult.Ok -> {
-                val flat = mutableListOf<TocItem>()
-                flattenOutline(result.value, depth = 0, out = flat)
-                _state.update { it.copy(toc = TocState(isLoading = false, items = flat)) }
+                val flat = flattenOutlineIterative(result.value)
+                ui.update { it.copy(toc = TocState(isLoading = false, items = flat)) }
             }
         }
     }
 
     private suspend fun executeSearch() {
-        val sessionHandle = handle ?: return
-        val query = _state.value.search.query.trim()
+        val sessionHandle = session.currentHandle() ?: return
+        val query = ui.state.value.search.query.trim()
         if (query.isBlank()) {
-            _state.update { it.copy(search = it.search.copy(results = emptyList(), error = null)) }
+            ui.update { it.copy(search = it.search.copy(results = emptyList(), error = null)) }
             return
         }
 
         val provider = sessionHandle.search
         if (provider == null) {
-            _state.update {
+            ui.update {
                 it.copy(
                     search = it.search.copy(
                         isSearching = false,
@@ -533,7 +551,7 @@ class ReaderViewModel @Inject constructor(
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            _state.update {
+            ui.update {
                 it.copy(
                     search = it.search.copy(
                         isSearching = true,
@@ -541,6 +559,16 @@ class ReaderViewModel @Inject constructor(
                         error = null
                     )
                 )
+            }
+
+            val accumulator = SearchResultAccumulator { batch ->
+                ui.update { current ->
+                    current.copy(
+                        search = current.search.copy(
+                            results = current.search.results + batch
+                        )
+                    )
+                }
             }
 
             try {
@@ -552,7 +580,7 @@ class ReaderViewModel @Inject constructor(
                     .collect { result ->
                         when (result) {
                             is ReaderResult.Err -> {
-                                _state.update {
+                                ui.update {
                                     it.copy(
                                         search = it.search.copy(
                                             isSearching = false,
@@ -564,25 +592,21 @@ class ReaderViewModel @Inject constructor(
 
                             is ReaderResult.Ok -> {
                                 val hit = result.value
-                                val encoded = locatorCodec.encode(hit.range.start)
-                                _state.update { current ->
-                                    current.copy(
-                                        search = current.search.copy(
-                                            results = current.search.results + SearchResultItem(
-                                                title = hit.sectionTitle,
-                                                excerpt = hit.excerpt,
-                                                locatorEncoded = encoded
-                                            )
-                                        )
+                                accumulator.add(
+                                    SearchResultItem(
+                                        title = hit.sectionTitle,
+                                        excerpt = hit.excerpt,
+                                        locatorEncoded = locatorCodec.encode(hit.range.start)
                                     )
-                                }
+                                )
                             }
                         }
                     }
             } catch (ce: CancellationException) {
                 throw ce
             } finally {
-                _state.update {
+                accumulator.flush()
+                ui.update {
                     it.copy(
                         search = it.search.copy(isSearching = false)
                     )
@@ -591,54 +615,44 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private fun flattenOutline(nodes: List<OutlineNode>, depth: Int, out: MutableList<TocItem>) {
-        nodes.forEach { node ->
+    private fun flattenOutlineIterative(nodes: List<OutlineNode>): List<TocItem> {
+        if (nodes.isEmpty()) return emptyList()
+        val out = ArrayList<TocItem>(nodes.size)
+        val stack = ArrayDeque<OutlineEntry>(nodes.size)
+        for (index in nodes.lastIndex downTo 0) {
+            stack.addLast(OutlineEntry(nodes[index], depth = 0))
+        }
+
+        while (stack.isNotEmpty()) {
+            val (node, depth) = stack.removeLast()
             out += TocItem(
                 title = node.title.ifBlank { "(untitled)" },
                 locatorEncoded = locatorCodec.encode(node.locator),
                 depth = depth
             )
-            if (node.children.isNotEmpty()) {
-                flattenOutline(node.children, depth + 1, out)
+
+            val children = node.children
+            for (index in children.lastIndex downTo 0) {
+                stack.addLast(OutlineEntry(children[index], depth + 1))
             }
         }
-    }
-
-    private fun cancelSessionCollectors() {
-        progressJob?.cancel()
-        progressJob = null
-        stateJob?.cancel()
-        stateJob = null
-        eventJob?.cancel()
-        eventJob = null
-        settingsJob?.cancel()
-        settingsJob = null
+        return out
     }
 
     private suspend fun closeSession() {
         searchJob?.cancel()
         searchJob = null
-        cancelSessionCollectors()
-
-        val sessionHandle = handle
-        if (sessionHandle != null && currentBookId > 0L) {
-            runCatching {
-                val renderState = sessionHandle.controller.state.value
-                saveReadingProgress(
-                    bookId = currentBookId,
-                    locator = renderState.locator,
-                    progression = renderState.progression.percent
-                )
-            }
+        session.closeCurrent { bookId, locator, progression ->
+            saveReadingProgress(
+                bookId = bookId,
+                locator = locator,
+                progression = progression
+            )
         }
-
-        runCatching { sessionHandle?.controller?.unbindSurface() }
-        runCatching { sessionHandle?.close() }
-        handle = null
-        currentBookId = -1L
     }
 
     override fun onCleared() {
+        render.cancel()
         runBlocking {
             closeSession()
         }
@@ -648,5 +662,10 @@ class ReaderViewModel @Inject constructor(
     private data class StartArgs(
         val bookId: Long,
         val locatorArg: String?
+    )
+
+    private data class OutlineEntry(
+        val node: OutlineNode,
+        val depth: Int
     )
 }

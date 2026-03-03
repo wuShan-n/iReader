@@ -22,18 +22,18 @@ class DatastoreReaderSettingsStore @Inject constructor(
 
     private object Keys {
         object Reflow {
-            val fontSizeSp = floatPreferencesKey("reader.reflow.font_size_sp")
-            val lineHeightMult = floatPreferencesKey("reader.reflow.line_height_mult")
-            val paragraphSpacingDp = floatPreferencesKey("reader.reflow.paragraph_spacing_dp")
-            val pagePaddingDp = floatPreferencesKey("reader.reflow.page_padding_dp")
-            val fontFamilyName = stringPreferencesKey("reader.reflow.font_family_name")
+            val fontSizeSp = floatPreferencesKey("reader.reflow.fontSizeSp")
+            val lineHeightMult = floatPreferencesKey("reader.reflow.lineHeightMult")
+            val paragraphSpacingDp = floatPreferencesKey("reader.reflow.paragraphSpacingDp")
+            val pagePaddingDp = floatPreferencesKey("reader.reflow.pagePaddingDp")
+            val fontFamilyName = stringPreferencesKey("reader.reflow.fontFamilyName")
             val hyphenation = booleanPreferencesKey("reader.reflow.hyphenation")
         }
 
         object Fixed {
-            val fitMode = stringPreferencesKey("reader.fixed.fit_mode")
+            val fitMode = stringPreferencesKey("reader.fixed.fitMode")
             val zoom = floatPreferencesKey("reader.fixed.zoom")
-            val rotationDegrees = intPreferencesKey("reader.fixed.rotation_degrees")
+            val rotationDegrees = intPreferencesKey("reader.fixed.rotationDegrees")
         }
     }
 

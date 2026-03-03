@@ -35,7 +35,9 @@ sealed interface RenderContent {
     data class Html(
         val inlineHtml: String? = null,
         val contentUri: Uri? = null,
-        val baseUri: Uri? = null
+        val baseUri: Uri? = null,
+        val resourceBasePath: String? = null,
+        val themeInjection: HtmlThemeInjection? = null
     ) : RenderContent
 
     data class BitmapPage(
@@ -56,6 +58,11 @@ sealed interface RenderContent {
      */
     data object Embedded : RenderContent
 }
+
+data class HtmlThemeInjection(
+    val css: String? = null,
+    val javascript: String? = null
+)
 
 data class RenderMetrics(
     val renderTimeMs: Long,

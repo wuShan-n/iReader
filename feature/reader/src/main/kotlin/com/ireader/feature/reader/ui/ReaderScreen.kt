@@ -1,5 +1,7 @@
 package com.ireader.feature.reader.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,6 +45,14 @@ fun ReaderScreen(
             when (effect) {
                 ReaderEffect.Back -> onBack()
                 is ReaderEffect.OpenAnnotations -> onOpenAnnotations(effect.bookId)
+                is ReaderEffect.OpenExternalUrl -> {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(effect.url))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
                 is ReaderEffect.Snackbar -> {
                     val message = when (val text = effect.message) {
                         is UiText.Dynamic -> text.value

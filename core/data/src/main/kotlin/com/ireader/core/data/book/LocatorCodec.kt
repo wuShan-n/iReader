@@ -1,4 +1,4 @@
-package com.ireader.feature.reader.domain
+package com.ireader.core.data.book
 
 import com.ireader.reader.model.Locator
 

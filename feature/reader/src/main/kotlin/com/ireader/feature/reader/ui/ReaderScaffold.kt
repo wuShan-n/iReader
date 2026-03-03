@@ -115,6 +115,7 @@ fun ReaderScaffold(
             PageRenderer(
                 state = state,
                 onToggleChrome = { onIntent(ReaderIntent.ToggleChrome) },
+                onLinkActivated = { link -> onIntent(ReaderIntent.ActivateLink(link)) },
                 onWebSchemeUrl = onWebSchemeUrl
             )
 

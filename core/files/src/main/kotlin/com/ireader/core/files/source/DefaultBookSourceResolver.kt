@@ -1,21 +1,18 @@
-package com.ireader.feature.reader.domain
+package com.ireader.core.files.source
 
 import android.content.Context
 import android.net.Uri
 import com.ireader.core.database.book.BookEntity
-import com.ireader.core.files.source.ContentUriDocumentSource
-import com.ireader.core.files.source.DocumentSource
-import com.ireader.core.files.source.FileDocumentSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class BookDocumentSourceResolver @Inject constructor(
+class DefaultBookSourceResolver @Inject constructor(
     @ApplicationContext private val context: Context
-) {
-    fun resolve(book: BookEntity): DocumentSource? {
+) : BookSourceResolver {
+    override fun resolve(book: BookEntity): DocumentSource? {
         val sourceUri = book.sourceUri
         if (!sourceUri.isNullOrBlank()) {
             val uri = Uri.parse(sourceUri)
@@ -43,3 +40,4 @@ class BookDocumentSourceResolver @Inject constructor(
         )
     }
 }
+

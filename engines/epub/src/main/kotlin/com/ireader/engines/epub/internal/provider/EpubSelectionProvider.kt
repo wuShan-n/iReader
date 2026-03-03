@@ -20,7 +20,8 @@ internal class EpubSelectionProvider(
             try {
                 val navigator = navigatorProvider() ?: return@withContext ReaderResult.Ok(null)
                 val selection = navigator.currentSelection() ?: return@withContext ReaderResult.Ok(null)
-                val locator = selection.locator.toAppLocator()
+                val readiumLocator = selection.locator
+                val locator = readiumLocator.toAppLocator()
 
                 val view = navigator.view
                 val rect = selection.rect
@@ -34,8 +35,23 @@ internal class EpubSelectionProvider(
                 } else {
                     null
                 }
+                val text = readiumLocator.text.highlight?.takeIf { it.isNotBlank() }
+                val rects = listOfNotNull(bounds)
+                val fragment = readiumLocator.locations.fragments.firstOrNull()
 
-                ReaderResult.Ok(SelectionProvider.Selection(locator = locator, bounds = bounds))
+                ReaderResult.Ok(
+                    SelectionProvider.Selection(
+                        locator = locator,
+                        bounds = bounds,
+                        start = locator,
+                        end = locator,
+                        selectedText = text,
+                        rects = rects,
+                        extras = buildMap {
+                            fragment?.let { put("fragment", it) }
+                        }
+                    )
+                )
             } catch (t: Throwable) {
                 ReaderResult.Err(ReaderError.Internal(cause = t))
             }

@@ -1,7 +1,7 @@
 package com.ireader.feature.reader.domain.usecase
 
 import com.ireader.core.data.book.ProgressRepo
-import com.ireader.feature.reader.domain.LocatorCodec
+import com.ireader.core.data.book.LocatorCodec
 import com.ireader.reader.model.Locator
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers

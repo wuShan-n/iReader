@@ -4,6 +4,7 @@ import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderState
+import com.ireader.reader.api.provider.ResourceProvider
 import com.ireader.reader.model.DocumentCapabilities
 
 enum class ReaderSheet {
@@ -54,6 +55,7 @@ data class ReaderUiState(
     val renderState: RenderState? = null,
     val page: RenderPage? = null,
     val controller: ReaderController? = null,
+    val resources: ResourceProvider? = null,
     val toc: TocState = TocState(),
     val search: SearchState = SearchState(),
     val currentConfig: RenderConfig? = null,
