@@ -254,7 +254,9 @@ internal class TxtController(
 
     override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> {
         val offset = TxtBlockLocatorCodec.parseOffset(locator, store.lengthChars)
-            ?: return ReaderResult.Err(ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}"))
+            ?: return ReaderResult.Err(
+                ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
+            )
         return mutex.withLock {
             navigation.moveTo(offset, store.lengthChars)
             renderLocked(policy)

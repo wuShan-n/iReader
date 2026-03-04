@@ -1,6 +1,10 @@
 package com.ireader.engines.txt.internal.open
 
 import com.ireader.engines.common.android.session.BaseReaderSession
+import com.ireader.engines.txt.internal.provider.TxtOutlineProvider
+import com.ireader.engines.txt.internal.provider.TxtSearchProviderPro
+import com.ireader.engines.txt.internal.provider.TxtSelectionManager
+import com.ireader.engines.txt.internal.provider.TxtTextProvider
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.render.ReaderController
@@ -16,32 +20,31 @@ internal class TxtSession(
     ioDispatcher: CoroutineDispatcher,
     persistOutline: Boolean,
     annotationsProvider: AnnotationProvider?,
-    providerFactory: TxtSessionProviderFactory = DefaultTxtSessionProviderFactory,
-    selection: TxtSelectionComponents = providerFactory.createSelectionComponents(
+    selectionManager: TxtSelectionManager = TxtSelectionManager(
         store = store,
         ioDispatcher = ioDispatcher
     )
 ) : BaseReaderSession(
     id = SessionId(UUID.randomUUID().toString()),
     controller = controller,
-    outline = providerFactory.createOutlineProvider(
+    outline = TxtOutlineProvider(
         files = files,
         meta = meta,
         store = store,
         ioDispatcher = ioDispatcher,
         persistOutline = persistOutline
     ),
-    search = providerFactory.createSearchProvider(
+    search = TxtSearchProviderPro(
         files = files,
         store = store,
         meta = meta,
         ioDispatcher = ioDispatcher
     ),
-    text = providerFactory.createTextProvider(
+    text = TxtTextProvider(
         store = store,
         ioDispatcher = ioDispatcher
     ),
     annotations = annotationsProvider,
-    selection = selection.provider,
-    selectionController = selection.controller
+    selection = selectionManager,
+    selectionController = selectionManager
 )

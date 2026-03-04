@@ -1,4 +1,10 @@
-@file:Suppress("LongMethod", "NestedBlockDepth", "ReturnCount")
+@file:Suppress(
+    "CyclomaticComplexMethod",
+    "LongMethod",
+    "MagicNumber",
+    "NestedBlockDepth",
+    "ReturnCount"
+)
 
 package com.ireader.engines.txt.internal.softbreak
 

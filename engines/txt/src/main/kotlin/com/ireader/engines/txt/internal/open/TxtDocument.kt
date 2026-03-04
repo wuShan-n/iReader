@@ -5,6 +5,7 @@ package com.ireader.engines.txt.internal.open
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
+import com.ireader.engines.txt.internal.render.TxtController
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
@@ -34,9 +35,7 @@ internal class TxtDocument(
     private val maxPageCache: Int,
     private val annotationProviderFactory: ((DocumentId) -> AnnotationProvider?)?,
     private val ioDispatcher: CoroutineDispatcher,
-    private val defaultDispatcher: CoroutineDispatcher,
-    private val controllerFactory: TxtControllerFactory = DefaultTxtControllerFactory,
-    private val sessionFactory: TxtSessionFactory = DefaultTxtSessionFactory()
+    private val defaultDispatcher: CoroutineDispatcher
 ) : ReaderDocument {
 
     override val format: BookFormat = BookFormat.TXT
@@ -86,7 +85,7 @@ internal class TxtDocument(
                 }.coerceIn(0L, store.lengthChars)
                 val annotationProvider = annotationProviderFactory?.invoke(id)
 
-                val controller = controllerFactory.create(
+                val controller = TxtController(
                     documentKey = id.value,
                     store = store,
                     meta = meta,
@@ -101,7 +100,7 @@ internal class TxtDocument(
                     defaultDispatcher = defaultDispatcher
                 )
                 ReaderResult.Ok(
-                    sessionFactory.create(
+                    TxtSession(
                         controller = controller,
                         files = files,
                         meta = meta,
