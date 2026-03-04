@@ -55,7 +55,7 @@ class TxtPageEndAdjusterTest {
 
     @Test
     fun `adjust should treat directory as boundary marker`() {
-        val raw = "上一段正文\n目录\n第一章 起始"
+        val raw = "上一段正文\n\n目录\n第一章 起始"
         val measuredEnd = raw.indexOf("第一章")
         val expected = raw.indexOf("目录")
 
@@ -67,5 +67,20 @@ class TxtPageEndAdjusterTest {
         )
 
         assertEquals(expected, adjusted)
+    }
+
+    @Test
+    fun `adjust should not rewind weak chapter marker without strong prelude`() {
+        val raw = "上一段正文没有句号\n目录\n下一段内容"
+        val measuredEnd = raw.indexOf("下一段内容")
+
+        val adjusted = adjuster.adjust(
+            raw = raw,
+            measuredEnd = measuredEnd,
+            rawLength = raw.length,
+            pageStartOffset = 0L
+        )
+
+        assertEquals(measuredEnd, adjusted)
     }
 }

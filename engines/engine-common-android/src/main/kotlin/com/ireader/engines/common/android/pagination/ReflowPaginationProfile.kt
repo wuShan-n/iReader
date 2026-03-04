@@ -1,12 +1,13 @@
 package com.ireader.engines.common.android.pagination
 
 import com.ireader.engines.common.hash.Hashing
+import com.ireader.engines.common.android.reflow.SOFT_BREAK_PROFILE_EXTRA_KEY
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 
 object ReflowPaginationProfile {
 
-    private const val PROFILE_SCHEMA_VERSION = 5
+    private const val PROFILE_SCHEMA_VERSION = 6
 
     fun keyFor(
         documentKey: String,
@@ -49,6 +50,8 @@ object ReflowPaginationProfile {
             append(config.includeFontPadding)
             append('|')
             append(config.pageInsetMode)
+            append('|')
+            append(config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY].orEmpty().trim().lowercase())
         }
         return Hashing.sha256Hex(raw).take(keyLength.coerceAtLeast(1))
     }

@@ -1,6 +1,7 @@
 package com.ireader.engines.txt.internal.softbreak
 
 import com.ireader.engines.common.android.reflow.ReflowSoftBreakIndex
+import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.common.io.readStringUtf8
 import com.ireader.engines.common.io.readVarLongOrNull
@@ -16,6 +17,8 @@ internal class SoftBreakIndex private constructor(
     val lengthChars: Long,
     val newlineCount: Long,
     val sampleHash: String,
+    val profile: SoftBreakTuningProfile,
+    val rulesVersion: Int,
     private val blocks: List<BlockMeta>
 ) : Closeable, ReflowSoftBreakIndex {
 
@@ -28,9 +31,14 @@ internal class SoftBreakIndex private constructor(
 
     companion object {
         private const val MAGIC = "SBX1"
-        private const val VERSION = 2
+        private const val VERSION = 6
 
-        fun openIfValid(file: File, meta: TxtMeta): SoftBreakIndex? {
+        fun openIfValid(
+            file: File,
+            meta: TxtMeta,
+            profile: SoftBreakTuningProfile,
+            rulesVersion: Int
+        ): SoftBreakIndex? {
             if (!file.exists()) {
                 return null
             }
@@ -50,9 +58,16 @@ internal class SoftBreakIndex private constructor(
                 val lengthChars = raf.readLong()
                 val newlineCount = raf.readLong()
                 val sampleHash = raf.readStringUtf8()
+                val profileRaw = raf.readStringUtf8()
+                val fileProfile = SoftBreakTuningProfile.fromStorageValue(profileRaw)
+                val fileRulesVersion = raf.readInt()
                 val indexOffset = raf.readLong()
 
                 if (lengthChars != meta.lengthChars || sampleHash != meta.sampleHash) {
+                    raf.close()
+                    return null
+                }
+                if (fileProfile != profile || fileRulesVersion != rulesVersion) {
                     raf.close()
                     return null
                 }
@@ -82,6 +97,8 @@ internal class SoftBreakIndex private constructor(
                     lengthChars = lengthChars,
                     newlineCount = newlineCount,
                     sampleHash = sampleHash,
+                    profile = fileProfile,
+                    rulesVersion = fileRulesVersion,
                     blocks = blocks
                 )
             } catch (_: Throwable) {

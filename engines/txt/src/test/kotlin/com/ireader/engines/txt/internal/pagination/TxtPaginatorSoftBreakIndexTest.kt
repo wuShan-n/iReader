@@ -1,6 +1,8 @@
 package com.ireader.engines.txt.internal.pagination
 
 import com.ireader.engines.common.android.reflow.ReflowPaginator
+import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
+import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.Utf16LeFileWriter
@@ -14,8 +16,9 @@ import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,7 +28,7 @@ import org.robolectric.RobolectricTestRunner
 class TxtPaginatorSoftBreakIndexTest {
 
     @Test
-    fun `pageAt should apply soft break index when hardWrapLikely is false`() = runBlocking {
+    fun `pageAt should preserve line breaks with soft break index when hardWrapLikely is false`() = runBlocking {
         val dir = Files.createTempDirectory("txt_paginator_softbreak").toFile()
         val files = createBookFiles(dir)
         val text = buildSoftWrappedText()
@@ -48,9 +51,15 @@ class TxtPaginatorSoftBreakIndexTest {
             SoftBreakIndexBuilder.buildIfNeeded(
                 files = files,
                 meta = meta,
-                ioDispatcher = Dispatchers.IO
+                ioDispatcher = Dispatchers.IO,
+                profile = SOFT_BREAK_PROFILE
             )
-            val softBreakIndex = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)
+            val softBreakIndex = SoftBreakIndex.openIfValid(
+                file = files.softBreakIdx,
+                meta = meta,
+                profile = SOFT_BREAK_PROFILE,
+                rulesVersion = softBreakRulesVersion()
+            )
             assertNotNull(softBreakIndex)
             softBreakIndex!!.use { index ->
                 Utf16TextStore(files.contentU16).use { store ->
@@ -64,7 +73,7 @@ class TxtPaginatorSoftBreakIndexTest {
                         config = RenderConfig.ReflowText(),
                         constraints = defaultConstraints()
                     )
-                    assertFalse(page.text.contains('\n'))
+                    assertTrue(page.text.contains('\n'))
                 }
             }
         } finally {
@@ -94,6 +103,218 @@ class TxtPaginatorSoftBreakIndexTest {
                 )
                 assertTrue(page.text.contains('\n'))
             }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `short lines ending with punctuation should stay hard when hardWrapLikely is false`() = runBlocking {
+        val dir = Files.createTempDirectory("txt_paginator_short_lines").toFile()
+        val files = createBookFiles(dir)
+        val line1 = "这是一段稳定长度测试文本用于验证句号行也会继续合并。"
+        val line2 = "这是一段稳定长度测试文本用于验证软换行识别继续推进"
+        val line3 = "这是一段稳定长度测试文本用于验证分页效果保持一致"
+        val text = "$line1\n$line2\n$line3"
+        Utf16LeFileWriter(files.contentU16).use { writer ->
+            text.forEach(writer::writeChar)
+        }
+        val meta = TxtMeta(
+            version = 2,
+            sourceUri = "file:///books/short-lines.txt",
+            displayName = "short-lines.txt",
+            sizeBytes = text.length.toLong(),
+            sampleHash = "sample-short-lines",
+            originalCharset = "UTF-8",
+            lengthChars = text.length.toLong(),
+            hardWrapLikely = false,
+            createdAtEpochMs = 0L
+        )
+
+        try {
+            SoftBreakIndexBuilder.buildIfNeeded(
+                files = files,
+                meta = meta,
+                ioDispatcher = Dispatchers.IO,
+                profile = SOFT_BREAK_PROFILE
+            )
+            val softBreakIndex = SoftBreakIndex.openIfValid(
+                file = files.softBreakIdx,
+                meta = meta,
+                profile = SOFT_BREAK_PROFILE,
+                rulesVersion = softBreakRulesVersion()
+            )
+            assertNotNull(softBreakIndex)
+            softBreakIndex!!.use { index ->
+                val flagsByOffset = LinkedHashMap<Long, Boolean>()
+                index.forEachNewlineInRange(0L, text.length.toLong()) { offset, isSoft ->
+                    flagsByOffset[offset] = isSoft
+                }
+
+                assertEquals(2, flagsByOffset.size)
+                assertEquals(false, flagsByOffset[line1.length.toLong()])
+                assertEquals(false, flagsByOffset[(line1.length + 1 + line2.length).toLong()])
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `hardWrapLikely true should merge short lines with same indentation`() = runBlocking {
+        val dir = Files.createTempDirectory("txt_paginator_same_indent").toFile()
+        val files = createBookFiles(dir)
+        val line1 = "  这是一段带缩进的短行文本用于验证软换行策略继续推进"
+        val line2 = "  这是一段带缩进的短行文本用于验证分页行为保持一致"
+        val line3 = "  这是一段带缩进的短行文本用于验证右侧不再提前断行"
+        val text = "$line1\n$line2\n$line3"
+        Utf16LeFileWriter(files.contentU16).use { writer ->
+            text.forEach(writer::writeChar)
+        }
+        val meta = TxtMeta(
+            version = 2,
+            sourceUri = "file:///books/same-indent.txt",
+            displayName = "same-indent.txt",
+            sizeBytes = text.length.toLong(),
+            sampleHash = "sample-same-indent",
+            originalCharset = "UTF-8",
+            lengthChars = text.length.toLong(),
+            hardWrapLikely = true,
+            createdAtEpochMs = 0L
+        )
+
+        try {
+            SoftBreakIndexBuilder.buildIfNeeded(
+                files = files,
+                meta = meta,
+                ioDispatcher = Dispatchers.IO,
+                profile = SOFT_BREAK_PROFILE
+            )
+            val softBreakIndex = SoftBreakIndex.openIfValid(
+                file = files.softBreakIdx,
+                meta = meta,
+                profile = SOFT_BREAK_PROFILE,
+                rulesVersion = softBreakRulesVersion()
+            )
+            assertNotNull(softBreakIndex)
+            softBreakIndex!!.use { index ->
+                val flagsByOffset = LinkedHashMap<Long, Boolean>()
+                index.forEachNewlineInRange(0L, text.length.toLong()) { offset, isSoft ->
+                    flagsByOffset[offset] = isSoft
+                }
+
+                assertEquals(2, flagsByOffset.size)
+                assertEquals(true, flagsByOffset[line1.length.toLong()])
+                assertEquals(true, flagsByOffset[(line1.length + 1 + line2.length).toLong()])
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `indent increase should keep boundary hard even when hardWrapLikely is true`() = runBlocking {
+        val dir = Files.createTempDirectory("txt_paginator_indent_increase").toFile()
+        val files = createBookFiles(dir)
+        val line1 = "这是普通叙述文本用于验证缩进突增时应保留硬换行"
+        val line2 = "    下一行缩进明显增加用于模拟新段落开始"
+        val line3 = "    同级缩进继续叙述可按软换行合并"
+        val text = "$line1\n$line2\n$line3"
+        Utf16LeFileWriter(files.contentU16).use { writer ->
+            text.forEach(writer::writeChar)
+        }
+        val meta = TxtMeta(
+            version = 2,
+            sourceUri = "file:///books/indent-increase.txt",
+            displayName = "indent-increase.txt",
+            sizeBytes = text.length.toLong(),
+            sampleHash = "sample-indent-increase",
+            originalCharset = "UTF-8",
+            lengthChars = text.length.toLong(),
+            hardWrapLikely = true,
+            createdAtEpochMs = 0L
+        )
+
+        try {
+            SoftBreakIndexBuilder.buildIfNeeded(
+                files = files,
+                meta = meta,
+                ioDispatcher = Dispatchers.IO,
+                profile = SOFT_BREAK_PROFILE
+            )
+            val softBreakIndex = SoftBreakIndex.openIfValid(
+                file = files.softBreakIdx,
+                meta = meta,
+                profile = SOFT_BREAK_PROFILE,
+                rulesVersion = softBreakRulesVersion()
+            )
+            assertNotNull(softBreakIndex)
+            softBreakIndex!!.use { index ->
+                val flagsByOffset = LinkedHashMap<Long, Boolean>()
+                index.forEachNewlineInRange(0L, text.length.toLong()) { offset, isSoft ->
+                    flagsByOffset[offset] = isSoft
+                }
+
+                assertEquals(2, flagsByOffset.size)
+                assertEquals(false, flagsByOffset[line1.length.toLong()])
+                assertEquals(true, flagsByOffset[(line1.length + 1 + line2.length).toLong()])
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `openIfValid should invalidate index when profile or rulesVersion mismatch`() = runBlocking {
+        val dir = Files.createTempDirectory("txt_softbreak_profile_mismatch").toFile()
+        val files = createBookFiles(dir)
+        val text = buildSoftWrappedText()
+        Utf16LeFileWriter(files.contentU16).use { writer ->
+            text.forEach(writer::writeChar)
+        }
+        val meta = TxtMeta(
+            version = 2,
+            sourceUri = "file:///books/profile-mismatch.txt",
+            displayName = "profile-mismatch.txt",
+            sizeBytes = text.length.toLong(),
+            sampleHash = "sample-profile-mismatch",
+            originalCharset = "UTF-8",
+            lengthChars = text.length.toLong(),
+            hardWrapLikely = true,
+            createdAtEpochMs = 0L
+        )
+
+        try {
+            SoftBreakIndexBuilder.buildIfNeeded(
+                files = files,
+                meta = meta,
+                ioDispatcher = Dispatchers.IO,
+                profile = SOFT_BREAK_PROFILE
+            )
+
+            val valid = SoftBreakIndex.openIfValid(
+                file = files.softBreakIdx,
+                meta = meta,
+                profile = SOFT_BREAK_PROFILE,
+                rulesVersion = softBreakRulesVersion()
+            )
+            val wrongProfile = SoftBreakIndex.openIfValid(
+                file = files.softBreakIdx,
+                meta = meta,
+                profile = SoftBreakTuningProfile.STRICT,
+                rulesVersion = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.STRICT).rulesVersion
+            )
+            val wrongRulesVersion = SoftBreakIndex.openIfValid(
+                file = files.softBreakIdx,
+                meta = meta,
+                profile = SOFT_BREAK_PROFILE,
+                rulesVersion = softBreakRulesVersion() + 1
+            )
+
+            valid?.close()
+            assertNotNull(valid)
+            assertNull(wrongProfile)
+            assertNull(wrongRulesVersion)
         } finally {
             dir.deleteRecursively()
         }
@@ -132,5 +353,12 @@ class TxtPaginatorSoftBreakIndexTest {
             bloomIdx = File(root, "bloom.idx"),
             bloomLock = File(root, "bloom.lock")
         )
+    }
+    private fun softBreakRulesVersion(): Int {
+        return SoftBreakRuleConfig.forProfile(SOFT_BREAK_PROFILE).rulesVersion
+    }
+
+    private companion object {
+        private val SOFT_BREAK_PROFILE = SoftBreakTuningProfile.BALANCED
     }
 }

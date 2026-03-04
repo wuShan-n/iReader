@@ -5,6 +5,7 @@ package com.ireader.engines.common.android.reflow
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.LeadingMarginSpan
+import kotlin.math.max
 
 object SoftBreakProcessor {
 
@@ -13,16 +14,14 @@ object SoftBreakProcessor {
         hardWrapLikely: Boolean,
         paragraphSpacingPx: Int,
         paragraphIndentPx: Int,
-        startsAtParagraphBoundary: Boolean
+        startsAtParagraphBoundary: Boolean,
+        ruleConfig: SoftBreakRuleConfig = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED)
     ): CharSequence {
-        val normalized = if (hardWrapLikely) {
-            normalizeSoftBreaks(
-                text = rawText,
-                preservePunctuationBoundaries = false
-            )
-        } else {
-            NormalizedText(rawText, collectHardBreakPositions(rawText))
-        }
+        val normalized = normalizeSoftBreaks(
+            text = rawText,
+            hardWrapLikely = hardWrapLikely,
+            ruleConfig = ruleConfig
+        )
         if (paragraphSpacingPx <= 0 && paragraphIndentPx <= 0) {
             return normalized.text
         }
@@ -73,100 +72,52 @@ object SoftBreakProcessor {
 
     private fun normalizeSoftBreaks(
         text: String,
-        preservePunctuationBoundaries: Boolean
+        hardWrapLikely: Boolean,
+        ruleConfig: SoftBreakRuleConfig
     ): NormalizedText {
         if (text.isEmpty()) {
             return NormalizedText("", intArrayOf())
         }
         val chars = text.toCharArray()
-        val hardBreaks = ArrayList<Int>()
-        var i = 0
-        while (i < chars.size) {
-            if (chars[i] == '\n') {
-                if (
-                    shouldTreatAsSoftBreak(
-                        chars = chars,
-                        index = i,
-                        preservePunctuationBoundaries = preservePunctuationBoundaries
-                    )
-                ) {
-                    chars[i] = ' '
-                } else {
-                    hardBreaks += i
-                }
+        val lines = ArrayList<SoftBreakLineInfo>(max(16, text.length / 48))
+        val newlineOffsets = ArrayList<Int>(max(16, text.length / 80))
+
+        var start = 0
+        while (start <= chars.size) {
+            val newline = text.indexOf('\n', start).let { idx ->
+                if (idx >= 0) idx else chars.size
             }
-            i++
+            lines += parseLine(chars, start, newline)
+            if (newline >= chars.size) {
+                break
+            }
+            newlineOffsets += newline
+            start = newline + 1
+        }
+
+        val typical = estimateTypicalLineLength(lines, hardWrapLikely, ruleConfig)
+        val context = SoftBreakClassifierContext(
+            typicalLineLength = typical,
+            hardWrapLikely = hardWrapLikely,
+            rules = ruleConfig
+        )
+
+        val hardBreaks = ArrayList<Int>()
+        for (i in newlineOffsets.indices) {
+            val offset = newlineOffsets[i]
+            val nextLine = lines.getOrNull(i + 1) ?: EMPTY_LINE
+            val decision = SoftBreakClassifier.classify(
+                line0 = lines[i],
+                line1 = nextLine,
+                context = context
+            )
+            if (decision.isSoft) {
+                chars[offset] = ' '
+            } else {
+                hardBreaks += offset
+            }
         }
         return NormalizedText(String(chars), hardBreaks.toIntArray())
-    }
-
-    private fun startsWithListMarker(chars: CharArray, startIndex: Int): Boolean {
-        var index = startIndex
-        while (index < chars.size) {
-            val ch = chars[index]
-            if (ch != ' ' && ch != '\t' && ch != '\u3000') {
-                break
-            }
-            index++
-        }
-        if (index !in chars.indices) {
-            return false
-        }
-        val marker = chars[index]
-        if (marker == '-' || marker == '*' || marker == '•' || marker == '·') {
-            return true
-        }
-        if (!marker.isDigit()) {
-            return false
-        }
-        val next = if (index + 1 < chars.size) chars[index + 1] else null
-        return next == '.' || next == '、' || next == ')' || next == '）'
-    }
-
-    private fun lineStartsBoundaryMarker(chars: CharArray, startIndex: Int): Boolean {
-        var index = startIndex
-        while (index < chars.size) {
-            val ch = chars[index]
-            if (ch == '\n') {
-                return false
-            }
-            if (ch != ' ' && ch != '\t' && ch != '\u3000') {
-                break
-            }
-            index++
-        }
-        if (index >= chars.size) {
-            return false
-        }
-
-        var endExclusive = index
-        while (endExclusive < chars.size && chars[endExclusive] != '\n' && (endExclusive - index) < 80) {
-            endExclusive++
-        }
-        if (endExclusive <= index) {
-            return false
-        }
-
-        val line = String(chars, index, endExclusive - index).trim()
-        if (line.isEmpty()) {
-            return false
-        }
-        return CHINESE_CHAPTER_REGEX.matches(line) ||
-            ENGLISH_CHAPTER_REGEX.containsMatchIn(line) ||
-            DIRECTORY_TITLE_REGEX.matches(line)
-    }
-
-    private fun collectHardBreakPositions(text: String): IntArray {
-        if (text.isEmpty()) {
-            return intArrayOf()
-        }
-        val positions = ArrayList<Int>()
-        text.forEachIndexed { index, ch ->
-            if (ch == '\n') {
-                positions += index
-            }
-        }
-        return positions.toIntArray()
     }
 
     private fun applyParagraphSpacing(
@@ -238,46 +189,96 @@ object SoftBreakProcessor {
         }
         return true
     }
-
-    private fun shouldTreatAsSoftBreak(
-        chars: CharArray,
-        index: Int,
-        preservePunctuationBoundaries: Boolean
-    ): Boolean {
-        val prev = if (index > 0) chars[index - 1] else null
-        val next = if (index + 1 < chars.size) chars[index + 1] else null
-
-        if (prev == null || next == null) {
-            return false
-        }
-        if (prev == '\n' || next == '\n') {
-            return false
-        }
-        if (preservePunctuationBoundaries && prev in STRONG_PARAGRAPH_PUNCTUATION) {
-            return false
-        }
-        if (next == ' ' || next == '\t' || next == '\u3000') {
-            return false
-        }
-        if (startsWithListMarker(chars, index + 1)) {
-            return false
-        }
-
-        // Chapter and directory markers should remain as paragraph boundaries.
-        if (lineStartsBoundaryMarker(chars, index + 1)) {
-            return false
-        }
-        return true
-    }
-
-    private val STRONG_PARAGRAPH_PUNCTUATION = setOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：')
     private const val MIN_INDENT_PARAGRAPH_CHARS = 12
     private val CHINESE_CHAPTER_REGEX = Regex("^\\s*第[0-9一二三四五六七八九十百千零〇两\\d]+[章节卷回部篇集].*")
     private val ENGLISH_CHAPTER_REGEX = Regex("^\\s*(chapter|part|prologue|epilogue)\\b", RegexOption.IGNORE_CASE)
     private val DIRECTORY_TITLE_REGEX = Regex("^(目录|目\\s*录|contents)$", RegexOption.IGNORE_CASE)
+    private val EMPTY_LINE = SoftBreakLineInfo(
+        length = 0,
+        leadingSpaces = 0,
+        firstNonSpace = null,
+        secondNonSpace = null,
+        lastNonSpace = null,
+        isBoundaryTitle = false,
+        startsWithListMarker = false,
+        startsWithDialogueMarker = false
+    )
 
     private data class NormalizedText(
         val text: String,
         val hardBreakPositions: IntArray
     )
+
+    private fun parseLine(chars: CharArray, start: Int, endExclusive: Int): SoftBreakLineInfo {
+        var lineLength = 0
+        var leadingSpaces = 0
+        var firstNonSpace: Char? = null
+        var secondNonSpace: Char? = null
+        var lastNonSpace: Char? = null
+        var seenNonSpace = false
+        var i = start
+        while (i < endExclusive) {
+            val c = chars[i]
+            lineLength++
+            if (!seenNonSpace) {
+                if (c == ' ' || c == '\t' || c == '\u3000') {
+                    leadingSpaces++
+                } else {
+                    seenNonSpace = true
+                    firstNonSpace = c
+                }
+            } else if (secondNonSpace == null && !c.isWhitespace()) {
+                secondNonSpace = c
+            }
+            if (!c.isWhitespace()) {
+                lastNonSpace = c
+            }
+            i++
+        }
+
+        val lineText = if (endExclusive > start) {
+            String(chars, start, endExclusive - start).trim()
+        } else {
+            ""
+        }
+        val boundary = lineText.isNotEmpty() && (
+            CHINESE_CHAPTER_REGEX.matches(lineText) ||
+                ENGLISH_CHAPTER_REGEX.containsMatchIn(lineText) ||
+                DIRECTORY_TITLE_REGEX.matches(lineText)
+            )
+        return SoftBreakLineInfo(
+            length = lineLength,
+            leadingSpaces = leadingSpaces,
+            firstNonSpace = firstNonSpace,
+            secondNonSpace = secondNonSpace,
+            lastNonSpace = lastNonSpace,
+            isBoundaryTitle = boundary,
+            startsWithListMarker = SoftBreakClassifier.detectListMarker(firstNonSpace, secondNonSpace),
+            startsWithDialogueMarker = SoftBreakClassifier.detectDialogueMarker(firstNonSpace)
+        )
+    }
+
+    private fun estimateTypicalLineLength(
+        lines: List<SoftBreakLineInfo>,
+        hardWrapLikely: Boolean,
+        ruleConfig: SoftBreakRuleConfig
+    ): Int {
+        var count = 0
+        var sum = 0L
+        lines.forEach { line ->
+            if (line.length > 0) {
+                count++
+                sum += line.length.toLong()
+            }
+        }
+        if (count == 0) {
+            return 72
+        }
+        val minTypical = if (hardWrapLikely) {
+            ruleConfig.minTypicalHardWrap
+        } else {
+            ruleConfig.minTypicalNormal
+        }
+        return (sum / count).toInt().coerceIn(minTypical, ruleConfig.maxTypical)
+    }
 }

@@ -13,6 +13,9 @@ import com.ireader.engines.common.android.reflow.ReflowPageSlice
 import com.ireader.engines.common.android.reflow.ReflowPageSliceCache
 import com.ireader.engines.common.android.reflow.ReflowPaginationIndexStore
 import com.ireader.engines.common.android.reflow.ReflowPaginator
+import com.ireader.engines.common.android.reflow.SOFT_BREAK_PROFILE_EXTRA_KEY
+import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
+import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
 import com.ireader.engines.common.cache.LruCache
 import com.ireader.engines.txt.internal.link.LinkDetector
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
@@ -111,7 +114,8 @@ internal class TxtController(
     dispatcher = defaultDispatcher
 ) {
 
-    private var softBreakIndex: SoftBreakIndex? = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)
+    private var softBreakProfile: SoftBreakTuningProfile = resolveSoftBreakProfile(initialConfig)
+    private var softBreakIndex: SoftBreakIndex? = openSoftBreakIndex(softBreakProfile)
     private val paginator = ReflowPaginator(
         source = TxtTextSource(store),
         hardWrapLikely = meta.hardWrapLikely,
@@ -141,20 +145,9 @@ internal class TxtController(
     private var constraints: LayoutConstraints? = null
     private var currentConfig: RenderConfig.ReflowText = initialConfig
 
-
     init {
         if (softBreakIndex == null) {
-            launchSafely("soft-break-index") {
-                SoftBreakIndexBuilder.buildIfNeeded(files, meta, ioDispatcher)
-                val loaded = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)
-                mutex.withLock {
-                    softBreakIndex?.close()
-                    softBreakIndex = loaded
-                    paginator.setSoftBreakIndex(loaded)
-                    sliceCache.clear()
-                    pageExtrasCache.clear()
-                }
-            }
+            buildSoftBreakIndexAsync(softBreakProfile)
         }
         observeAnnotationChangesIfNeeded()
     }
@@ -185,6 +178,17 @@ internal class TxtController(
         return mutex.withLock {
             currentConfig = sanitized
             stateMutable.value = stateMutable.value.copy(config = sanitized)
+            val newProfile = resolveSoftBreakProfile(sanitized)
+            val profileChanged = newProfile != softBreakProfile
+            if (profileChanged) {
+                softBreakProfile = newProfile
+                runCatching { softBreakIndex?.close() }
+                softBreakIndex = openSoftBreakIndex(newProfile)
+                paginator.setSoftBreakIndex(softBreakIndex)
+                if (softBreakIndex == null) {
+                    buildSoftBreakIndexAsync(newProfile)
+                }
+            }
             sliceCache.clear()
             pageExtrasCache.clear()
             reloadPaginationIndexIfNeededLocked()
@@ -344,6 +348,43 @@ internal class TxtController(
         annotationObserverJob?.cancel()
         runCatching { softBreakIndex?.close() }
             .onFailure { Log.w(TAG, "TXT controller failed to close soft-break index", it) }
+    }
+
+    private fun resolveSoftBreakProfile(config: RenderConfig.ReflowText): SoftBreakTuningProfile {
+        return SoftBreakTuningProfile.fromStorageValue(config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY])
+    }
+
+    private fun openSoftBreakIndex(profile: SoftBreakTuningProfile): SoftBreakIndex? {
+        val ruleConfig = SoftBreakRuleConfig.forProfile(profile)
+        return SoftBreakIndex.openIfValid(
+            file = files.softBreakIdx,
+            meta = meta,
+            profile = profile,
+            rulesVersion = ruleConfig.rulesVersion
+        )
+    }
+
+    private fun buildSoftBreakIndexAsync(profile: SoftBreakTuningProfile) {
+        launchSafely("soft-break-index") {
+            SoftBreakIndexBuilder.buildIfNeeded(
+                files = files,
+                meta = meta,
+                ioDispatcher = ioDispatcher,
+                profile = profile
+            )
+            val loaded = openSoftBreakIndex(profile)
+            mutex.withLock {
+                if (profile != softBreakProfile) {
+                    runCatching { loaded?.close() }
+                    return@withLock
+                }
+                softBreakIndex?.close()
+                softBreakIndex = loaded
+                paginator.setSoftBreakIndex(loaded)
+                sliceCache.clear()
+                pageExtrasCache.clear()
+            }
+        }
     }
 
     private suspend fun renderLocked(policy: RenderPolicy): ReaderResult<RenderPage> {

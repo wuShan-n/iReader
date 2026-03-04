@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.render
 
+import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.Utf16LeFileWriter
@@ -158,7 +159,8 @@ class TxtControllerTest {
         SoftBreakIndexBuilder.buildIfNeeded(
             files = files,
             meta = meta,
-            ioDispatcher = Dispatchers.IO
+            ioDispatcher = Dispatchers.IO,
+            profile = SoftBreakTuningProfile.BALANCED
         )
         val controller = TxtController(
             documentKey = "doc-test",

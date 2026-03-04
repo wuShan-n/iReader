@@ -2,6 +2,11 @@
 
 package com.ireader.engines.txt.internal.softbreak
 
+import com.ireader.engines.common.android.reflow.SoftBreakClassifier
+import com.ireader.engines.common.android.reflow.SoftBreakClassifierContext
+import com.ireader.engines.common.android.reflow.SoftBreakLineInfo
+import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
+import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.provider.ChapterDetector
@@ -20,30 +25,41 @@ import kotlin.coroutines.coroutineContext
 internal object SoftBreakIndexBuilder {
 
     private const val MAGIC = "SBX1"
-    private const val VERSION = 2
+    private const val VERSION = 6
     private const val BLOCK_NEWLINES = 4096
     private const val MAX_TITLE_CHARS = 80
     private const val CHUNK_CHARS = 128 * 1024
 
-    private val strongEndPunct = setOf('。', '！', '？', '.', '!', '?', '…', ':', '：', ';', '；')
     private val detector = ChapterDetector()
 
     suspend fun buildIfNeeded(
         files: TxtBookFiles,
         meta: TxtMeta,
-        ioDispatcher: CoroutineDispatcher
+        ioDispatcher: CoroutineDispatcher,
+        profile: SoftBreakTuningProfile
     ) = withContext(ioDispatcher) {
+        val ruleConfig = SoftBreakRuleConfig.forProfile(profile)
         if (!files.contentU16.exists()) {
             return@withContext
         }
-        SoftBreakIndex.openIfValid(files.softBreakIdx, meta)?.close()?.also {
+        SoftBreakIndex.openIfValid(
+            file = files.softBreakIdx,
+            meta = meta,
+            profile = profile,
+            rulesVersion = ruleConfig.rulesVersion
+        )?.close()?.also {
             return@withContext
         }
 
         files.bookDir.mkdirs()
         RandomAccessFile(files.softBreakLock, "rw").channel.use { lockChannel ->
             lockChannel.lock().use {
-                SoftBreakIndex.openIfValid(files.softBreakIdx, meta)?.close()?.also {
+                SoftBreakIndex.openIfValid(
+                    file = files.softBreakIdx,
+                    meta = meta,
+                    profile = profile,
+                    rulesVersion = ruleConfig.rulesVersion
+                )?.close()?.also {
                     return@withContext
                 }
 
@@ -61,6 +77,8 @@ internal object SoftBreakIndexBuilder {
                     val newlineCountPos = raf.filePointer
                     raf.writeLong(0L)
                     raf.writeStringUtf8(meta.sampleHash)
+                    raf.writeStringUtf8(profile.storageValue)
+                    raf.writeInt(ruleConfig.rulesVersion)
                     val indexOffsetPos = raf.filePointer
                     raf.writeLong(0L)
 
@@ -114,27 +132,24 @@ internal object SoftBreakIndexBuilder {
                     var leadingSpaces = 0
                     var seenNonSpace = false
                     var firstNonSpace: Char? = null
+                    var secondNonSpace: Char? = null
                     var lastNonSpace: Char? = null
                     val lineTitle = StringBuilder(MAX_TITLE_CHARS)
 
                     var nonEmptyLineCount = 0L
                     var nonEmptyLineLengthSum = 0L
 
-                    data class LineInfo(
-                        val len: Int,
-                        val leadingSpaces: Int,
-                        val firstNonSpace: Char?,
-                        val lastNonSpace: Char?,
-                        val isTitle: Boolean,
-                        val startsWithBullet: Boolean
-                    )
-
                     fun estimateTypicalLineLength(): Int {
                         if (nonEmptyLineCount == 0L) {
                             return 72
                         }
                         val avg = (nonEmptyLineLengthSum / nonEmptyLineCount).toInt()
-                        return avg.coerceIn(40, 140)
+                        val minTypical = if (meta.hardWrapLikely) {
+                            ruleConfig.minTypicalHardWrap
+                        } else {
+                            ruleConfig.minTypicalNormal
+                        }
+                        return avg.coerceIn(minTypical, ruleConfig.maxTypical)
                     }
 
                     fun resetLineState() {
@@ -142,21 +157,23 @@ internal object SoftBreakIndexBuilder {
                         leadingSpaces = 0
                         seenNonSpace = false
                         firstNonSpace = null
+                        secondNonSpace = null
                         lastNonSpace = null
                         lineTitle.setLength(0)
                     }
 
-                    fun finishLine(): LineInfo {
+                    fun finishLine(): SoftBreakLineInfo {
                         val titleText = lineTitle.toString().trim()
-                        val isTitle = titleText.isNotEmpty() && detector.isChapterBoundaryTitle(titleText)
-                        val startsBullet = firstNonSpace == '-' || firstNonSpace == '*' || firstNonSpace == '•'
-                        val info = LineInfo(
-                            len = lineLength,
+                        val isBoundary = titleText.isNotEmpty() && detector.isChapterBoundaryTitle(titleText)
+                        val info = SoftBreakLineInfo(
+                            length = lineLength,
                             leadingSpaces = leadingSpaces,
                             firstNonSpace = firstNonSpace,
+                            secondNonSpace = secondNonSpace,
                             lastNonSpace = lastNonSpace,
-                            isTitle = isTitle,
-                            startsWithBullet = startsBullet
+                            isBoundaryTitle = isBoundary,
+                            startsWithListMarker = SoftBreakClassifier.detectListMarker(firstNonSpace, secondNonSpace),
+                            startsWithDialogueMarker = SoftBreakClassifier.detectDialogueMarker(firstNonSpace)
                         )
                         if (lineLength > 0) {
                             nonEmptyLineCount++
@@ -166,7 +183,7 @@ internal object SoftBreakIndexBuilder {
                         return info
                     }
 
-                    fun finishLineIfHasData(): LineInfo? {
+                    fun finishLineIfHasData(): SoftBreakLineInfo? {
                         return if (lineLength > 0 || firstNonSpace != null || lastNonSpace != null) {
                             finishLine()
                         } else {
@@ -174,33 +191,20 @@ internal object SoftBreakIndexBuilder {
                         }
                     }
 
-                    fun isSoftBreak(line0: LineInfo, line1: LineInfo): Boolean {
-                        val typical = estimateTypicalLineLength()
-                        if (line0.len == 0 || line1.len == 0) {
-                            return false
-                        }
-                        if (line0.isTitle || line1.isTitle) {
-                            return false
-                        }
-                        if (line1.leadingSpaces >= 2 || line1.startsWithBullet) {
-                            return false
-                        }
-                        if (line0.len < (typical * 0.60).toInt()) {
-                            return false
-                        }
-                        if (line1.len < (typical * 0.30).toInt()) {
-                            return false
-                        }
-                        if (!meta.hardWrapLikely) {
-                            val last = line0.lastNonSpace
-                            if (last != null && strongEndPunct.contains(last)) {
-                                return false
-                            }
-                        }
-                        return true
+                    fun isSoftBreak(line0: SoftBreakLineInfo, line1: SoftBreakLineInfo): Boolean {
+                        val context = SoftBreakClassifierContext(
+                            typicalLineLength = estimateTypicalLineLength(),
+                            hardWrapLikely = meta.hardWrapLikely,
+                            rules = ruleConfig
+                        )
+                        return SoftBreakClassifier.classify(
+                            line0 = line0,
+                            line1 = line1,
+                            context = context
+                        ).isSoft
                     }
 
-                    data class Pending(val newlineOffset: Long, val line0: LineInfo)
+                    data class Pending(val newlineOffset: Long, val line0: SoftBreakLineInfo)
                     var pending: Pending? = null
 
                     fun recordNewline(offset: Long, isSoft: Boolean) {
@@ -241,6 +245,8 @@ internal object SoftBreakIndexBuilder {
                                             seenNonSpace = true
                                             firstNonSpace = c
                                         }
+                                    } else if (secondNonSpace == null && !c.isWhitespace()) {
+                                        secondNonSpace = c
                                     }
                                     if (!c.isWhitespace()) {
                                         lastNonSpace = c

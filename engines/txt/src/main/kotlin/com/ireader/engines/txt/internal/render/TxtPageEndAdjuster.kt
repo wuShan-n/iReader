@@ -7,6 +7,8 @@ internal class TxtPageEndAdjuster(
     private val detector: ChapterDetector = ChapterDetector()
 ) : ReflowPageEndAdjuster {
 
+    private val strongEndPunctuation = setOf('。', '！', '？', '.', '!', '?', '…', ';', '；', ':', '：')
+
     @Suppress("UnusedParameter")
     override fun adjust(
         raw: String,
@@ -30,7 +32,11 @@ internal class TxtPageEndAdjuster(
                 .takeIf { it >= 0 && it < measuredEnd }
                 ?: measuredEnd
             val line = raw.substring(lineStart, lineEnd).trim()
-            if (lineStart > 0 && detector.isChapterBoundaryTitle(line)) {
+            if (
+                lineStart > 0 &&
+                detector.isChapterBoundaryTitle(line) &&
+                hasStrongPrelude(raw, lineStart)
+            ) {
                 return lineStart
             }
             if (lineEnd >= measuredEnd) {
@@ -39,5 +45,20 @@ internal class TxtPageEndAdjuster(
             lineStart = lineEnd + 1
         }
         return null
+    }
+
+    private fun hasStrongPrelude(raw: String, lineStart: Int): Boolean {
+        val beforeNewline = lineStart - 1
+        if (beforeNewline !in raw.indices || raw[beforeNewline] != '\n') {
+            return false
+        }
+        val previousBreak = raw.lastIndexOf('\n', startIndex = beforeNewline - 1)
+        val previousStart = previousBreak + 1
+        val previousLine = raw.substring(previousStart, beforeNewline).trim()
+        if (previousLine.isEmpty()) {
+            return true
+        }
+        val last = previousLine.lastOrNull() ?: return false
+        return strongEndPunctuation.contains(last)
     }
 }

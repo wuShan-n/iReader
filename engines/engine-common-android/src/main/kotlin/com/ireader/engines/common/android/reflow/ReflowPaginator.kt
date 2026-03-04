@@ -59,6 +59,8 @@ class ReflowPaginator(
         val paint = TextPaintFactory.create(config, constraints)
         val paragraphIndentPx = (paint.textSize * typography.paragraphIndentEm).roundToInt()
             .coerceAtLeast(0)
+        val softBreakProfile = SoftBreakTuningProfile.fromStorageValue(config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY])
+        val softBreakRules = SoftBreakRuleConfig.forProfile(softBreakProfile)
 
         var windowChars = initialWindowChars(config, constraints)
         var measuredEnd = 0
@@ -89,7 +91,8 @@ class ReflowPaginator(
                     hardWrapLikely = hardWrapLikely,
                     paragraphSpacingPx = paragraphSpacingPx,
                     paragraphIndentPx = paragraphIndentPx,
-                    startsAtParagraphBoundary = startsAtParagraphBoundary
+                    startsAtParagraphBoundary = startsAtParagraphBoundary,
+                    ruleConfig = softBreakRules
                 )
             }
             measuredText = display
