@@ -2,7 +2,7 @@ package com.ireader.engines.epub.internal.provider
 
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
-import com.ireader.reader.api.provider.ResourceProvider
+import com.ireader.reader.api.provider.BlockingResourceProvider
 import java.io.InputStream
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -16,36 +16,44 @@ import org.readium.r2.shared.util.fromLegacyHref
 internal class EpubResourceProvider(
     private val publication: Publication,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
-) : ResourceProvider {
+) : BlockingResourceProvider {
 
     override suspend fun openResource(path: String): ReaderResult<InputStream> {
         return withContext(ioDispatcher) {
-            try {
-                val href = parseHref(path)
-                    ?: return@withContext ReaderResult.Err(
-                        ReaderError.CorruptOrInvalid("Invalid EPUB href: $path")
-                    )
-
-                val resource = publication.get(href)
-                    ?: return@withContext ReaderResult.Err(
-                        ReaderError.NotFound("Resource not found: $path")
-                    )
-
-                ReaderResult.Ok(resource.asInputStream())
-            } catch (t: Throwable) {
-                ReaderResult.Err(ReaderError.Io(cause = t))
-            }
+            openResourceBlocking(path)
         }
     }
 
     override suspend fun getMimeType(path: String): ReaderResult<String?> {
         return withContext(ioDispatcher) {
-            try {
-                val href = parseHref(path) ?: return@withContext ReaderResult.Ok(null)
-                ReaderResult.Ok(publication.linkWithHref(href)?.mediaType?.toString())
-            } catch (t: Throwable) {
-                ReaderResult.Err(ReaderError.Internal(cause = t))
-            }
+            getMimeTypeBlocking(path)
+        }
+    }
+
+    override fun openResourceBlocking(path: String): ReaderResult<InputStream> {
+        return try {
+            val href = parseHref(path)
+                ?: return ReaderResult.Err(
+                    ReaderError.CorruptOrInvalid("Invalid EPUB href: $path")
+                )
+
+            val resource = publication.get(href)
+                ?: return ReaderResult.Err(
+                    ReaderError.NotFound("Resource not found: $path")
+                )
+
+            ReaderResult.Ok(resource.asInputStream())
+        } catch (t: Throwable) {
+            ReaderResult.Err(ReaderError.Io(cause = t))
+        }
+    }
+
+    override fun getMimeTypeBlocking(path: String): ReaderResult<String?> {
+        return try {
+            val href = parseHref(path) ?: return ReaderResult.Ok(null)
+            ReaderResult.Ok(publication.linkWithHref(href)?.mediaType?.toString())
+        } catch (t: Throwable) {
+            ReaderResult.Err(ReaderError.Internal(cause = t))
         }
     }
 

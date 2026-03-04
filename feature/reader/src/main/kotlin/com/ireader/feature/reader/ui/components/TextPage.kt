@@ -2,7 +2,6 @@ package com.ireader.feature.reader.ui.components
 
 import android.graphics.Typeface
 import android.os.Build
-import android.text.Layout
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -14,12 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.ireader.reader.api.render.BreakStrategyMode
-import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.core.common.android.typography.toAndroidBreakStrategy
+import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
+import com.ireader.core.common.android.typography.toAndroidJustificationMode
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.api.render.TextAlignMode
-import com.ireader.reader.api.render.effectivePagePaddingDp
+import com.ireader.reader.api.render.toTypographySpec
 
 @Composable
 fun TextPage(
@@ -28,8 +27,9 @@ fun TextPage(
     modifier: Modifier = Modifier
 ) {
     val config = reflowConfig ?: RenderConfig.ReflowText()
+    val typography = config.toTypographySpec()
     val density = LocalDensity.current
-    val pagePaddingPx = with(density) { config.effectivePagePaddingDp().dp.roundToPx() }
+    val pagePaddingPx = with(density) { typography.pagePaddingDp.dp.roundToPx() }
 
     AndroidView(
         modifier = modifier.fillMaxSize(),
@@ -46,13 +46,13 @@ fun TextPage(
             }
         },
         update = { textView ->
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, config.fontSizeSp)
-            textView.setLineSpacing(0f, config.lineHeightMult)
-            textView.includeFontPadding = config.includeFontPadding
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, typography.fontSizeSp)
+            textView.setLineSpacing(0f, typography.lineHeightMult)
+            textView.includeFontPadding = typography.includeFontPadding
             textView.setPadding(pagePaddingPx, pagePaddingPx, pagePaddingPx, pagePaddingPx)
             textView.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
             textView.gravity = Gravity.TOP or Gravity.START
-            val familyName = config.fontFamilyName
+            val familyName = typography.fontFamilyName
             textView.typeface = if (familyName.isNullOrBlank()) {
                 Typeface.DEFAULT
             } else {
@@ -61,22 +61,11 @@ fun TextPage(
             textView.text = content.text
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                textView.breakStrategy = when (config.breakStrategy) {
-                    BreakStrategyMode.SIMPLE -> Layout.BREAK_STRATEGY_SIMPLE
-                    BreakStrategyMode.BALANCED -> Layout.BREAK_STRATEGY_BALANCED
-                    BreakStrategyMode.HIGH_QUALITY -> Layout.BREAK_STRATEGY_HIGH_QUALITY
-                }
-                textView.hyphenationFrequency = when (config.hyphenationMode) {
-                    HyphenationMode.NONE -> Layout.HYPHENATION_FREQUENCY_NONE
-                    HyphenationMode.NORMAL -> Layout.HYPHENATION_FREQUENCY_NORMAL
-                    HyphenationMode.FULL -> Layout.HYPHENATION_FREQUENCY_FULL
-                }
+                textView.breakStrategy = typography.breakStrategy.toAndroidBreakStrategy()
+                textView.hyphenationFrequency = typography.hyphenationMode.toAndroidHyphenationFrequency()
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                textView.justificationMode = when (config.textAlign) {
-                    TextAlignMode.START -> Layout.JUSTIFICATION_MODE_NONE
-                    TextAlignMode.JUSTIFY -> Layout.JUSTIFICATION_MODE_INTER_WORD
-                }
+                textView.justificationMode = typography.textAlign.toAndroidJustificationMode()
             }
             textView.requestLayout()
         }

@@ -10,14 +10,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.provider.BlockingResourceProvider
 import com.ireader.reader.api.provider.ResourceProvider
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.TextAlignMode
-import com.ireader.reader.api.render.effectivePagePaddingDp
-import com.ireader.reader.api.render.effectiveParagraphIndentEm
-import com.ireader.reader.api.render.effectiveParagraphSpacingDp
+import com.ireader.reader.api.render.toTypographySpec
 import java.util.Locale
 import kotlinx.coroutines.runBlocking
 
@@ -103,11 +102,20 @@ private class ReaderHtmlWebViewClient(
         val path = uri.readerResourcePath()
             ?: return errorResponse(statusCode = 400, reason = "Missing resource path")
 
-        val opened = runBlocking { provider.openResource(path) }
+        val opened = if (provider is BlockingResourceProvider) {
+            provider.openResourceBlocking(path)
+        } else {
+            runBlocking { provider.openResource(path) }
+        }
         val stream = (opened as? ReaderResult.Ok)?.value
             ?: return errorResponse(statusCode = 404, reason = "Resource not found")
 
-        val mime = runBlocking { provider.getMimeType(path) }
+        val mimeResult = if (provider is BlockingResourceProvider) {
+            provider.getMimeTypeBlocking(path)
+        } else {
+            runBlocking { provider.getMimeType(path) }
+        }
+        val mime = mimeResult
             .let { it as? ReaderResult.Ok }
             ?.value
             ?: guessMimeType(path)
@@ -190,27 +198,28 @@ private fun injectTheme(
     }
 }
 
-private fun buildReflowCss(config: RenderConfig.ReflowText?): String {
+internal fun buildReflowCss(config: RenderConfig.ReflowText?): String {
     if (config == null) return ""
-    val textAlign = when (config.textAlign) {
+    val typography = config.toTypographySpec()
+    val textAlign = when (typography.textAlign) {
         TextAlignMode.START -> "start"
         TextAlignMode.JUSTIFY -> "justify"
     }
-    val hyphens = if (config.hyphenationMode == HyphenationMode.NONE) {
+    val hyphens = if (typography.hyphenationMode == HyphenationMode.NONE) {
         "manual"
     } else {
         "auto"
     }
-    val lineBreak = if (config.cjkLineBreakStrict) "strict" else "auto"
-    val hangingPunctuation = if (config.hangingPunctuation) "first allow-end last" else "none"
-    val family = config.fontFamilyName?.takeIf { it.isNotBlank() }
+    val lineBreak = if (typography.cjkLineBreakStrict) "strict" else "auto"
+    val hangingPunctuation = if (typography.hangingPunctuation) "first allow-end last" else "none"
+    val family = typography.fontFamilyName?.takeIf { it.isNotBlank() }
         ?.let { "font-family: '${it.replace("'", "\\'")}';" }
         .orEmpty()
-    val fontSizePx = formatCssNumber(config.fontSizeSp)
-    val lineHeight = formatCssNumber(config.lineHeightMult)
-    val pagePaddingPx = formatCssNumber(config.effectivePagePaddingDp())
-    val paragraphSpacingPx = formatCssNumber(config.effectiveParagraphSpacingDp())
-    val paragraphIndentEm = formatCssNumber(config.effectiveParagraphIndentEm())
+    val fontSizePx = formatCssNumber(typography.fontSizeSp)
+    val lineHeight = formatCssNumber(typography.lineHeightMult)
+    val pagePaddingPx = formatCssNumber(typography.pagePaddingDp)
+    val paragraphSpacingPx = formatCssNumber(typography.paragraphSpacingDp)
+    val paragraphIndentEm = formatCssNumber(typography.paragraphIndentEm)
     return """
         :root {
             --ireader-font-size: ${fontSizePx}px;

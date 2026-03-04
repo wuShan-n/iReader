@@ -7,23 +7,20 @@
 
 package com.ireader.engines.txt.internal.render
 
-import com.ireader.engines.common.android.pagination.ReflowPaginationProfile
-import com.ireader.engines.common.cache.LruCache
-import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
-import com.ireader.engines.txt.internal.open.TxtMeta
-import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.link.LinkDetector
+import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
+import com.ireader.engines.txt.internal.open.TxtBookFiles
+import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.pagination.PageSlice
-import com.ireader.engines.txt.internal.pagination.PageMap
 import com.ireader.engines.txt.internal.pagination.TxtPaginator
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.reader.api.error.ReaderError
+import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.error.getOrNull
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.AnnotationQuery
-import com.ireader.reader.api.error.ReaderError
-import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.render.InvalidateReason
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.NavigationAvailability
@@ -35,12 +32,9 @@ import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderMetrics
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
-import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.api.render.RenderState
+import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.model.Locator
-import com.ireader.reader.model.Progression
-import java.io.File
-import java.util.Locale
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -55,7 +49,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 
 internal class TxtController(
@@ -65,7 +58,7 @@ internal class TxtController(
     initialOffset: Long,
     initialConfig: RenderConfig.ReflowText,
     maxPageCache: Int,
-    private val persistPagination: Boolean,
+    persistPagination: Boolean,
     private val files: TxtBookFiles,
     private val annotationProvider: AnnotationProvider?,
     private val ioDispatcher: CoroutineDispatcher,
@@ -74,38 +67,43 @@ internal class TxtController(
 
     private val scope = CoroutineScope(SupervisorJob() + defaultDispatcher)
     private val mutex = Mutex()
+
     private var softBreakIndex: SoftBreakIndex? = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)
     private val paginator = TxtPaginator(store, meta, softBreakIndex)
-    private val pageCache = LruCache<Long, PageSlice>(maxPageCache)
+    private val sliceCache = TxtPageSliceCache(
+        paginator = paginator,
+        maxPageCache = maxPageCache,
+        maxOffsetProvider = { store.lengthChars }
+    )
+    private val paginationIndex = TxtPaginationIndexStore(
+        enabled = persistPagination,
+        documentKey = documentKey,
+        paginationDir = files.paginationDir
+    )
     private var pageCompletionJob: Job? = null
 
     private val eventsMutable = MutableSharedFlow<ReaderEvent>(extraBufferCapacity = 32)
     override val events: Flow<ReaderEvent> = eventsMutable.asSharedFlow()
 
     private val initialStart = initialOffset.coerceIn(0L, store.lengthChars)
+    private val navigation = TxtNavigationState(initialStart)
+
+    private var constraints: LayoutConstraints? = null
+    private var currentConfig: RenderConfig.ReflowText = initialConfig
+    private var currentEffectiveConfig: RenderConfig.ReflowText = initialConfig.toTxtEffectiveConfig()
+
     private val stateMutable = MutableStateFlow(
         RenderState(
-            locator = locatorFor(initialStart),
-            progression = progressionFor(initialStart),
+            locator = navigation.locatorFor(store.lengthChars),
+            progression = navigation.progressionFor(store.lengthChars),
             nav = NavigationAvailability(
-                canGoPrev = initialStart > 0L,
-                canGoNext = initialStart < store.lengthChars
+                canGoPrev = navigation.canGoPrev(),
+                canGoNext = navigation.canGoNext(store.lengthChars)
             ),
             config = initialConfig
         )
     )
     override val state: StateFlow<RenderState> = stateMutable.asStateFlow()
-
-    private var constraints: LayoutConstraints? = null
-    private var currentConfig: RenderConfig.ReflowText = initialConfig
-    private var currentStart: Long = initialStart
-    private var currentEnd: Long = initialStart
-    private var avgCharsPerPage: Int = 1800
-
-    private var profileKey: String? = null
-    private var pageStarts = sortedSetOf<Long>()
-    private var pageIndexDirty = false
-    private val paginationDir: File = files.paginationDir
 
     init {
         if (meta.hardWrapLikely && softBreakIndex == null) {
@@ -117,7 +115,7 @@ internal class TxtController(
                         softBreakIndex?.close()
                         softBreakIndex = loaded
                         paginator.setSoftBreakIndex(loaded)
-                        pageCache.clear()
+                        sliceCache.clear()
                     }
                 }
             }
@@ -135,7 +133,7 @@ internal class TxtController(
     override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> {
         return mutex.withLock {
             this.constraints = constraints
-            pageCache.clear()
+            sliceCache.clear()
             reloadPaginationIndexIfNeededLocked()
             updateStateLocked()
             ReaderResult.Ok(Unit)
@@ -147,8 +145,9 @@ internal class TxtController(
             ?: return ReaderResult.Err(ReaderError.Internal("TXT requires ReflowText config"))
         return mutex.withLock {
             currentConfig = reflow
+            currentEffectiveConfig = reflow.toTxtEffectiveConfig()
             stateMutable.value = stateMutable.value.copy(config = reflow)
-            pageCache.clear()
+            sliceCache.clear()
             reloadPaginationIndexIfNeededLocked()
             ReaderResult.Ok(Unit)
         }
@@ -170,7 +169,12 @@ internal class TxtController(
         return mutex.withLock {
             val constraintsLocal = constraints
                 ?: return@withLock ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
-            val current = getOrBuildSliceLocked(currentStart, constraintsLocal, allowCache = true)
+            val current = sliceCache.getOrBuild(
+                start = navigation.currentStart,
+                constraints = constraintsLocal,
+                config = currentEffectiveConfig,
+                allowCache = true
+            )
             if (current.endOffset >= store.lengthChars) {
                 return@withLock buildPageResultLocked(
                     slice = current,
@@ -178,7 +182,7 @@ internal class TxtController(
                     cacheHit = true
                 )
             }
-            currentStart = current.endOffset
+            navigation.moveTo(current.endOffset, store.lengthChars)
             renderLocked(policy)
         }
     }
@@ -187,11 +191,22 @@ internal class TxtController(
         return mutex.withLock {
             val constraintsLocal = constraints
                 ?: return@withLock ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
-            if (currentStart <= 0L) {
+            if (!navigation.canGoPrev()) {
                 return@withLock renderLocked(policy)
             }
-            val target = findPreviousStartLocked(currentStart, constraintsLocal)
-            currentStart = target
+            val target = navigation.findPreviousStart(
+                fromStart = navigation.currentStart,
+                maxOffset = store.lengthChars,
+                constraints = constraintsLocal
+            ) { start, constraintsArg ->
+                sliceCache.getOrBuild(
+                    start = start,
+                    constraints = constraintsArg,
+                    config = currentEffectiveConfig,
+                    allowCache = true
+                )
+            }
+            navigation.moveTo(target, store.lengthChars)
             renderLocked(policy)
         }
     }
@@ -200,7 +215,7 @@ internal class TxtController(
         val offset = TxtBlockLocatorCodec.parseOffset(locator, store.lengthChars)
             ?: return ReaderResult.Err(ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}"))
         return mutex.withLock {
-            currentStart = offset.coerceIn(0L, store.lengthChars)
+            navigation.moveTo(offset, store.lengthChars)
             renderLocked(policy)
         }
     }
@@ -208,13 +223,9 @@ internal class TxtController(
     override suspend fun goToProgress(percent: Double, policy: RenderPolicy): ReaderResult<RenderPage> {
         val clamped = percent.coerceIn(0.0, 1.0)
         return mutex.withLock {
-            val target = if (pageStarts.size >= 8) {
-                val index = ((pageStarts.size - 1) * clamped).roundToInt().coerceIn(0, pageStarts.size - 1)
-                pageStarts.elementAt(index)
-            } else {
-                (store.lengthChars * clamped).toLong()
-            }
-            currentStart = target.coerceIn(0L, store.lengthChars)
+            val target = paginationIndex.startForProgress(clamped)
+                ?: (store.lengthChars * clamped).toLong()
+            navigation.moveTo(target, store.lengthChars)
             renderLocked(policy)
         }
     }
@@ -225,12 +236,22 @@ internal class TxtController(
         }
         return mutex.withLock {
             val constraintsLocal = constraints ?: return@withLock ReaderResult.Ok(Unit)
-            val currentSlice = getOrBuildSliceLocked(currentStart, constraintsLocal, allowCache = true)
+            val currentSlice = sliceCache.getOrBuild(
+                start = navigation.currentStart,
+                constraints = constraintsLocal,
+                config = currentEffectiveConfig,
+                allowCache = true
+            )
 
             var forwardStart = currentSlice.endOffset
             repeat(count) {
                 if (forwardStart >= store.lengthChars) return@repeat
-                val next = getOrBuildSliceLocked(forwardStart, constraintsLocal, allowCache = true)
+                val next = sliceCache.getOrBuild(
+                    start = forwardStart,
+                    constraints = constraintsLocal,
+                    config = currentEffectiveConfig,
+                    allowCache = true
+                )
                 if (next.endOffset <= forwardStart) {
                     return@repeat
                 }
@@ -240,11 +261,27 @@ internal class TxtController(
             var backwardStart = currentSlice.startOffset
             repeat(count) {
                 if (backwardStart <= 0L) return@repeat
-                val prevStart = findPreviousStartLocked(backwardStart, constraintsLocal)
+                val prevStart = navigation.findPreviousStart(
+                    fromStart = backwardStart,
+                    maxOffset = store.lengthChars,
+                    constraints = constraintsLocal
+                ) { start, constraintsArg ->
+                    sliceCache.getOrBuild(
+                        start = start,
+                        constraints = constraintsArg,
+                        config = currentEffectiveConfig,
+                        allowCache = true
+                    )
+                }
                 if (prevStart >= backwardStart) {
                     return@repeat
                 }
-                getOrBuildSliceLocked(prevStart, constraintsLocal, allowCache = true)
+                sliceCache.getOrBuild(
+                    start = prevStart,
+                    constraints = constraintsLocal,
+                    config = currentEffectiveConfig,
+                    allowCache = true
+                )
                 backwardStart = prevStart
             }
             ReaderResult.Ok(Unit)
@@ -253,22 +290,19 @@ internal class TxtController(
 
     override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
         return mutex.withLock {
-            pageCache.clear()
+            sliceCache.clear()
             if (reason == InvalidateReason.CONFIG_CHANGED || reason == InvalidateReason.LAYOUT_CHANGED) {
-                profileKey = null
+                paginationIndex.invalidateProfile()
+                pageCompletionJob?.cancel()
             }
             ReaderResult.Ok(Unit)
         }
     }
 
     override fun close() {
-        runCatching {
-            savePaginationIndexLocked()
-        }
+        runCatching { paginationIndex.saveIfDirty() }
         pageCompletionJob?.cancel()
-        runCatching {
-            softBreakIndex?.close()
-        }
+        runCatching { softBreakIndex?.close() }
         scope.cancel()
     }
 
@@ -280,19 +314,18 @@ internal class TxtController(
         var cacheHit = false
         val elapsed = measureTimeMillis {
             if (policy.allowCache) {
-                builtSlice = pageCache[currentStart]
+                builtSlice = sliceCache.getCached(navigation.currentStart)
                 if (builtSlice != null) {
                     cacheHit = true
                 }
             }
             if (builtSlice == null) {
-                val computed = paginator.pageAt(
-                    startOffset = currentStart,
-                    config = currentConfig,
-                    constraints = constraintsLocal
+                builtSlice = sliceCache.getOrBuild(
+                    start = navigation.currentStart,
+                    constraints = constraintsLocal,
+                    config = currentEffectiveConfig,
+                    allowCache = false
                 )
-                builtSlice = computed
-                pageCache[currentStart] = computed
             }
         }
         val slice = builtSlice ?: return ReaderResult.Err(ReaderError.Internal("Failed to paginate TXT page"))
@@ -303,7 +336,7 @@ internal class TxtController(
             cacheHit = cacheHit
         )
         if (page is ReaderResult.Ok) {
-            recordPageStartLocked(slice.startOffset)
+            paginationIndex.record(slice.startOffset)
             maybeSchedulePageCompletionLocked()
         }
         return page
@@ -314,11 +347,7 @@ internal class TxtController(
         renderTimeMs: Long,
         cacheHit: Boolean
     ): ReaderResult<RenderPage> {
-        currentStart = slice.startOffset
-        currentEnd = slice.endOffset
-        val consumed = (slice.endOffset - slice.startOffset).toInt().coerceAtLeast(1)
-        avgCharsPerPage = ((avgCharsPerPage * 3) + consumed) / 4
-
+        navigation.updateFromSlice(slice)
         updateStateLocked()
         val pageRange = TxtBlockLocatorCodec.rangeForOffsets(
             startOffset = slice.startOffset,
@@ -333,7 +362,7 @@ internal class TxtController(
 
         val page = RenderPage(
             id = PageId("${slice.startOffset}-${slice.endOffset}"),
-            locator = locatorFor(slice.startOffset),
+            locator = navigation.locatorFor(store.lengthChars),
             content = RenderContent.Text(
                 text = slice.text,
                 mapping = TxtTextMapping(slice.startOffset, slice.endOffset)
@@ -350,150 +379,28 @@ internal class TxtController(
         return ReaderResult.Ok(page)
     }
 
-    private suspend fun getOrBuildSliceLocked(
-        start: Long,
-        constraints: LayoutConstraints,
-        allowCache: Boolean
-    ): PageSlice {
-        val normalizedStart = start.coerceIn(0L, store.lengthChars)
-        if (allowCache) {
-            val cached = pageCache[normalizedStart]
-            if (cached != null) {
-                return cached
-            }
-        }
-        val computed = paginator.pageAt(
-            startOffset = normalizedStart,
-            config = currentConfig,
-            constraints = constraints
-        )
-        pageCache[normalizedStart] = computed
-        return computed
-    }
-
-    private suspend fun findPreviousStartLocked(
-        currentStart: Long,
-        constraints: LayoutConstraints
-    ): Long {
-        if (currentStart <= 0L) {
-            return 0L
-        }
-        val estimateDistance = (avgCharsPerPage * 2L).coerceAtLeast(1_200L)
-        var cursor = (currentStart - estimateDistance).coerceAtLeast(0L)
-        var previousStart = 0L
-        var safety = 0
-
-        while (cursor < currentStart && safety < 256) {
-            val slice = getOrBuildSliceLocked(cursor, constraints, allowCache = true)
-            if (slice.endOffset >= currentStart) {
-                return previousStart.coerceAtMost(currentStart)
-            }
-            previousStart = slice.startOffset
-            if (slice.endOffset <= cursor) {
-                break
-            }
-            cursor = slice.endOffset
-            safety++
-        }
-        return cursor.coerceAtMost(currentStart).coerceAtLeast(0L)
-    }
-
     private fun updateStateLocked() {
-        val canGoPrev = currentStart > 0L
-        val canGoNext = currentEnd < store.lengthChars
         stateMutable.value = stateMutable.value.copy(
-            locator = locatorFor(currentStart),
-            progression = progressionFor(currentStart),
+            locator = navigation.locatorFor(store.lengthChars),
+            progression = navigation.progressionFor(store.lengthChars),
             nav = NavigationAvailability(
-                canGoPrev = canGoPrev,
-                canGoNext = canGoNext
+                canGoPrev = navigation.canGoPrev(),
+                canGoNext = navigation.canGoNext(store.lengthChars)
             ),
             config = currentConfig
         )
     }
 
-    private fun progressionFor(offset: Long): Progression {
-        val percent = if (store.lengthChars == 0L) {
-            0.0
-        } else {
-            offset.toDouble() / store.lengthChars.toDouble()
-        }.coerceIn(0.0, 1.0)
-        val label = "${(percent * 100.0).roundToInt()}%"
-        return Progression(percent = percent, label = label)
-    }
-
-    private fun locatorFor(offset: Long): Locator {
-        val percent = if (store.lengthChars == 0L) {
-            0.0
-        } else {
-            offset.toDouble() / store.lengthChars.toDouble()
-        }.coerceIn(0.0, 1.0)
-        return TxtBlockLocatorCodec.locatorForOffset(
-            offset = offset.coerceIn(0L, store.lengthChars),
-            maxOffset = store.lengthChars,
-            extras = mapOf("progression" to String.format(Locale.US, "%.6f", percent))
-        )
-    }
-
     private fun reloadPaginationIndexIfNeededLocked() {
-        if (!persistPagination) {
-            profileKey = null
-            pageStarts.clear()
-            pageIndexDirty = false
-            pageCompletionJob?.cancel()
-            return
-        }
-        val constraintsLocal = constraints ?: return
-        val nextProfile = computeProfileKey(constraintsLocal, currentConfig)
-        if (nextProfile == profileKey) {
-            return
-        }
-        savePaginationIndexLocked()
-        profileKey = nextProfile
-        pageStarts = loadPageStarts(nextProfile)
-        pageIndexDirty = false
+        paginationIndex.reloadIfNeeded(
+            constraints = constraints,
+            profileConfig = currentEffectiveConfig
+        )
         pageCompletionJob?.cancel()
     }
 
-    private fun recordPageStartLocked(start: Long) {
-        if (!persistPagination || profileKey.isNullOrBlank()) {
-            return
-        }
-        if (pageStarts.add(start)) {
-            pageIndexDirty = true
-            if (pageStarts.size % 16 == 0) {
-                savePaginationIndexLocked()
-            }
-        }
-    }
-
-    private fun savePaginationIndexLocked() {
-        if (!persistPagination || profileKey.isNullOrBlank() || !pageIndexDirty) {
-            return
-        }
-        val file = profileFile(profileKey!!)
-        file.parentFile?.mkdirs()
-        PageMap.save(file, pageStarts)
-        pageIndexDirty = false
-    }
-
-    private fun loadPageStarts(profile: String): java.util.TreeSet<Long> {
-        return PageMap.load(
-            binaryFile = profileFile(profile),
-            legacyTextFile = legacyProfileFile(profile)
-        )
-    }
-
-    private fun profileFile(profile: String): File {
-        return File(paginationDir, "pagemap_v2_$profile.bin")
-    }
-
-    private fun legacyProfileFile(profile: String): File {
-        return File(paginationDir, "pagemap_v2_$profile.txt")
-    }
-
     private fun maybeSchedulePageCompletionLocked() {
-        if (!persistPagination || profileKey.isNullOrBlank()) {
+        if (!paginationIndex.hasActiveProfile()) {
             return
         }
         if (pageCompletionJob?.isActive == true) {
@@ -516,29 +423,23 @@ internal class TxtController(
         if (maxPages <= 0 || store.lengthChars <= 0L) {
             return
         }
-        var cursor = pageStarts.lastOrNull() ?: currentStart
+        var cursor = paginationIndex.lastKnownStart() ?: navigation.currentStart
         cursor = cursor.coerceIn(0L, store.lengthChars)
         var steps = 0
         while (cursor < store.lengthChars && steps < maxPages) {
-            val slice = getOrBuildSliceLocked(cursor, constraints, allowCache = true)
-            recordPageStartLocked(slice.startOffset)
+            val slice = sliceCache.getOrBuild(
+                start = cursor,
+                constraints = constraints,
+                config = currentEffectiveConfig,
+                allowCache = true
+            )
+            paginationIndex.record(slice.startOffset)
             if (slice.endOffset <= cursor) {
                 break
             }
             cursor = slice.endOffset
             steps++
         }
-        savePaginationIndexLocked()
-    }
-
-    private fun computeProfileKey(
-        constraints: LayoutConstraints,
-        config: RenderConfig.ReflowText
-    ): String {
-        return ReflowPaginationProfile.keyFor(
-            documentKey = documentKey,
-            constraints = constraints,
-            config = config
-        )
+        paginationIndex.saveIfDirty()
     }
 }

@@ -1,6 +1,10 @@
 package com.ireader.engines.common.android.layout
 
 import android.text.Layout
+import com.ireader.core.common.android.typography.toAndroidBreakStrategy
+import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
+import com.ireader.core.common.android.typography.toAndroidJustificationMode
+import com.ireader.core.common.android.typography.toAndroidLayoutAlignment
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.TextAlignMode
@@ -11,24 +15,23 @@ class StaticLayoutMeasurerTest {
 
     @Test
     fun `maps break strategy modes to android constants`() {
-        assertEquals(Layout.BREAK_STRATEGY_SIMPLE, StaticLayoutMeasurer.breakStrategy(BreakStrategyMode.SIMPLE))
-        assertEquals(Layout.BREAK_STRATEGY_BALANCED, StaticLayoutMeasurer.breakStrategy(BreakStrategyMode.BALANCED))
-        assertEquals(Layout.BREAK_STRATEGY_HIGH_QUALITY, StaticLayoutMeasurer.breakStrategy(BreakStrategyMode.HIGH_QUALITY))
+        assertEquals(Layout.BREAK_STRATEGY_SIMPLE, BreakStrategyMode.SIMPLE.toAndroidBreakStrategy())
+        assertEquals(Layout.BREAK_STRATEGY_BALANCED, BreakStrategyMode.BALANCED.toAndroidBreakStrategy())
+        assertEquals(Layout.BREAK_STRATEGY_HIGH_QUALITY, BreakStrategyMode.HIGH_QUALITY.toAndroidBreakStrategy())
     }
 
     @Test
     fun `maps hyphenation mode to android constants`() {
-        assertEquals(Layout.HYPHENATION_FREQUENCY_NONE, StaticLayoutMeasurer.hyphenationFrequency(HyphenationMode.NONE))
-        assertEquals(Layout.HYPHENATION_FREQUENCY_NORMAL, StaticLayoutMeasurer.hyphenationFrequency(HyphenationMode.NORMAL))
-        assertEquals(Layout.HYPHENATION_FREQUENCY_FULL, StaticLayoutMeasurer.hyphenationFrequency(HyphenationMode.FULL))
+        assertEquals(Layout.HYPHENATION_FREQUENCY_NONE, HyphenationMode.NONE.toAndroidHyphenationFrequency())
+        assertEquals(Layout.HYPHENATION_FREQUENCY_NORMAL, HyphenationMode.NORMAL.toAndroidHyphenationFrequency())
+        assertEquals(Layout.HYPHENATION_FREQUENCY_FULL, HyphenationMode.FULL.toAndroidHyphenationFrequency())
     }
 
     @Test
-    fun `maps text alignment to justification mode`() {
-        assertEquals(Layout.JUSTIFICATION_MODE_NONE, StaticLayoutMeasurer.justificationMode(TextAlignMode.START))
-        assertEquals(
-            Layout.JUSTIFICATION_MODE_INTER_WORD,
-            StaticLayoutMeasurer.justificationMode(TextAlignMode.JUSTIFY)
-        )
+    fun `maps text alignment to android layout and justification modes`() {
+        assertEquals(Layout.Alignment.ALIGN_NORMAL, TextAlignMode.START.toAndroidLayoutAlignment())
+        assertEquals(Layout.Alignment.ALIGN_NORMAL, TextAlignMode.JUSTIFY.toAndroidLayoutAlignment())
+        assertEquals(Layout.JUSTIFICATION_MODE_NONE, TextAlignMode.START.toAndroidJustificationMode())
+        assertEquals(Layout.JUSTIFICATION_MODE_INTER_WORD, TextAlignMode.JUSTIFY.toAndroidJustificationMode())
     }
 }

@@ -3,9 +3,12 @@
 package com.ireader.engines.common.android.layout
 
 import android.os.Build
-import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import com.ireader.core.common.android.typography.toAndroidBreakStrategy
+import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
+import com.ireader.core.common.android.typography.toAndroidJustificationMode
+import com.ireader.core.common.android.typography.toAndroidLayoutAlignment
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.TextAlignMode
@@ -36,16 +39,16 @@ object StaticLayoutMeasurer {
             paint,
             widthPx.coerceAtLeast(1)
         )
-            .setAlignment(layoutAlignment(textAlign))
+            .setAlignment(textAlign.toAndroidLayoutAlignment())
             .setIncludePad(includeFontPadding)
             .setLineSpacing(0f, lineHeightMult)
-            .setHyphenationFrequency(hyphenationFrequency(hyphenationMode))
+            .setHyphenationFrequency(hyphenationMode.toAndroidHyphenationFrequency())
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            builder.setBreakStrategy(breakStrategy(breakStrategy))
+            builder.setBreakStrategy(breakStrategy.toAndroidBreakStrategy())
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.setJustificationMode(justificationMode(textAlign))
+            builder.setJustificationMode(textAlign.toAndroidJustificationMode())
         }
 
         val layout = builder.build()
@@ -80,33 +83,4 @@ object StaticLayoutMeasurer {
         )
     }
 
-    internal fun layoutAlignment(mode: TextAlignMode): Layout.Alignment {
-        return when (mode) {
-            TextAlignMode.START -> Layout.Alignment.ALIGN_NORMAL
-            TextAlignMode.JUSTIFY -> Layout.Alignment.ALIGN_NORMAL
-        }
-    }
-
-    internal fun breakStrategy(mode: BreakStrategyMode): Int {
-        return when (mode) {
-            BreakStrategyMode.SIMPLE -> Layout.BREAK_STRATEGY_SIMPLE
-            BreakStrategyMode.BALANCED -> Layout.BREAK_STRATEGY_BALANCED
-            BreakStrategyMode.HIGH_QUALITY -> Layout.BREAK_STRATEGY_HIGH_QUALITY
-        }
-    }
-
-    internal fun hyphenationFrequency(mode: HyphenationMode): Int {
-        return when (mode) {
-            HyphenationMode.NONE -> Layout.HYPHENATION_FREQUENCY_NONE
-            HyphenationMode.NORMAL -> Layout.HYPHENATION_FREQUENCY_NORMAL
-            HyphenationMode.FULL -> Layout.HYPHENATION_FREQUENCY_FULL
-        }
-    }
-
-    internal fun justificationMode(mode: TextAlignMode): Int {
-        return when (mode) {
-            TextAlignMode.START -> Layout.JUSTIFICATION_MODE_NONE
-            TextAlignMode.JUSTIFY -> Layout.JUSTIFICATION_MODE_INTER_WORD
-        }
-    }
 }

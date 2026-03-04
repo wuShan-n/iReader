@@ -8,6 +8,7 @@ android {
 
 dependencies {
     implementation(project(":core:reader:api"))
+    implementation(project(":core:common-android"))
     implementation(project(":engines:engine-common"))
     testImplementation(libs.junit)
 }

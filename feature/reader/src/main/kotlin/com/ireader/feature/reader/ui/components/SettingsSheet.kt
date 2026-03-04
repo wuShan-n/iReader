@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -131,9 +130,22 @@ private fun ReflowMainPanel(
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
     var persist by remember { mutableStateOf(true) }
+    var livePreview by remember { mutableStateOf(true) }
     var fontSize by remember(config.fontSizeSp) { mutableFloatStateOf(config.fontSizeSp) }
     var lineHeight by remember(config.lineHeightMult) { mutableFloatStateOf(config.lineHeightMult) }
     var pagePadding by remember(config.pagePaddingDp) { mutableFloatStateOf(config.pagePaddingDp) }
+    fun draftConfig(): RenderConfig.ReflowText {
+        return config.copy(
+            fontSizeSp = fontSize,
+            lineHeightMult = lineHeight,
+            pagePaddingDp = pagePadding
+        )
+    }
+    fun previewIfEnabled() {
+        if (livePreview) {
+            onApply(draftConfig(), false)
+        }
+    }
 
     val actionBg = if (isNightMode) Color(0xFF2C2C2C) else Color(0xFFE9ECEF)
     val textColor = if (isNightMode) Color(0xFFE5E5E5) else Color(0xFF1B1B1B)
@@ -169,7 +181,7 @@ private fun ReflowMainPanel(
                 TextButton(
                     onClick = {
                         fontSize = (fontSize - 1f).coerceAtLeast(12f)
-                        onApply(config.copy(fontSizeSp = fontSize, lineHeightMult = lineHeight, pagePaddingDp = pagePadding), false)
+                        previewIfEnabled()
                     },
                     modifier = Modifier.weight(1f)
                 ) {
@@ -179,7 +191,7 @@ private fun ReflowMainPanel(
                 TextButton(
                     onClick = {
                         fontSize = (fontSize + 1f).coerceAtMost(30f)
-                        onApply(config.copy(fontSizeSp = fontSize, lineHeightMult = lineHeight, pagePaddingDp = pagePadding), false)
+                        previewIfEnabled()
                     },
                     modifier = Modifier.weight(1f)
                 ) {
@@ -206,7 +218,7 @@ private fun ReflowMainPanel(
                 valueRange = 1.1f..2.2f,
                 onValueChange = {
                     lineHeight = it
-                    onApply(config.copy(fontSizeSp = fontSize, lineHeightMult = it, pagePaddingDp = pagePadding), false)
+                    previewIfEnabled()
                 }
             )
             Text("边距 ${pagePadding.roundToInt()}dp", color = textColor)
@@ -215,7 +227,7 @@ private fun ReflowMainPanel(
                 valueRange = 8f..36f,
                 onValueChange = {
                     pagePadding = it
-                    onApply(config.copy(fontSizeSp = fontSize, lineHeightMult = lineHeight, pagePaddingDp = it), false)
+                    previewIfEnabled()
                 }
             )
         }
@@ -233,6 +245,21 @@ private fun ReflowMainPanel(
             OutlinedButton(onClick = { onOpenSubPanel(ReaderSettingsPanel.MoreBackground) }) {
                 Text("更多背景")
             }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("实时预览", color = textColor)
+            Switch(
+                checked = livePreview,
+                onCheckedChange = {
+                    livePreview = it
+                    previewIfEnabled()
+                }
+            )
         }
 
         Row(
@@ -267,14 +294,7 @@ private fun ReflowMainPanel(
             }
             Button(
                 onClick = {
-                    onApply(
-                        config.copy(
-                            fontSizeSp = fontSize,
-                            lineHeightMult = lineHeight,
-                            pagePaddingDp = pagePadding
-                        ),
-                        persist
-                    )
+                    onApply(draftConfig(), persist)
                 }
             ) {
                 Text("应用")
@@ -290,6 +310,19 @@ private fun FontPanel(
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
     val fonts = listOf("系统字体", "思源宋体", "霞鹜文楷", "方正新楷体")
+    var persist by remember { mutableStateOf(true) }
+    var livePreview by remember { mutableStateOf(true) }
+    var selectedFamily by remember(current.fontFamilyName) { mutableStateOf(current.fontFamilyName) }
+
+    fun currentDraft(): RenderConfig.ReflowText {
+        return current.copy(fontFamilyName = selectedFamily)
+    }
+    fun previewIfEnabled() {
+        if (livePreview) {
+            onApply(currentDraft(), false)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxHeight(0.72f)
@@ -304,7 +337,7 @@ private fun FontPanel(
         ) {
             items(fonts.size) { index ->
                 val name = fonts[index]
-                val selected = current.fontFamilyName == name || (index == 0 && current.fontFamilyName == null)
+                val selected = selectedFamily == name || (index == 0 && selectedFamily == null)
                 Box(
                     modifier = Modifier
                         .height(70.dp)
@@ -322,13 +355,45 @@ private fun FontPanel(
                 ) {
                     TextButton(
                         onClick = {
-                            val family = if (index == 0) null else name
-                            onApply(current.copy(fontFamilyName = family), false)
+                            selectedFamily = if (index == 0) null else name
+                            previewIfEnabled()
                         }
                     ) {
                         Text(name)
                     }
                 }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("实时预览")
+            Switch(
+                checked = livePreview,
+                onCheckedChange = {
+                    livePreview = it
+                    previewIfEnabled()
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(
+                    checked = persist,
+                    onCheckedChange = { persist = it }
+                )
+                Text("保存为默认")
+            }
+            Button(onClick = { onApply(currentDraft(), persist) }) {
+                Text("应用")
             }
         }
     }
@@ -341,6 +406,8 @@ private fun SpacingPanel(
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
     val defaults = remember { RenderConfig.ReflowText() }
+    var persist by remember { mutableStateOf(true) }
+    var livePreview by remember { mutableStateOf(true) }
     var lineHeight by remember(current.lineHeightMult) { mutableFloatStateOf(current.lineHeightMult) }
     var paragraph by remember(current.paragraphSpacingDp) { mutableFloatStateOf(current.paragraphSpacingDp) }
     var paragraphIndent by remember(current.paragraphIndentEm) { mutableFloatStateOf(current.paragraphIndentEm) }
@@ -368,6 +435,11 @@ private fun SpacingPanel(
             pageInsetMode = pageInsetMode
         )
     }
+    fun previewIfEnabled() {
+        if (livePreview) {
+            onApply(draftConfig(), false)
+        }
+    }
 
     fun resetToDefaults() {
         lineHeight = defaults.lineHeightMult
@@ -381,7 +453,7 @@ private fun SpacingPanel(
         cjkLineBreakStrict = defaults.cjkLineBreakStrict
         hangingPunctuation = defaults.hangingPunctuation
         pageInsetMode = defaults.pageInsetMode
-        onApply(draftConfig(), false)
+        previewIfEnabled()
     }
 
     Column(
@@ -404,7 +476,7 @@ private fun SpacingPanel(
             range = 1.1f..2.4f,
             onChange = {
                 lineHeight = it
-                onApply(draftConfig(), false)
+                previewIfEnabled()
             }
         )
         SettingSliderRow(
@@ -414,7 +486,7 @@ private fun SpacingPanel(
             range = 0f..3.2f,
             onChange = {
                 paragraphIndent = it
-                onApply(draftConfig(), false)
+                previewIfEnabled()
             }
         )
         SettingSliderRow(
@@ -424,7 +496,7 @@ private fun SpacingPanel(
             range = 0f..24f,
             onChange = {
                 paragraph = it
-                onApply(draftConfig(), false)
+                previewIfEnabled()
             }
         )
         SettingSliderRow(
@@ -434,7 +506,7 @@ private fun SpacingPanel(
             range = 8f..42f,
             onChange = {
                 padding = it
-                onApply(draftConfig(), false)
+                previewIfEnabled()
             }
         )
 
@@ -445,7 +517,7 @@ private fun SpacingPanel(
                 selected = textAlign == TextAlignMode.START,
                 onClick = {
                     textAlign = TextAlignMode.START
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
             ChoiceButton(
@@ -453,7 +525,7 @@ private fun SpacingPanel(
                 selected = textAlign == TextAlignMode.JUSTIFY,
                 onClick = {
                     textAlign = TextAlignMode.JUSTIFY
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
         }
@@ -465,7 +537,7 @@ private fun SpacingPanel(
                 selected = breakStrategy == BreakStrategyMode.SIMPLE,
                 onClick = {
                     breakStrategy = BreakStrategyMode.SIMPLE
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
             ChoiceButton(
@@ -473,7 +545,7 @@ private fun SpacingPanel(
                 selected = breakStrategy == BreakStrategyMode.BALANCED,
                 onClick = {
                     breakStrategy = BreakStrategyMode.BALANCED
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
             ChoiceButton(
@@ -481,7 +553,7 @@ private fun SpacingPanel(
                 selected = breakStrategy == BreakStrategyMode.HIGH_QUALITY,
                 onClick = {
                     breakStrategy = BreakStrategyMode.HIGH_QUALITY
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
         }
@@ -493,7 +565,7 @@ private fun SpacingPanel(
                 selected = hyphenationMode == HyphenationMode.NONE,
                 onClick = {
                     hyphenationMode = HyphenationMode.NONE
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
             ChoiceButton(
@@ -501,7 +573,7 @@ private fun SpacingPanel(
                 selected = hyphenationMode == HyphenationMode.NORMAL,
                 onClick = {
                     hyphenationMode = HyphenationMode.NORMAL
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
             ChoiceButton(
@@ -509,7 +581,7 @@ private fun SpacingPanel(
                 selected = hyphenationMode == HyphenationMode.FULL,
                 onClick = {
                     hyphenationMode = HyphenationMode.FULL
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
         }
@@ -521,7 +593,7 @@ private fun SpacingPanel(
                 selected = pageInsetMode == PageInsetMode.RELAXED,
                 onClick = {
                     pageInsetMode = PageInsetMode.RELAXED
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
             ChoiceButton(
@@ -529,7 +601,7 @@ private fun SpacingPanel(
                 selected = pageInsetMode == PageInsetMode.COMPACT,
                 onClick = {
                     pageInsetMode = PageInsetMode.COMPACT
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
         }
@@ -544,7 +616,7 @@ private fun SpacingPanel(
                 checked = includeFontPadding,
                 onCheckedChange = {
                     includeFontPadding = it
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
         }
@@ -558,7 +630,7 @@ private fun SpacingPanel(
                 checked = cjkLineBreakStrict,
                 onCheckedChange = {
                     cjkLineBreakStrict = it
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
         }
@@ -572,9 +644,41 @@ private fun SpacingPanel(
                 checked = hangingPunctuation,
                 onCheckedChange = {
                     hangingPunctuation = it
-                    onApply(draftConfig(), false)
+                    previewIfEnabled()
                 }
             )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("实时预览")
+            Switch(
+                checked = livePreview,
+                onCheckedChange = {
+                    livePreview = it
+                    previewIfEnabled()
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(
+                    checked = persist,
+                    onCheckedChange = { persist = it }
+                )
+                Text("保存为默认")
+            }
+            Button(onClick = { onApply(draftConfig(), persist) }) {
+                Text("应用")
+            }
         }
     }
 }
@@ -585,9 +689,20 @@ private fun PageTurnPanel(
     onBack: () -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
+    var persist by remember { mutableStateOf(true) }
+    var livePreview by remember { mutableStateOf(true) }
     var selected by remember(current.extra) {
         mutableStateOf(current.extra["page_turn"] ?: "左右覆盖")
     }
+    fun draftConfig(): RenderConfig.ReflowText {
+        return current.copy(extra = current.extra + ("page_turn" to selected))
+    }
+    fun previewIfEnabled() {
+        if (livePreview) {
+            onApply(draftConfig(), false)
+        }
+    }
+
     val options = listOf("仿真翻页", "左右覆盖", "上下滑动", "无动效")
     Column(
         modifier = Modifier
@@ -617,15 +732,44 @@ private fun PageTurnPanel(
                     TextButton(
                         onClick = {
                             selected = option
-                            onApply(
-                                current.copy(extra = current.extra + ("page_turn" to option)),
-                                false
-                            )
+                            previewIfEnabled()
                         }
                     ) {
                         Text(option, color = if (isSelected) ReaderTokens.Palette.AccentBlue else Color.Gray)
                     }
                 }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("实时预览")
+            Switch(
+                checked = livePreview,
+                onCheckedChange = {
+                    livePreview = it
+                    previewIfEnabled()
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(
+                    checked = persist,
+                    onCheckedChange = { persist = it }
+                )
+                Text("保存为默认")
+            }
+            Button(onClick = { onApply(draftConfig(), persist) }) {
+                Text("应用")
             }
         }
     }

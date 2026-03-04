@@ -11,9 +11,7 @@ import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.api.render.effectivePagePaddingDp
-import com.ireader.reader.api.render.effectiveParagraphIndentEm
-import com.ireader.reader.api.render.effectiveParagraphSpacingDp
+import com.ireader.reader.api.render.toTypographySpec
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -42,12 +40,13 @@ internal class TxtPaginator(
         }
 
         val startsAtParagraphBoundary = startsAtParagraphBoundary(start)
-        val paddingPx = (config.effectivePagePaddingDp() * constraints.density).roundToInt()
+        val typography = config.toTypographySpec()
+        val paddingPx = (typography.pagePaddingDp * constraints.density).roundToInt()
         val width = (constraints.viewportWidthPx - paddingPx * 2).coerceAtLeast(1)
         val height = (constraints.viewportHeightPx - paddingPx * 2).coerceAtLeast(1)
-        val paragraphSpacingPx = (config.effectiveParagraphSpacingDp() * constraints.density).roundToInt()
+        val paragraphSpacingPx = (typography.paragraphSpacingDp * constraints.density).roundToInt()
         val paint = TextPaintFactory.create(config, constraints)
-        val paragraphIndentPx = (paint.textSize * config.effectiveParagraphIndentEm()).roundToInt()
+        val paragraphIndentPx = (paint.textSize * typography.paragraphIndentEm).roundToInt()
             .coerceAtLeast(0)
 
         var windowChars = initialWindowChars(config, constraints)
@@ -89,11 +88,11 @@ internal class TxtPaginator(
                 paint = paint,
                 widthPx = width,
                 heightPx = height,
-                lineHeightMult = config.lineHeightMult,
-                textAlign = config.textAlign,
-                breakStrategy = config.breakStrategy,
-                hyphenationMode = config.hyphenationMode,
-                includeFontPadding = config.includeFontPadding
+                lineHeightMult = typography.lineHeightMult,
+                textAlign = typography.textAlign,
+                breakStrategy = typography.breakStrategy,
+                hyphenationMode = typography.hyphenationMode,
+                includeFontPadding = typography.includeFontPadding
             )
             measuredEnd = measure.endChar.coerceIn(0, rawLength)
 
