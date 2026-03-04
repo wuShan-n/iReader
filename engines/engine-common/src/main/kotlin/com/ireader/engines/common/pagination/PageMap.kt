@@ -1,14 +1,14 @@
-package com.ireader.engines.txt.internal.pagination
+package com.ireader.engines.common.pagination
 
-import com.ireader.engines.txt.internal.util.prepareTempFile
-import com.ireader.engines.txt.internal.util.replaceFileAtomically
-import com.ireader.engines.txt.internal.util.readVarLongOrNull
-import com.ireader.engines.txt.internal.util.writeVarLong
+import com.ireader.engines.common.io.prepareTempFile
+import com.ireader.engines.common.io.readVarLongOrNull
+import com.ireader.engines.common.io.replaceFileAtomically
+import com.ireader.engines.common.io.writeVarLong
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.TreeSet
 
-internal object PageMap {
+object PageMap {
 
     private const val MAGIC = 0x504D4150 // PMAP
     private const val VERSION = 1
@@ -79,3 +79,4 @@ internal object PageMap {
         return out
     }
 }
+

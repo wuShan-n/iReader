@@ -1,8 +1,9 @@
 package com.ireader.engines.txt.internal.softbreak
 
+import com.ireader.engines.common.android.reflow.ReflowSoftBreakIndex
 import com.ireader.engines.txt.internal.open.TxtMeta
-import com.ireader.engines.txt.internal.util.readStringUtf8
-import com.ireader.engines.txt.internal.util.readVarLongOrNull
+import com.ireader.engines.common.io.readStringUtf8
+import com.ireader.engines.common.io.readVarLongOrNull
 import java.io.Closeable
 import java.io.File
 import java.io.RandomAccessFile
@@ -16,7 +17,7 @@ internal class SoftBreakIndex private constructor(
     val newlineCount: Long,
     val sampleHash: String,
     private val blocks: List<BlockMeta>
-) : Closeable {
+) : Closeable, ReflowSoftBreakIndex {
 
     internal data class BlockMeta(
         val filePos: Long,
@@ -90,7 +91,7 @@ internal class SoftBreakIndex private constructor(
         }
     }
 
-    fun forEachNewlineInRange(
+    override fun forEachNewlineInRange(
         startChar: Long,
         endChar: Long,
         consumer: (offset: Long, isSoft: Boolean) -> Unit

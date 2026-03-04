@@ -17,6 +17,7 @@ import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
@@ -75,7 +76,7 @@ internal class PdfDocument(
             return@withContext ReaderResult.Err(ReaderError.Internal("PDF document already closed"))
         }
 
-        val fixedConfig = initialConfig as? RenderConfig.FixedPage ?: RenderConfig.FixedPage()
+        val fixedConfig = (initialConfig as? RenderConfig.FixedPage ?: RenderConfig.FixedPage()).sanitized()
         val initialPage = initialLocator?.toPdfPageIndexOrNull(pageCount) ?: 0
 
         val annotationProvider = engineConfig.annotationProviderFactory?.invoke(id)

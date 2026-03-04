@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.pagination
 
+import com.ireader.engines.common.pagination.PageMap
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

@@ -8,13 +8,16 @@
 package com.ireader.engines.txt.internal.render
 
 import android.util.Log
+import com.ireader.engines.common.android.controller.BaseCoroutineReaderController
+import com.ireader.engines.common.android.reflow.ReflowPageSlice
+import com.ireader.engines.common.android.reflow.ReflowPageSliceCache
+import com.ireader.engines.common.android.reflow.ReflowPaginationIndexStore
+import com.ireader.engines.common.android.reflow.ReflowPaginator
 import com.ireader.engines.common.cache.LruCache
 import com.ireader.engines.txt.internal.link.LinkDetector
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
-import com.ireader.engines.txt.internal.pagination.PageSlice
-import com.ireader.engines.txt.internal.pagination.TxtPaginator
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
@@ -37,26 +40,52 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.api.render.RenderSurface
+import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
-import kotlinx.coroutines.CancellationException
+import com.ireader.reader.model.Progression
+import java.util.Locale
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
+
+private fun initialRenderState(
+    initialOffset: Long,
+    maxOffset: Long,
+    config: RenderConfig.ReflowText
+): RenderState {
+    val safeMax = maxOffset.coerceAtLeast(0L)
+    val start = initialOffset.coerceIn(0L, safeMax)
+    val percent = if (safeMax == 0L) {
+        0.0
+    } else {
+        start.toDouble() / safeMax.toDouble()
+    }.coerceIn(0.0, 1.0)
+
+    return RenderState(
+        locator = TxtBlockLocatorCodec.locatorForOffset(
+            offset = start,
+            maxOffset = safeMax,
+            extras = mapOf("progression" to String.format(Locale.US, "%.6f", percent))
+        ),
+        progression = Progression(
+            percent = percent,
+            label = "${(percent * 100.0).roundToInt()}%"
+        ),
+        nav = NavigationAvailability(
+            canGoPrev = start > 0L,
+            canGoNext = start < safeMax
+        ),
+        config = config
+    )
+}
 
 internal class TxtController(
     private val documentKey: String,
@@ -70,19 +99,27 @@ internal class TxtController(
     private val annotationProvider: AnnotationProvider?,
     private val ioDispatcher: CoroutineDispatcher,
     defaultDispatcher: CoroutineDispatcher
-) : ReaderController {
-
-    private val scope = CoroutineScope(SupervisorJob() + defaultDispatcher)
-    private val mutex = Mutex()
+) : BaseCoroutineReaderController(
+    initialState = initialRenderState(
+        initialOffset = initialOffset,
+        maxOffset = store.lengthChars,
+        config = initialConfig
+    ),
+    dispatcher = defaultDispatcher
+) {
 
     private var softBreakIndex: SoftBreakIndex? = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)
-    private val paginator = TxtPaginator(store, meta, softBreakIndex)
-    private val sliceCache = TxtPageSliceCache(
+    private val paginator = ReflowPaginator(
+        source = TxtTextSource(store),
+        hardWrapLikely = meta.hardWrapLikely,
+        softBreakIndex = softBreakIndex
+    )
+    private val sliceCache = ReflowPageSliceCache(
         paginator = paginator,
         maxPageCache = maxPageCache,
         maxOffsetProvider = { store.lengthChars }
     )
-    private val paginationIndex = TxtPaginationIndexStore(
+    private val paginationIndex = ReflowPaginationIndexStore(
         enabled = persistPagination,
         documentKey = documentKey,
         paginationDir = files.paginationDir
@@ -93,9 +130,6 @@ internal class TxtController(
     private var annotationObserverJob: Job? = null
     private var annotationRevision: Long = 0L
 
-    private val eventsMutable = MutableSharedFlow<ReaderEvent>(extraBufferCapacity = 32)
-    override val events: Flow<ReaderEvent> = eventsMutable.asSharedFlow()
-
     private val initialStart = initialOffset.coerceIn(0L, store.lengthChars)
     private val navigation = TxtNavigationState(initialStart)
 
@@ -103,18 +137,6 @@ internal class TxtController(
     private var currentConfig: RenderConfig.ReflowText = initialConfig
     private var currentEffectiveConfig: RenderConfig.ReflowText = initialConfig.toTxtEffectiveConfig()
 
-    private val stateMutable = MutableStateFlow(
-        RenderState(
-            locator = navigation.locatorFor(store.lengthChars),
-            progression = navigation.progressionFor(store.lengthChars),
-            nav = NavigationAvailability(
-                canGoPrev = navigation.canGoPrev(),
-                canGoNext = navigation.canGoNext(store.lengthChars)
-            ),
-            config = initialConfig
-        )
-    )
-    override val state: StateFlow<RenderState> = stateMutable.asStateFlow()
 
     init {
         if (softBreakIndex == null) {
@@ -155,10 +177,11 @@ internal class TxtController(
     override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> {
         val reflow = config as? RenderConfig.ReflowText
             ?: return ReaderResult.Err(ReaderError.Internal("TXT requires ReflowText config"))
+        val sanitized = reflow.sanitized()
         return mutex.withLock {
-            currentConfig = reflow
-            currentEffectiveConfig = reflow.toTxtEffectiveConfig()
-            stateMutable.value = stateMutable.value.copy(config = reflow)
+            currentConfig = sanitized
+            currentEffectiveConfig = sanitized.toTxtEffectiveConfig()
+            stateMutable.value = stateMutable.value.copy(config = sanitized)
             sliceCache.clear()
             pageExtrasCache.clear()
             reloadPaginationIndexIfNeededLocked()
@@ -311,21 +334,20 @@ internal class TxtController(
         }
     }
 
-    override fun close() {
+    override fun onClose() {
         runCatching { paginationIndex.saveIfDirty() }
-            .onFailure { reportBackgroundFailure("save-pagination-index", it) }
+            .onFailure { Log.w(TAG, "TXT controller failed to save pagination index", it) }
         pageCompletionJob?.cancel()
         annotationObserverJob?.cancel()
         runCatching { softBreakIndex?.close() }
-            .onFailure { reportBackgroundFailure("close-soft-break-index", it) }
-        scope.cancel()
+            .onFailure { Log.w(TAG, "TXT controller failed to close soft-break index", it) }
     }
 
     private suspend fun renderLocked(policy: RenderPolicy): ReaderResult<RenderPage> {
         val constraintsLocal = constraints
             ?: return ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
 
-        var builtSlice: PageSlice? = null
+        var builtSlice: ReflowPageSlice? = null
         var cacheHit = false
         val elapsed = measureTimeMillis {
             if (policy.allowCache) {
@@ -358,7 +380,7 @@ internal class TxtController(
     }
 
     private suspend fun buildPageResultLocked(
-        slice: PageSlice,
+        slice: ReflowPageSlice,
         renderTimeMs: Long,
         cacheHit: Boolean
     ): ReaderResult<RenderPage> {
@@ -528,20 +550,8 @@ internal class TxtController(
         }
     }
 
-    private fun launchSafely(name: String, block: suspend () -> Unit): Job {
-        return scope.launch {
-            try {
-                block()
-            } catch (ce: CancellationException) {
-                throw ce
-            } catch (e: Exception) {
-                reportBackgroundFailure(name, e)
-            }
-        }
-    }
-
-    private fun reportBackgroundFailure(stage: String, throwable: Throwable) {
-        Log.w(TAG, "TXT controller background task failed: $stage", throwable)
+    override fun onCoroutineError(name: String, throwable: Throwable) {
+        Log.w(TAG, "TXT controller background task failed: $name", throwable)
     }
 
     private data class PageCompletionBatchResult(

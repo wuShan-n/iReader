@@ -1,6 +1,6 @@
-package com.ireader.engines.txt.internal.pagination
+package com.ireader.engines.common.android.reflow
 
-internal data class PageSlice(
+data class ReflowPageSlice(
     val startOffset: Long,
     val endOffset: Long,
     val text: CharSequence

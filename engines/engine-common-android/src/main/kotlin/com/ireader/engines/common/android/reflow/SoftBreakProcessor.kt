@@ -1,12 +1,12 @@
 @file:Suppress("ComplexCondition", "CyclomaticComplexMethod", "ReturnCount")
 
-package com.ireader.engines.txt.internal.render
+package com.ireader.engines.common.android.reflow
 
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.LeadingMarginSpan
 
-internal object SoftBreakProcessor {
+object SoftBreakProcessor {
 
     fun process(
         rawText: String,

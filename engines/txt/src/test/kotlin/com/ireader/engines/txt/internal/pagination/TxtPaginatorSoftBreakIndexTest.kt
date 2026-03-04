@@ -1,8 +1,10 @@
 package com.ireader.engines.txt.internal.pagination
 
+import com.ireader.engines.common.android.reflow.ReflowPaginator
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.Utf16LeFileWriter
+import com.ireader.engines.txt.internal.render.TxtTextSource
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
@@ -51,9 +53,9 @@ class TxtPaginatorSoftBreakIndexTest {
             assertNotNull(softBreakIndex)
             softBreakIndex!!.use { index ->
                 Utf16TextStore(files.contentU16).use { store ->
-                    val paginator = TxtPaginator(
-                        store = store,
-                        meta = meta,
+                    val paginator = ReflowPaginator(
+                        source = TxtTextSource(store),
+                        hardWrapLikely = meta.hardWrapLikely,
                         softBreakIndex = index
                     )
                     val page = paginator.pageAt(

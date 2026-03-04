@@ -7,6 +7,7 @@ import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.RenderConfigSanitizer
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentMetadata
@@ -47,8 +48,9 @@ class DefaultReaderRuntime(
                 val config = initialConfig
                     ?: resolveInitialConfig?.invoke(document.capabilities)
                     ?: RenderDefaults.configFor(document.capabilities)
+                val sanitized = RenderConfigSanitizer.sanitize(config, document.capabilities)
 
-                val sessionResult = catchingSuspend { document.createSession(initialLocator, config) }
+                val sessionResult = catchingSuspend { document.createSession(initialLocator, sanitized) }
                 when (sessionResult) {
                     is ReaderResult.Ok -> ReaderResult.Ok(ReaderSessionHandle(document, sessionResult.value))
                     is ReaderResult.Err -> {

@@ -1,10 +1,10 @@
-package com.ireader.engines.txt.internal.util
+package com.ireader.engines.common.io
 
 import java.io.EOFException
 import java.io.IOException
 import java.io.RandomAccessFile
 
-internal fun RandomAccessFile.writeVarLong(value: Long) {
+fun RandomAccessFile.writeVarLong(value: Long) {
     require(value >= 0L) { "VarLong only supports non-negative values: $value" }
     var v = value
     while ((v and -128L) != 0L) {
@@ -14,7 +14,7 @@ internal fun RandomAccessFile.writeVarLong(value: Long) {
     writeByte(v.toInt())
 }
 
-internal fun RandomAccessFile.readVarLongOrNull(): Long? {
+fun RandomAccessFile.readVarLongOrNull(): Long? {
     var shift = 0
     var result = 0L
     try {
@@ -32,16 +32,17 @@ internal fun RandomAccessFile.readVarLongOrNull(): Long? {
     }
 }
 
-internal fun RandomAccessFile.writeStringUtf8(value: String) {
+fun RandomAccessFile.writeStringUtf8(value: String) {
     val bytes = value.toByteArray(Charsets.UTF_8)
     require(bytes.size <= 0xFFFF) { "String too long for u16 length: ${bytes.size}" }
     writeShort(bytes.size)
     write(bytes)
 }
 
-internal fun RandomAccessFile.readStringUtf8(): String {
+fun RandomAccessFile.readStringUtf8(): String {
     val len = readShort().toInt() and 0xFFFF
     val bytes = ByteArray(len)
     readFully(bytes)
     return String(bytes, Charsets.UTF_8)
 }
+

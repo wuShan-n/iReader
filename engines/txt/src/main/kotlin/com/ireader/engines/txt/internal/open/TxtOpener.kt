@@ -15,8 +15,8 @@ import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.common.hash.Hashing
 import com.ireader.engines.common.id.DocumentIds
 import com.ireader.engines.txt.internal.encoding.EncodingDetector
-import com.ireader.engines.txt.internal.util.prepareTempFile
-import com.ireader.engines.txt.internal.util.replaceFileAtomically
+import com.ireader.engines.common.io.prepareTempFile
+import com.ireader.engines.common.io.replaceFileAtomically
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.DocumentId

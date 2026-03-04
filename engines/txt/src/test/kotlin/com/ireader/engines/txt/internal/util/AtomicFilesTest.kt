@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.util
 
+import com.ireader.engines.common.io.replaceFileAtomically
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

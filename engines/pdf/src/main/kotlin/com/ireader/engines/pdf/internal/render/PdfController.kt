@@ -3,6 +3,7 @@
 package com.ireader.engines.pdf.internal.render
 
 import android.graphics.Bitmap
+import com.ireader.engines.common.android.controller.BaseCoroutineReaderController
 import com.ireader.engines.pdf.PdfEngineConfig
 import com.ireader.engines.pdf.internal.backend.PdfBackend
 import com.ireader.engines.pdf.internal.cache.TileCache
@@ -19,7 +20,6 @@ import com.ireader.reader.api.render.InvalidateReason
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.NavigationAvailability
 import com.ireader.reader.api.render.PageId
-import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
@@ -28,6 +28,7 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.api.render.RenderState
+import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorSchemes
@@ -35,18 +36,9 @@ import com.ireader.reader.model.NormalizedRect
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.system.measureTimeMillis
 import kotlin.math.roundToInt
 
 internal class PdfController(
@@ -56,10 +48,24 @@ internal class PdfController(
     initialConfig: RenderConfig.FixedPage,
     private val annotationProvider: AnnotationProvider?,
     private val engineConfig: PdfEngineConfig
-) : ReaderController {
-
-    private val mutex = Mutex()
-    private val scope = CoroutineScope(SupervisorJob() + engineConfig.renderDispatcher)
+) : BaseCoroutineReaderController(
+    initialState = RenderState(
+        locator = pageLocator(
+            initialPageIndex.coerceIn(0, pageCount.coerceAtLeast(1) - 1),
+            pageCount
+        ),
+        progression = progressionForPage(
+            initialPageIndex.coerceIn(0, pageCount.coerceAtLeast(1) - 1),
+            pageCount
+        ),
+        nav = NavigationAvailability(
+            canGoPrev = initialPageIndex.coerceIn(0, pageCount.coerceAtLeast(1) - 1) > 0,
+            canGoNext = initialPageIndex.coerceIn(0, pageCount.coerceAtLeast(1) - 1) < pageCount - 1
+        ),
+        config = initialConfig
+    ),
+    dispatcher = engineConfig.renderDispatcher
+) {
     private val tileCache = TileCache(engineConfig.tileCacheMaxBytes)
     private val tileInflight = TileInflight(scope)
     private var activeTileProvider: PdfTileProvider? = null
@@ -68,22 +74,6 @@ internal class PdfController(
     private var currentPage = initialPageIndex.coerceIn(0, pageCount.coerceAtLeast(1) - 1)
     private var currentConfig = initialConfig
     private var constraints: LayoutConstraints? = null
-
-    private val eventsMutable = MutableSharedFlow<ReaderEvent>(extraBufferCapacity = 32)
-    override val events: Flow<ReaderEvent> = eventsMutable.asSharedFlow()
-
-    private val stateMutable = MutableStateFlow(
-        RenderState(
-            locator = pageLocator(currentPage, pageCount),
-            progression = progressionForPage(currentPage, pageCount),
-            nav = NavigationAvailability(
-                canGoPrev = currentPage > 0,
-                canGoNext = currentPage < pageCount - 1
-            ),
-            config = initialConfig
-        )
-    )
-    override val state: StateFlow<RenderState> = stateMutable.asStateFlow()
 
     override suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
@@ -100,8 +90,9 @@ internal class PdfController(
         val fixed = config as? RenderConfig.FixedPage
             ?: return ReaderResult.Err(ReaderError.Internal("PDF requires RenderConfig.FixedPage"))
         return mutex.withLock {
-            currentConfig = fixed
-            stateMutable.value = stateMutable.value.copy(config = fixed)
+            val sanitized = fixed.sanitized()
+            currentConfig = sanitized
+            stateMutable.value = stateMutable.value.copy(config = sanitized)
             ReaderResult.Ok(Unit)
         }
     }
@@ -167,18 +158,19 @@ internal class PdfController(
         }
     }
 
-    override fun close() {
+    override fun onClose() {
         prefetchJob?.cancel()
         runCatching { activeTileProvider?.close() }
         activeTileProvider = null
         runCatching { runBlocking { tileInflight.clear() } }
         runCatching { runBlocking { tileCache.clear() } }
-        scope.cancel()
     }
 
     private suspend fun renderLocked(policy: RenderPolicy): ReaderResult<RenderPage> {
         val layout = constraints
             ?: return ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
+
+        val startTimeNs = System.nanoTime()
 
         val pageSize = runCatching { backend.pageSize(currentPage) }
             .getOrElse { return ReaderResult.Err(ReaderError.Internal("Failed to read page size", it)) }
@@ -237,14 +229,7 @@ internal class PdfController(
         }.getOrElse {
             return ReaderResult.Err(ReaderError.Internal("Failed to render PDF content", it))
         }
-
-        var metrics: RenderMetrics? = null
-        val elapsed = measureTimeMillis {
-            metrics = RenderMetrics(
-                renderTimeMs = 0L,
-                cacheHit = policy.allowCache
-            )
-        }
+        val elapsedMs = ((System.nanoTime() - startTimeNs) / 1_000_000L).coerceAtLeast(0L)
 
         val page = RenderPage(
             id = PageId(
@@ -265,7 +250,10 @@ internal class PdfController(
             content = content,
             links = links,
             decorations = decorations,
-            metrics = metrics?.copy(renderTimeMs = elapsed)
+            metrics = RenderMetrics(
+                renderTimeMs = elapsedMs,
+                cacheHit = false
+            )
         )
 
         updateStateLocked()

@@ -1,23 +1,21 @@
-package com.ireader.engines.txt.internal.render
+package com.ireader.engines.common.android.reflow
 
 import com.ireader.engines.common.cache.LruCache
-import com.ireader.engines.txt.internal.pagination.PageSlice
-import com.ireader.engines.txt.internal.pagination.TxtPaginator
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 
-internal class TxtPageSliceCache(
-    private val paginator: TxtPaginator,
+class ReflowPageSliceCache(
+    private val paginator: ReflowPaginator,
     maxPageCache: Int,
     private val maxOffsetProvider: () -> Long
 ) {
-    private val pageCache = LruCache<Long, PageSlice>(maxPageCache)
+    private val pageCache = LruCache<Long, ReflowPageSlice>(maxPageCache)
 
     fun clear() {
         pageCache.clear()
     }
 
-    fun getCached(start: Long): PageSlice? {
+    fun getCached(start: Long): ReflowPageSlice? {
         return pageCache[start.normalized()]
     }
 
@@ -26,7 +24,7 @@ internal class TxtPageSliceCache(
         constraints: LayoutConstraints,
         config: RenderConfig.ReflowText,
         allowCache: Boolean
-    ): PageSlice {
+    ): ReflowPageSlice {
         val normalizedStart = start.normalized()
         if (allowCache) {
             val cached = pageCache[normalizedStart]
@@ -48,3 +46,4 @@ internal class TxtPageSliceCache(
         return coerceIn(0L, maxOffset)
     }
 }
+

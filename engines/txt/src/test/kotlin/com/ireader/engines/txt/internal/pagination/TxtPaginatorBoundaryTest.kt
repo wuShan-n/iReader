@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.pagination
 
+import com.ireader.engines.common.android.reflow.ReflowPaginator
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -16,7 +17,7 @@ class TxtPaginatorBoundaryTest {
         }
         val measuredEnd = raw.length - 1
 
-        val adjusted = TxtPaginator.adjustMeasuredEndForParagraphTail(
+        val adjusted = ReflowPaginator.adjustMeasuredEndForParagraphTail(
             raw = raw,
             measuredEnd = measuredEnd,
             rawLength = raw.length
@@ -30,7 +31,7 @@ class TxtPaginatorBoundaryTest {
         val raw = "This is a single paragraph without line breaks and should not rewind."
         val measuredEnd = raw.length - 1
 
-        val adjusted = TxtPaginator.adjustMeasuredEndForParagraphTail(
+        val adjusted = ReflowPaginator.adjustMeasuredEndForParagraphTail(
             raw = raw,
             measuredEnd = measuredEnd,
             rawLength = raw.length

@@ -2,10 +2,10 @@ package com.ireader.engines.txt.internal.search
 
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.store.Utf16TextStore
-import com.ireader.engines.txt.internal.util.prepareTempFile
-import com.ireader.engines.txt.internal.util.readStringUtf8
-import com.ireader.engines.txt.internal.util.replaceFileAtomically
-import com.ireader.engines.txt.internal.util.writeStringUtf8
+import com.ireader.engines.common.io.prepareTempFile
+import com.ireader.engines.common.io.readStringUtf8
+import com.ireader.engines.common.io.replaceFileAtomically
+import com.ireader.engines.common.io.writeStringUtf8
 import java.io.File
 import java.io.RandomAccessFile
 import kotlin.math.ceil

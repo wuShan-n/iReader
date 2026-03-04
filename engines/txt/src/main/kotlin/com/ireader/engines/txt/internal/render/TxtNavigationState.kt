@@ -1,7 +1,7 @@
 package com.ireader.engines.txt.internal.render
 
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
-import com.ireader.engines.txt.internal.pagination.PageSlice
+import com.ireader.engines.common.android.reflow.ReflowPageSlice
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.Progression
@@ -21,7 +21,7 @@ internal class TxtNavigationState(
         currentStart = start.coerceIn(0L, maxOffset)
     }
 
-    fun updateFromSlice(slice: PageSlice) {
+    fun updateFromSlice(slice: ReflowPageSlice) {
         currentStart = slice.startOffset
         currentEnd = slice.endOffset
         val consumed = (slice.endOffset - slice.startOffset).toInt().coerceAtLeast(1)
@@ -61,7 +61,7 @@ internal class TxtNavigationState(
         fromStart: Long,
         maxOffset: Long,
         constraints: LayoutConstraints,
-        resolveSlice: suspend (Long, LayoutConstraints) -> PageSlice
+        resolveSlice: suspend (Long, LayoutConstraints) -> ReflowPageSlice
     ): Long {
         if (fromStart <= 0L) {
             return 0L

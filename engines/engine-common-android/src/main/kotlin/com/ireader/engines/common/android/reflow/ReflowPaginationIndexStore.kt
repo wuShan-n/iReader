@@ -1,14 +1,14 @@
-package com.ireader.engines.txt.internal.render
+package com.ireader.engines.common.android.reflow
 
 import com.ireader.engines.common.android.pagination.ReflowPaginationProfile
-import com.ireader.engines.txt.internal.pagination.PageMap
+import com.ireader.engines.common.pagination.PageMap
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 import java.io.File
 import java.util.TreeSet
 import kotlin.math.roundToInt
 
-internal class TxtPaginationIndexStore(
+class ReflowPaginationIndexStore(
     private val enabled: Boolean,
     private val documentKey: String,
     private val paginationDir: File
@@ -106,3 +106,4 @@ internal class TxtPaginationIndexStore(
         return File(paginationDir, "pagemap_v2_$profile.txt")
     }
 }
+

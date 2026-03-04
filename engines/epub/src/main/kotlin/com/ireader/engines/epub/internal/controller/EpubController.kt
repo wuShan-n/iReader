@@ -24,6 +24,7 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.api.render.RenderSurface
+import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.Progression
 import java.util.concurrent.atomic.AtomicReference
@@ -150,12 +151,16 @@ internal class EpubController(
     }
 
     override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> {
-        _state.value = _state.value.copy(config = config)
+        val sanitized = when (config) {
+            is RenderConfig.ReflowText -> config.sanitized()
+            is RenderConfig.FixedPage -> config.sanitized()
+        }
+        _state.value = _state.value.copy(config = sanitized)
         val fragment = fragmentRef.get() ?: return ReaderResult.Ok(Unit)
 
         return withContext(mainDispatcher) {
             try {
-                applyConfig(fragment, config)
+                applyConfig(fragment, sanitized)
                 ReaderResult.Ok(Unit)
             } catch (t: Throwable) {
                 ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))

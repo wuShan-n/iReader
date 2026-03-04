@@ -1,27 +1,23 @@
 @file:Suppress("LongMethod", "MagicNumber", "ReturnCount")
 
-package com.ireader.engines.txt.internal.pagination
+package com.ireader.engines.common.android.reflow
 
 import android.text.SpannableStringBuilder
 import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
 import com.ireader.engines.common.android.layout.TextPaintFactory
-import com.ireader.engines.txt.internal.open.TxtMeta
-import com.ireader.engines.txt.internal.render.SoftBreakProcessor
-import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
-import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.toTypographySpec
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-internal class TxtPaginator(
-    private val store: Utf16TextStore,
-    private val meta: TxtMeta,
-    private var softBreakIndex: SoftBreakIndex? = null
+class ReflowPaginator(
+    private val source: ReflowTextSource,
+    private val hardWrapLikely: Boolean,
+    private var softBreakIndex: ReflowSoftBreakIndex? = null
 ) {
 
-    fun setSoftBreakIndex(index: SoftBreakIndex?) {
+    fun setSoftBreakIndex(index: ReflowSoftBreakIndex?) {
         softBreakIndex = index
     }
 
@@ -29,14 +25,14 @@ internal class TxtPaginator(
         startOffset: Long,
         config: RenderConfig.ReflowText,
         constraints: LayoutConstraints
-    ): PageSlice {
-        if (store.lengthChars <= 0L) {
-            return PageSlice(0L, 0L, "")
+    ): ReflowPageSlice {
+        if (source.lengthChars <= 0L) {
+            return ReflowPageSlice(0L, 0L, "")
         }
 
-        val start = startOffset.coerceIn(0L, store.lengthChars)
-        if (start >= store.lengthChars) {
-            return PageSlice(store.lengthChars, store.lengthChars, "")
+        val start = startOffset.coerceIn(0L, source.lengthChars)
+        if (start >= source.lengthChars) {
+            return ReflowPageSlice(source.lengthChars, source.lengthChars, "")
         }
 
         val startsAtParagraphBoundary = startsAtParagraphBoundary(start)
@@ -56,12 +52,12 @@ internal class TxtPaginator(
         var measuredRaw = ""
 
         while (true) {
-            val toRead = min(windowChars.toLong(), store.lengthChars - start).toInt()
-            val raw = store.readString(start, toRead)
+            val toRead = min(windowChars.toLong(), source.lengthChars - start).toInt()
+            val raw = source.readString(start, toRead)
             rawLength = raw.length
             measuredRaw = raw
             if (rawLength == 0) {
-                return PageSlice(start, start, "")
+                return ReflowPageSlice(start, start, "")
             }
 
             val display = if (softBreakIndex != null) {
@@ -75,7 +71,7 @@ internal class TxtPaginator(
             } else {
                 SoftBreakProcessor.process(
                     rawText = raw,
-                    hardWrapLikely = meta.hardWrapLikely,
+                    hardWrapLikely = hardWrapLikely,
                     paragraphSpacingPx = paragraphSpacingPx,
                     paragraphIndentPx = paragraphIndentPx,
                     startsAtParagraphBoundary = startsAtParagraphBoundary
@@ -97,7 +93,7 @@ internal class TxtPaginator(
             measuredEnd = measure.endChar.coerceIn(0, rawLength)
 
             val consumedAllWindow = measuredEnd >= rawLength
-            val reachedDocumentEnd = start + rawLength >= store.lengthChars
+            val reachedDocumentEnd = start + rawLength >= source.lengthChars
             if (!consumedAllWindow || reachedDocumentEnd || windowChars >= MAX_WINDOW_CHARS) {
                 break
             }
@@ -105,7 +101,7 @@ internal class TxtPaginator(
         }
 
         var end = start + measuredEnd.toLong()
-        if (measuredEnd in 1 until rawLength && start + rawLength.toLong() < store.lengthChars) {
+        if (measuredEnd in 1 until rawLength && start + rawLength.toLong() < source.lengthChars) {
             val adjusted = adjustMeasuredEndForParagraphTail(measuredRaw, measuredEnd, rawLength)
             if (adjusted in 1 until measuredEnd) {
                 measuredEnd = adjusted
@@ -113,14 +109,14 @@ internal class TxtPaginator(
             }
         }
         if (end <= start) {
-            end = (start + 1L).coerceAtMost(store.lengthChars)
+            end = (start + 1L).coerceAtMost(source.lengthChars)
             measuredEnd = (end - start).toInt()
             measuredText = measuredText.subSequence(0, measuredEnd)
         } else {
             measuredText = measuredText.subSequence(0, measuredEnd)
         }
 
-        return PageSlice(
+        return ReflowPageSlice(
             startOffset = start,
             endOffset = end,
             text = measuredText
@@ -162,7 +158,7 @@ internal class TxtPaginator(
         if (offset <= 0L) {
             return true
         }
-        val previous = store.readString(offset - 1L, 1)
+        val previous = source.readString(offset - 1L, 1)
         return previous.firstOrNull() == '\n'
     }
 
@@ -182,7 +178,7 @@ internal class TxtPaginator(
         private const val MIN_PARAGRAPH_CHARS_FOR_REWIND = 24
         private const val MAX_REWIND_CHARS = 240
 
-        internal fun adjustMeasuredEndForParagraphTail(
+        fun adjustMeasuredEndForParagraphTail(
             raw: String,
             measuredEnd: Int,
             rawLength: Int
@@ -213,3 +209,4 @@ internal class TxtPaginator(
         }
     }
 }
+

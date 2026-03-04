@@ -1,9 +1,9 @@
-package com.ireader.engines.txt.internal.render
+package com.ireader.engines.common.android.reflow
 
 import android.graphics.Paint
 import android.text.style.LineHeightSpan
 
-internal class ParagraphSpacingSpan(
+class ParagraphSpacingSpan(
     private val extraPx: Int
 ) : LineHeightSpan {
     override fun chooseHeight(
@@ -23,4 +23,3 @@ internal class ParagraphSpacingSpan(
         }
     }
 }
-

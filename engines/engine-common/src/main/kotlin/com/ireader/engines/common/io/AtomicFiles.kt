@@ -1,16 +1,16 @@
-package com.ireader.engines.txt.internal.util
+package com.ireader.engines.common.io
 
 import java.io.File
 import java.io.IOException
 
-internal fun prepareTempFile(file: File) {
+fun prepareTempFile(file: File) {
     file.parentFile?.mkdirs()
     if (file.exists() && !file.delete()) {
         throw IOException("Failed to delete stale temp file: ${file.absolutePath}")
     }
 }
 
-internal fun replaceFileAtomically(
+fun replaceFileAtomically(
     tempFile: File,
     targetFile: File,
     rename: (File, File) -> Boolean = { src, dst -> src.renameTo(dst) }
@@ -27,3 +27,4 @@ internal fun replaceFileAtomically(
         tempFile.deleteOnExit()
     }
 }
+

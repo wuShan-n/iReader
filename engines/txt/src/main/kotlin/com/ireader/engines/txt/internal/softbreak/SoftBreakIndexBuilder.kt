@@ -6,10 +6,10 @@ import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.provider.ChapterDetector
 import com.ireader.engines.txt.internal.store.Utf16TextStore
-import com.ireader.engines.txt.internal.util.prepareTempFile
-import com.ireader.engines.txt.internal.util.replaceFileAtomically
-import com.ireader.engines.txt.internal.util.writeStringUtf8
-import com.ireader.engines.txt.internal.util.writeVarLong
+import com.ireader.engines.common.io.prepareTempFile
+import com.ireader.engines.common.io.replaceFileAtomically
+import com.ireader.engines.common.io.writeStringUtf8
+import com.ireader.engines.common.io.writeVarLong
 import java.io.File
 import java.io.RandomAccessFile
 import kotlinx.coroutines.CoroutineDispatcher

@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.render
 
+import com.ireader.engines.common.android.reflow.SoftBreakProcessor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

@@ -13,6 +13,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
@@ -77,6 +78,7 @@ internal class TxtDocument(
                     ?: return@withContext ReaderResult.Err(
                         ReaderError.Internal("TXT engine requires RenderConfig.ReflowText")
                     )
+                val effectiveConfig = config.sanitized()
                 val initialOffset = when {
                     initialLocator == null -> 0L
                     else -> TxtBlockLocatorCodec.parseOffset(initialLocator, store.lengthChars) ?: 0L
@@ -88,7 +90,7 @@ internal class TxtDocument(
                     store = store,
                     meta = meta,
                     initialOffset = initialOffset,
-                    initialConfig = config,
+                    initialConfig = effectiveConfig,
                     maxPageCache = maxPageCache,
                     persistPagination = persistPagination,
                     files = files,
