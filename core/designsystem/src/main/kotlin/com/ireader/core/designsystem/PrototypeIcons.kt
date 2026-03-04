@@ -475,9 +475,58 @@ object PrototypeIcons {
             )
         }
     }
+
+    @Composable
+    fun Bookmark(
+        modifier: Modifier = Modifier.size(22.dp),
+        tint: Color = LocalContentColor.current
+    ) {
+        Canvas(modifier = modifier) {
+            val stroke = iconStroke()
+            val path = Path().apply {
+                moveTo(size.width * 0.32f, size.height * 0.14f)
+                lineTo(size.width * 0.68f, size.height * 0.14f)
+                lineTo(size.width * 0.68f, size.height * 0.82f)
+                lineTo(size.width * 0.5f, size.height * 0.66f)
+                lineTo(size.width * 0.32f, size.height * 0.82f)
+                close()
+            }
+            drawPath(path = path, color = tint, style = Stroke(width = stroke, join = StrokeJoin.Round))
+        }
+    }
+
+    @Composable
+    fun Note(
+        modifier: Modifier = Modifier.size(22.dp),
+        tint: Color = LocalContentColor.current
+    ) {
+        Canvas(modifier = modifier) {
+            val stroke = iconStroke()
+            drawRoundRect(
+                color = tint,
+                topLeft = p(0.16f, 0.2f),
+                size = Size(size.width * 0.68f, size.height * 0.64f),
+                cornerRadius = CornerRadius(size.minDimension * 0.07f),
+                style = Stroke(width = stroke)
+            )
+            drawLine(
+                color = tint,
+                start = p(0.28f, 0.4f),
+                end = p(0.72f, 0.4f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = tint,
+                start = p(0.28f, 0.56f),
+                end = p(0.62f, 0.56f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+        }
+    }
 }
 
 private fun DrawScope.iconStroke(): Float = size.minDimension * 0.075f
 
 private fun DrawScope.p(x: Float, y: Float): Offset = Offset(size.width * x, size.height * y)
-

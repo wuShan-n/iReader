@@ -25,13 +25,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Bookmarks
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -1125,15 +1121,15 @@ private fun ReaderMoreSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                MoreActionItem(label = "搜索", icon = Icons.Outlined.Search, darkSurface = darkSurface, onClick = {
+                MoreActionItem(label = "搜索", icon = { tint -> PrototypeIcons.Search(tint = tint) }, darkSurface = darkSurface, onClick = {
                     onClose()
                     onOpenSearch()
                 })
-                MoreActionItem(label = "笔记", icon = Icons.Outlined.Bookmarks, darkSurface = darkSurface, onClick = {
+                MoreActionItem(label = "笔记", icon = { tint -> PrototypeIcons.Note(tint = tint) }, darkSurface = darkSurface, onClick = {
                     onClose()
                     onOpenAnnotations()
                 })
-                MoreActionItem(label = "分享", icon = Icons.Outlined.Share, darkSurface = darkSurface, onClick = {
+                MoreActionItem(label = "分享", icon = { tint -> PrototypeIcons.Share(tint = tint) }, darkSurface = darkSurface, onClick = {
                     onClose()
                     onShare()
                 })
@@ -1151,14 +1147,14 @@ private fun ReaderMoreSheet(
 @Composable
 private fun MoreActionItem(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: @Composable (Color) -> Unit,
     darkSurface: Boolean,
     onClick: () -> Unit
 ) {
-    val iconBg = if (darkSurface) Color(0xFF2F2F2F) else Color(0xFFF5F2EC)
-    val iconBorder = if (darkSurface) Color(0x1FFFFFFF) else Color(0x22000000)
-    val tint = if (darkSurface) Color(0xFFE5E5E5) else Color(0xFF585858)
-    val textColor = if (darkSurface) Color(0xFFE2DED7) else Color(0xFF6A6865)
+    val iconBg = if (darkSurface) Color(0xFF2F2F2F) else Color.White
+    val iconBorder = if (darkSurface) Color(0x1FFFFFFF) else ReaderTokens.Palette.PrototypeBorder
+    val tint = if (darkSurface) Color(0xFFE5E5E5) else ReaderTokens.Palette.PrototypeTextSecondary
+    val textColor = if (darkSurface) Color(0xFFE2DED7) else ReaderTokens.Palette.PrototypeTextSecondary
     TextButton(onClick = onClick) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1166,12 +1162,16 @@ private fun MoreActionItem(
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .background(iconBg, CircleShape)
-                    .border(1.dp, iconBorder, CircleShape),
+                    .size(52.dp)
+                    .background(iconBg, RoundedCornerShape(ReaderTokens.Shape.PrototypeActionTile))
+                    .border(
+                        width = ReaderTokens.Border.Hairline,
+                        color = iconBorder,
+                        shape = RoundedCornerShape(ReaderTokens.Shape.PrototypeActionTile)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = label, tint = tint)
+                icon(tint)
             }
             Text(
                 text = label,
@@ -1295,7 +1295,7 @@ private fun FullSettingsScreen(
             ) {
                 Surface(shape = RoundedCornerShape(14.dp), color = card) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("屏幕显示", color = ReaderTokens.Palette.AccentBlue)
+                        Text("屏幕显示", color = ReaderTokens.Palette.PrototypeBlue)
                         SwitchRow(
                             "阅读进度显示",
                             "页脚显示本章百分比",
@@ -1325,7 +1325,7 @@ private fun FullSettingsScreen(
 
                 Surface(shape = RoundedCornerShape(14.dp), color = card) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("主题", color = ReaderTokens.Palette.AccentBlue)
+                        Text("主题", color = ReaderTokens.Palette.PrototypeBlue)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,

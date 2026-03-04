@@ -8,12 +8,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -29,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.ireader.core.designsystem.PrototypeIcons
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.feature.reader.presentation.SearchState
 import com.ireader.feature.reader.presentation.asString
@@ -44,8 +42,11 @@ fun SearchSheet(
     onClickResult: (locatorEncoded: String) -> Unit
 ) {
     var query by remember(state.query) { mutableStateOf(state.query) }
-    val container = if (isNightMode) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.ReaderPanelElevatedDay
-    val card = if (isNightMode) Color(0xFF2B2B2B) else Color(0xFFF2EEE6)
+    val container = if (isNightMode) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.PrototypeSurface
+    val card = if (isNightMode) Color(0xFF2B2B2B) else Color.White
+    val border = if (isNightMode) Color(0xFF3A3A3A) else ReaderTokens.Palette.PrototypeBorder
+    val titleColor = if (isNightMode) Color(0xFFE5E5E5) else ReaderTokens.Palette.PrototypeTextPrimary
+    val subColor = if (isNightMode) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextTertiary
 
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -57,7 +58,7 @@ fun SearchSheet(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("全文搜索", style = MaterialTheme.typography.titleMedium)
+            Text("全文搜索", style = MaterialTheme.typography.titleMedium, color = titleColor)
             OutlinedTextField(
                 value = query,
                 onValueChange = {
@@ -66,13 +67,17 @@ fun SearchSheet(
                 },
                 label = { Text("关键词") },
                 leadingIcon = {
-                    Icon(imageVector = Icons.Outlined.Search, contentDescription = null)
+                    PrototypeIcons.Search(modifier = Modifier.padding(start = 2.dp), tint = subColor)
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = card,
-                    unfocusedContainerColor = card
+                    unfocusedContainerColor = card,
+                    focusedBorderColor = ReaderTokens.Palette.PrototypeBlue,
+                    unfocusedBorderColor = border,
+                    focusedLabelColor = ReaderTokens.Palette.PrototypeBlue,
+                    unfocusedLabelColor = subColor
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -93,12 +98,12 @@ fun SearchSheet(
             if (state.error != null) {
                 Text(
                     text = state.error.asString(),
-                    color = MaterialTheme.colorScheme.error,
+                    color = ReaderTokens.Palette.PrototypeDanger,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
 
-            HorizontalDivider()
+            HorizontalDivider(color = border)
             when {
                 state.isSearching -> {
                     CircularProgressIndicator(modifier = Modifier.padding(vertical = 8.dp))
@@ -108,7 +113,7 @@ fun SearchSheet(
                     Text(
                         text = "输入关键词开始搜索",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = subColor
                     )
                 }
 
@@ -116,7 +121,7 @@ fun SearchSheet(
                     Text(
                         text = "未找到匹配结果",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = subColor
                     )
                 }
 
@@ -124,7 +129,11 @@ fun SearchSheet(
                     items(state.results) { item ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = card
+                            color = card,
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = ReaderTokens.Border.Hairline,
+                                color = border
+                            )
                         ) {
                             TextButton(
                                 modifier = Modifier.fillMaxWidth(),
@@ -132,9 +141,9 @@ fun SearchSheet(
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     if (!item.title.isNullOrBlank()) {
-                                        Text(item.title)
+                                        Text(item.title, color = titleColor)
                                     }
-                                    Text(item.excerpt, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(item.excerpt, color = subColor)
                                 }
                             }
                         }

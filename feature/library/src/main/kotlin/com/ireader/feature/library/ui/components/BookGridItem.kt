@@ -59,15 +59,15 @@ internal fun BookGridItem(
     )
     val cardStroke = animateColorAsState(
         targetValue = if (isEditMode && isSelected) {
-            ReaderTokens.Palette.AccentBlue
+            ReaderTokens.Palette.PrototypeBlue
         } else {
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+            ReaderTokens.Palette.PrototypeBorder
         },
         animationSpec = tween(durationMillis = ReaderTokens.Motion.Fast),
         label = "book_item_stroke"
     )
     val metaColor = if (isEditMode && isSelected) {
-        ReaderTokens.Palette.AccentBlue
+        ReaderTokens.Palette.PrototypeBlue
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -108,7 +108,7 @@ internal fun BookGridItem(
                         .padding(8.dp)
                         .size(22.dp)
                         .background(
-                            color = if (isSelected) ReaderTokens.Palette.AccentBlue else Color(0x78000000),
+                            color = if (isSelected) ReaderTokens.Palette.PrototypeBlue else Color(0x78000000),
                             shape = CircleShape
                         )
                         .border(width = 1.dp, color = Color.White, shape = CircleShape),
@@ -148,14 +148,14 @@ internal fun BookGridItem(
             if (status != null) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                    color = ReaderTokens.Palette.PrototypeBlueSoft,
                     modifier = Modifier.defaultMinSize(minHeight = 18.dp)
                 ) {
                     Text(
                         text = status,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = ReaderTokens.Palette.PrototypeBlue
                     )
                 }
                 Spacer(modifier = Modifier.width(6.dp))

@@ -9,15 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.Bookmarks
-import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -26,8 +21,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.ireader.core.designsystem.PrototypeIcons
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.feature.reader.presentation.ReaderMenuTab
 import com.ireader.feature.reader.presentation.TocState
@@ -47,12 +44,13 @@ fun TocSheet(
     val container = if (isNightMode) {
         ReaderTokens.Palette.ReaderPanelElevatedNight
     } else {
-        ReaderTokens.Palette.ReaderPanelElevatedDay
+        ReaderTokens.Palette.PrototypeSurface
     }
-    val tabsBg = if (isNightMode) ColorTokens.NightTab else ColorTokens.DayTab
-    val selectedBg = if (isNightMode) ColorTokens.NightSelectedTab else ColorTokens.DaySelectedTab
-    val textColor = if (isNightMode) ColorTokens.NightText else ColorTokens.DayText
-    val secondary = if (isNightMode) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.SecondaryTextDay
+    val tabsBg = if (isNightMode) Color(0xFF343434) else ReaderTokens.Palette.PrototypeSurfaceMuted
+    val selectedBg = if (isNightMode) Color(0xFF252525) else Color.White
+    val textColor = if (isNightMode) Color(0xFFE8E3DA) else ReaderTokens.Palette.PrototypeTextPrimary
+    val secondary = if (isNightMode) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextSecondary
+    val divider = if (isNightMode) Color(0xFF3A3A3A) else ReaderTokens.Palette.PrototypeBorder
 
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -110,7 +108,7 @@ fun TocSheet(
                 )
             }
 
-            HorizontalDivider(color = if (isNightMode) ReaderTokens.Palette.ReaderDividerNight else ReaderTokens.Palette.ReaderDividerDay)
+            HorizontalDivider(color = divider)
 
             when (activeTab) {
                 ReaderMenuTab.Toc -> TocList(
@@ -120,7 +118,7 @@ fun TocSheet(
                 )
 
                 ReaderMenuTab.Notes -> PlaceholderPanel(
-                    icon = Icons.Outlined.EditNote,
+                    icon = { tint -> PrototypeIcons.Note(tint = tint) },
                     title = "暂无笔记",
                     desc = "可在阅读页选中文本后添加笔记",
                     cta = "打开笔记页",
@@ -129,7 +127,7 @@ fun TocSheet(
                 )
 
                 ReaderMenuTab.Bookmarks -> PlaceholderPanel(
-                    icon = Icons.Outlined.Bookmarks,
+                    icon = { tint -> PrototypeIcons.Bookmark(tint = tint) },
                     title = "暂无书签",
                     desc = "在更多功能里添加书签后会显示在这里",
                     cta = "继续阅读",
@@ -147,58 +145,48 @@ private fun TocList(
     isNightMode: Boolean,
     onClick: (locatorEncoded: String) -> Unit
 ) {
-    val itemColor = if (isNightMode) {
-        ReaderTokens.Palette.ReaderPanelNight
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f)
-    }
+    val itemText = if (isNightMode) Color(0xFFE8E3DA) else ReaderTokens.Palette.PrototypeTextPrimary
+    val divider = if (isNightMode) Color(0xFF3A3A3A) else ReaderTokens.Palette.PrototypeBorder
+    val active = ReaderTokens.Palette.PrototypeBlue
     if (state.isLoading) {
-        Text("加载中...", style = MaterialTheme.typography.bodySmall)
+        Text("加载中...", style = MaterialTheme.typography.bodySmall, color = itemText.copy(alpha = 0.8f))
     }
     if (state.error != null) {
         Text(
             state.error.asString(),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error
+            color = ReaderTokens.Palette.PrototypeDanger
         )
     }
 
     LazyColumn(
         modifier = Modifier.height(420.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        items(state.items) { item ->
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = itemColor
+        itemsIndexed(state.items) { index, item ->
+            TextButton(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                onClick = { onClick(item.locatorEncoded) }
             ) {
-                TextButton(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    onClick = { onClick(item.locatorEncoded) }
+                        .padding(start = (item.depth * 10).dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = (item.depth * 10).dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.MenuBook,
-                            contentDescription = null,
-                            modifier = Modifier.padding(end = 8.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = item.title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    Text(
+                        text = item.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (index == 0) active else itemText
+                    )
                 }
+            }
+            if (index < state.items.lastIndex) {
+                HorizontalDivider(color = divider)
             }
         }
     }
@@ -234,15 +222,15 @@ private fun SheetMenuTab(
 
 @Composable
 private fun PlaceholderPanel(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: @Composable (Color) -> Unit,
     title: String,
     desc: String,
     cta: String,
     isNightMode: Boolean,
     onCta: () -> Unit
 ) {
-    val textColor = if (isNightMode) ColorTokens.NightText else ColorTokens.DayText
-    val subColor = if (isNightMode) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.SecondaryTextDay
+    val textColor = if (isNightMode) Color(0xFFE8E3DA) else ReaderTokens.Palette.PrototypeTextPrimary
+    val subColor = if (isNightMode) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextSecondary
     val card = if (isNightMode) ReaderTokens.Palette.ReaderPanelNight else ReaderTokens.Palette.LibraryCardDay
     Box(
         modifier = Modifier
@@ -256,19 +244,10 @@ private fun PlaceholderPanel(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(icon, contentDescription = null, tint = subColor)
+            icon(subColor)
             Text(title, color = textColor, style = MaterialTheme.typography.titleMedium)
             Text(desc, color = subColor, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = onCta) { Text(cta) }
         }
     }
-}
-
-private object ColorTokens {
-    val DayTab = androidx.compose.ui.graphics.Color(0xFFE9ECEF)
-    val NightTab = androidx.compose.ui.graphics.Color(0xFF343434)
-    val DaySelectedTab = androidx.compose.ui.graphics.Color(0xFFFFFFFF)
-    val NightSelectedTab = androidx.compose.ui.graphics.Color(0xFF252525)
-    val DayText = androidx.compose.ui.graphics.Color(0xFF1A1A1A)
-    val NightText = androidx.compose.ui.graphics.Color(0xFFE8E3DA)
 }
