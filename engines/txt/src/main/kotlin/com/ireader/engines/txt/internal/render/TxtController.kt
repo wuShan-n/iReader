@@ -147,7 +147,18 @@ internal class TxtController(
 
     init {
         if (softBreakIndex == null) {
+            logInfo(
+                TAG,
+                "soft-break index unavailable at open; using runtime classifier until build completes " +
+                    "profile=${softBreakProfile.storageValue} hardWrapLikely=${meta.hardWrapLikely}"
+            )
             buildSoftBreakIndexAsync(softBreakProfile)
+        } else {
+            logInfo(
+                TAG,
+                "soft-break index loaded from cache profile=${softBreakProfile.storageValue} " +
+                    "lengthChars=${store.lengthChars}"
+            )
         }
         observeAnnotationChangesIfNeeded()
     }
@@ -184,6 +195,10 @@ internal class TxtController(
                 softBreakProfile = newProfile
                 runCatching { softBreakIndex?.close() }
                 softBreakIndex = openSoftBreakIndex(newProfile)
+                logInfo(
+                    TAG,
+                    "soft-break profile switched to=${newProfile.storageValue} hasIndex=${softBreakIndex != null}"
+                )
                 paginator.setSoftBreakIndex(softBreakIndex)
                 if (softBreakIndex == null) {
                     buildSoftBreakIndexAsync(newProfile)
@@ -345,11 +360,11 @@ internal class TxtController(
 
     override fun onClose() {
         runCatching { paginationIndex.saveIfDirty() }
-            .onFailure { Log.w(TAG, "TXT controller failed to save pagination index", it) }
+            .onFailure { logWarn(TAG, "TXT controller failed to save pagination index", it) }
         pageCompletionJob?.cancel()
         annotationObserverJob?.cancel()
         runCatching { softBreakIndex?.close() }
-            .onFailure { Log.w(TAG, "TXT controller failed to close soft-break index", it) }
+            .onFailure { logWarn(TAG, "TXT controller failed to close soft-break index", it) }
     }
 
     private fun resolveSoftBreakProfile(config: RenderConfig.ReflowText): SoftBreakTuningProfile {
@@ -382,6 +397,21 @@ internal class TxtController(
                 }
                 softBreakIndex?.close()
                 softBreakIndex = loaded
+                if (loaded == null) {
+                    logWarn(
+                        TAG,
+                        "soft-break index build completed but index still unavailable " +
+                            "profile=${profile.storageValue}",
+                        null
+                    )
+                } else {
+                    logInfo(
+                        TAG,
+                        "soft-break index activated profile=${profile.storageValue} " +
+                            "lengthChars=${loaded.lengthChars} newlineCount=${loaded.newlineCount} " +
+                            "rulesVersion=${loaded.rulesVersion}; clearing page caches"
+                    )
+                }
                 paginator.setSoftBreakIndex(loaded)
                 sliceCache.clear()
                 pageExtrasCache.clear()
@@ -606,7 +636,7 @@ internal class TxtController(
     }
 
     override fun onCoroutineError(name: String, throwable: Throwable) {
-        Log.w(TAG, "TXT controller background task failed: $name", throwable)
+        logWarn(TAG, "TXT controller background task failed: $name", throwable)
     }
 
     private data class PageCompletionBatchResult(
@@ -628,5 +658,19 @@ internal class TxtController(
     private companion object {
         private const val TAG = "TxtController"
         private const val PAGE_COMPLETION_BATCH_SIZE = 4
+
+        private fun logInfo(tag: String, message: String) {
+            runCatching { Log.i(tag, message) }
+        }
+
+        private fun logWarn(tag: String, message: String, throwable: Throwable?) {
+            runCatching {
+                if (throwable == null) {
+                    Log.w(tag, message)
+                } else {
+                    Log.w(tag, message, throwable)
+                }
+            }
+        }
     }
 }

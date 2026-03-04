@@ -163,6 +163,8 @@ object SoftBreakProcessor {
         paragraphEndExclusive: Int
     ): Boolean {
         var index = paragraphStart
+        var leadingWhitespaceCount = 0
+        var leadingFullWidthSpaces = 0
         while (index < paragraphEndExclusive) {
             val ch = text[index]
             if (ch == '\n') {
@@ -171,27 +173,35 @@ object SoftBreakProcessor {
             if (!ch.isWhitespace() && ch != '\u3000') {
                 break
             }
+            leadingWhitespaceCount++
+            if (ch == '\u3000') {
+                leadingFullWidthSpaces++
+            }
             index++
         }
         if (index >= paragraphEndExclusive) {
+            return false
+        }
+        if (leadingFullWidthSpaces > 0 || leadingWhitespaceCount >= MANUAL_INDENT_WHITESPACE_MIN) {
             return false
         }
         val visibleLength = paragraphEndExclusive - index
         if (visibleLength < MIN_INDENT_PARAGRAPH_CHARS) {
             return false
         }
-        val snippet = text.subSequence(index, minOf(paragraphEndExclusive, index + 28)).toString()
-        if (CHINESE_CHAPTER_REGEX.matches(snippet)) {
-            return false
-        }
-        if (ENGLISH_CHAPTER_REGEX.containsMatchIn(snippet)) {
+        val snippet = text.subSequence(index, minOf(paragraphEndExclusive, index + 64)).toString().trim()
+        if (isBoundaryTitleLine(snippet)) {
             return false
         }
         return true
     }
+
     private const val MIN_INDENT_PARAGRAPH_CHARS = 12
-    private val CHINESE_CHAPTER_REGEX = Regex("^\\s*第[0-9一二三四五六七八九十百千零〇两\\d]+[章节卷回部篇集].*")
-    private val ENGLISH_CHAPTER_REGEX = Regex("^\\s*(chapter|part|prologue|epilogue)\\b", RegexOption.IGNORE_CASE)
+    private const val MANUAL_INDENT_WHITESPACE_MIN = 2
+    private const val MAX_BOUNDARY_TITLE_CHARS = 48
+    private val CHINESE_CHAPTER_REGEX = Regex("^第[零一二三四五六七八九十百千万0-9]{1,9}[章节回卷部篇].{0,30}$")
+    private val ENGLISH_CHAPTER_REGEX = Regex("^(Chapter|CHAPTER)\\s+\\d+.*$")
+    private val PROLOGUE_REGEX = Regex("^(Prologue|Epilogue|PROLOGUE|EPILOGUE)$")
     private val DIRECTORY_TITLE_REGEX = Regex("^(目录|目\\s*录|contents)$", RegexOption.IGNORE_CASE)
     private val EMPTY_LINE = SoftBreakLineInfo(
         length = 0,
@@ -241,11 +251,7 @@ object SoftBreakProcessor {
         } else {
             ""
         }
-        val boundary = lineText.isNotEmpty() && (
-            CHINESE_CHAPTER_REGEX.matches(lineText) ||
-                ENGLISH_CHAPTER_REGEX.containsMatchIn(lineText) ||
-                DIRECTORY_TITLE_REGEX.matches(lineText)
-            )
+        val boundary = isBoundaryTitleLine(lineText)
         return SoftBreakLineInfo(
             length = lineLength,
             leadingSpaces = leadingSpaces,
@@ -256,6 +262,21 @@ object SoftBreakProcessor {
             startsWithListMarker = SoftBreakClassifier.detectListMarker(firstNonSpace, secondNonSpace),
             startsWithDialogueMarker = SoftBreakClassifier.detectDialogueMarker(firstNonSpace)
         )
+    }
+
+    private fun isBoundaryTitleLine(line: String): Boolean {
+        if (line.isBlank()) {
+            return false
+        }
+        if (DIRECTORY_TITLE_REGEX.matches(line)) {
+            return true
+        }
+        if (line.length > MAX_BOUNDARY_TITLE_CHARS) {
+            return false
+        }
+        return CHINESE_CHAPTER_REGEX.matches(line) ||
+            ENGLISH_CHAPTER_REGEX.matches(line) ||
+            PROLOGUE_REGEX.matches(line)
     }
 
     private fun estimateTypicalLineLength(

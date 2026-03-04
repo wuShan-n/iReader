@@ -1,7 +1,10 @@
 package com.ireader.engines.txt.internal.render
 
 import com.ireader.engines.common.android.reflow.SoftBreakProcessor
+import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
+import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SoftBreakProcessorTest {
@@ -195,4 +198,25 @@ class SoftBreakProcessorTest {
 
         assertEquals(raw, output)
     }
+
+    @Test
+    fun `aggressive profile may merge same-indented lines when previous line ends with quote`() {
+        val raw = buildString {
+            append("　　我慢慢说完了这个临时想到的行动计划并让她先别插话”\n")
+            append("　　她没有打断我只是继续看着我等待我把后续想法全部讲完")
+        }
+
+        val output = SoftBreakProcessor.process(
+            rawText = raw,
+            hardWrapLikely = false,
+            paragraphSpacingPx = 0,
+            paragraphIndentPx = 0,
+            startsAtParagraphBoundary = true,
+            ruleConfig = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.AGGRESSIVE)
+        ).toString()
+
+        assertTrue("expected newline to be merged into space", output.contains("” 　　她"))
+        assertEquals(' ', output[raw.indexOf('\n')])
+    }
+
 }

@@ -3,6 +3,7 @@
 package com.ireader.engines.common.android.reflow
 
 import android.text.SpannableStringBuilder
+import android.util.Log
 import com.ireader.core.common.android.typography.prefersInterCharacterJustify
 import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
 import com.ireader.engines.common.android.layout.TextPaintFactory
@@ -61,6 +62,7 @@ class ReflowPaginator(
             .coerceAtLeast(0)
         val softBreakProfile = SoftBreakTuningProfile.fromStorageValue(config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY])
         val softBreakRules = SoftBreakRuleConfig.forProfile(softBreakProfile)
+        val usingSoftBreakIndex = softBreakIndex != null
 
         var windowChars = initialWindowChars(config, constraints)
         var measuredEnd = 0
@@ -120,6 +122,7 @@ class ReflowPaginator(
             windowChars = (windowChars * 2).coerceAtMost(MAX_WINDOW_CHARS)
         }
 
+        val measuredEndBeforeAdjust = measuredEnd
         if (measuredEnd in 1 until rawLength) {
             measuredEnd = pageEndAdjuster.adjust(
                 raw = measuredRaw,
@@ -135,6 +138,22 @@ class ReflowPaginator(
             measuredText = measuredText.subSequence(0, measuredEnd)
         } else {
             measuredText = measuredText.subSequence(0, measuredEnd)
+        }
+
+        if (isDebugLoggingEnabled()) {
+            val newlineStats = collectNewlineStats(
+                raw = measuredRaw,
+                display = measuredText,
+                endExclusive = measuredEnd
+            )
+            logDebug(
+                TAG,
+                "pageAt start=$start end=$end source=${if (usingSoftBreakIndex) "index" else "runtime"} " +
+                    "hardWrapLikely=$hardWrapLikely softBreakProfile=${softBreakProfile.storageValue} " +
+                    "newlineSoft=${newlineStats.softBreaks} newlineHard=${newlineStats.hardBreaks} " +
+                    "measuredEnd=$measuredEndBeforeAdjust adjustedEnd=$measuredEnd " +
+                    "rewind=${measuredEndBeforeAdjust - measuredEnd}"
+            )
         }
 
         return ReflowPageSlice(
@@ -193,7 +212,37 @@ class ReflowPaginator(
         return rough.coerceIn(2_500, 16_000)
     }
 
+    private fun collectNewlineStats(
+        raw: String,
+        display: CharSequence,
+        endExclusive: Int
+    ): NewlineStats {
+        if (raw.isEmpty() || display.isEmpty() || endExclusive <= 0) {
+            return NewlineStats(softBreaks = 0, hardBreaks = 0)
+        }
+        val limit = minOf(raw.length, display.length, endExclusive)
+        var soft = 0
+        var hard = 0
+        for (i in 0 until limit) {
+            if (raw[i] != '\n') {
+                continue
+            }
+            if (display[i] == ' ') {
+                soft++
+            } else {
+                hard++
+            }
+        }
+        return NewlineStats(softBreaks = soft, hardBreaks = hard)
+    }
+
+    private data class NewlineStats(
+        val softBreaks: Int,
+        val hardBreaks: Int
+    )
+
     companion object {
+        private const val TAG = "ReflowPaginator"
         private const val MAX_WINDOW_CHARS = 96_000
         private const val MIN_TAIL_CHARS_FOR_REWIND = 14
         private const val MIN_SENTENCE_TAIL_CHARS_FOR_REWIND = 12
@@ -277,6 +326,15 @@ class ReflowPaginator(
                 return clampedEnd
             }
             return candidate
+        }
+
+        private fun isDebugLoggingEnabled(): Boolean {
+            return runCatching { Log.isLoggable(TAG, Log.DEBUG) }
+                .getOrDefault(false)
+        }
+
+        private fun logDebug(tag: String, message: String) {
+            runCatching { Log.d(tag, message) }
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.ireader.engines.txt.internal.render
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TxtPageEndAdjusterTest {
@@ -73,6 +74,54 @@ class TxtPageEndAdjusterTest {
     fun `adjust should not rewind weak chapter marker without strong prelude`() {
         val raw = "上一段正文没有句号\n目录\n下一段内容"
         val measuredEnd = raw.indexOf("下一段内容")
+
+        val adjusted = adjuster.adjust(
+            raw = raw,
+            measuredEnd = measuredEnd,
+            rawLength = raw.length,
+            pageStartOffset = 0L
+        )
+
+        assertEquals(measuredEnd, adjusted)
+    }
+
+    @Test
+    fun `adjust should pick nearest boundary when multiple chapter markers appear before measured end`() {
+        val raw = buildString {
+            append("上一章收束。\n")
+            append("第10章 边界A\n")
+            repeat(12) { index ->
+                append("中间正文第${index + 1}行继续推进剧情。\n")
+            }
+            append("第11章 边界B\n")
+            append("新章节正文开始。")
+        }
+        val measuredEnd = raw.indexOf("新章节正文")
+        val firstBoundary = raw.indexOf("第10章")
+        val secondBoundary = raw.indexOf("第11章")
+
+        val adjusted = adjuster.adjust(
+            raw = raw,
+            measuredEnd = measuredEnd,
+            rawLength = raw.length,
+            pageStartOffset = 0L
+        )
+
+        assertEquals(secondBoundary, adjusted)
+        assertTrue("expected rewind to be positive", measuredEnd - adjusted > 0)
+        assertTrue("expected nearest boundary to be selected", adjusted > firstBoundary)
+    }
+
+    @Test
+    fun `adjust should ignore far boundary when rewind exceeds cap`() {
+        val raw = buildString {
+            append("上一章收束。\n")
+            append("第10章 边界A\n")
+            repeat(320) { index ->
+                append("这是一段较长正文用于制造超大回退距离${index + 1}\n")
+            }
+        }
+        val measuredEnd = raw.length - 1
 
         val adjusted = adjuster.adjust(
             raw = raw,
