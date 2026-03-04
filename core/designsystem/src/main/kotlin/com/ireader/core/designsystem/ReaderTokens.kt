@@ -39,6 +39,21 @@ object ReaderTokens {
         val SecondaryTextDay = Color(0xFF6F685E)
         val SecondaryTextNight = Color(0xFFA8A39B)
         val Scrim = Color(0x4D000000)
+
+        val PrototypeBlue = Color(0xFF007AFF)
+        val PrototypeBlueSoft = Color(0xFFEBF5FF)
+        val PrototypeSurface = Color(0xFFF8F9FA)
+        val PrototypeSurfaceMuted = Color(0xFFE9ECEF)
+        val PrototypeBorder = Color(0xFFDEE2E6)
+        val PrototypeTextPrimary = Color(0xFF1A1A1A)
+        val PrototypeTextSecondary = Color(0xFF6C757D)
+        val PrototypeTextTertiary = Color(0xFFADB5BD)
+        val PrototypeDanger = Color(0xFFFF3B30)
+    }
+
+    object Border {
+        val Hairline = 1.dp
+        val Strong = 1.5.dp
     }
 
     object Shape {
@@ -51,6 +66,9 @@ object ReaderTokens {
         val BottomBarRadius = 20.dp
         val ActionRadius = 12.dp
         val CardRadius = 14.dp
+        val PrototypeSheetTop = 20.dp
+        val PrototypeCard = 8.dp
+        val PrototypeActionTile = 16.dp
     }
 
     object Space {

@@ -29,13 +29,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Bookmarks
-import androidx.compose.material.icons.outlined.Brightness6
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.NightlightRound
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,6 +42,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -71,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
+import com.ireader.core.designsystem.PrototypeIcons
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.feature.reader.presentation.ReaderErrorAction
 import com.ireader.feature.reader.presentation.ReaderDockTab
@@ -120,15 +117,15 @@ fun ReaderScaffold(
         ReaderBackgroundPreset.NAVY
     )
     val panelColor = if (darkSurface) {
-        ReaderTokens.Palette.ReaderPanelElevatedNight
+        Color(0xFF1E1E1E)
     } else {
-        ReaderTokens.Palette.ReaderPanelElevatedDay
+        ReaderTokens.Palette.PrototypeSurface
     }
-    val panelBorder = if (darkSurface) ReaderTokens.Palette.ReaderDividerNight else ReaderTokens.Palette.ReaderDividerDay
+    val panelBorder = if (darkSurface) Color(0xFF3A3A3A) else ReaderTokens.Palette.PrototypeBorder
     val panelTextColor = if (darkSurface) {
-        Color(0xFFE8E3DA)
+        Color(0xFFE0DDD8)
     } else {
-        Color(0xFF24201C)
+        ReaderTokens.Palette.PrototypeTextPrimary
     }
     val readerTextColor = if (darkSurface) {
         ReaderTokens.Palette.ReaderTextNight
@@ -285,7 +282,6 @@ fun ReaderScaffold(
                         isNightMode = state.isNightMode,
                         panelColor = panelColor.copy(alpha = 0.98f),
                         panelBorderColor = panelBorder,
-                        contentColor = panelTextColor,
                         onToggleDockTab = { tab -> onIntent(ReaderIntent.ToggleDockTab(tab)) },
                         onToggleNight = { onIntent(ReaderIntent.ToggleNightMode) }
                     )
@@ -420,7 +416,7 @@ private fun ReaderTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(panelColor)
-            .border(width = 1.dp, color = panelBorderColor)
+            .border(width = ReaderTokens.Border.Hairline, color = panelBorderColor)
             .statusBarsPadding()
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -429,7 +425,7 @@ private fun ReaderTopBar(
         IconButton(
             onClick = onBack,
             colors = IconButtonDefaults.iconButtonColors(
-                containerColor = contentColor.copy(alpha = 0.12f),
+                containerColor = Color.Transparent,
                 contentColor = contentColor
             )
         ) {
@@ -447,29 +443,29 @@ private fun ReaderTopBar(
             IconButton(
                 onClick = onOpenSearch,
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = contentColor.copy(alpha = 0.12f),
+                    containerColor = Color.Transparent,
                     contentColor = contentColor
                 )
             ) {
-                Icon(imageVector = Icons.Outlined.Search, contentDescription = "搜索", tint = contentColor)
+                PrototypeIcons.Cart(tint = contentColor)
             }
             IconButton(
                 onClick = onOpenAnnotations,
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = contentColor.copy(alpha = 0.12f),
+                    containerColor = Color.Transparent,
                     contentColor = contentColor
                 )
             ) {
-                Icon(imageVector = Icons.Outlined.Bookmarks, contentDescription = "笔记", tint = contentColor)
+                PrototypeIcons.Target(tint = contentColor)
             }
             IconButton(
                 onClick = onMore,
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = contentColor.copy(alpha = 0.12f),
+                    containerColor = Color.Transparent,
                     contentColor = contentColor
                 )
             ) {
-                Icon(imageVector = Icons.Outlined.MoreVert, contentDescription = "更多", tint = contentColor)
+                PrototypeIcons.MoreVertical(tint = contentColor)
             }
         }
     }
@@ -481,7 +477,6 @@ private fun ReaderBottomBar(
     isNightMode: Boolean,
     panelColor: Color,
     panelBorderColor: Color,
-    contentColor: Color,
     onToggleDockTab: (ReaderDockTab) -> Unit,
     onToggleNight: () -> Unit,
 ) {
@@ -489,7 +484,7 @@ private fun ReaderBottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(panelColor)
-            .border(width = 1.dp, color = panelBorderColor)
+            .border(width = ReaderTokens.Border.Hairline, color = panelBorderColor)
             .navigationBarsPadding()
             .padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceAround
@@ -498,9 +493,8 @@ private fun ReaderBottomBar(
             label = "目录",
             selected = activeDockTab == ReaderDockTab.Menu,
             isNightMode = isNightMode,
-            contentColor = contentColor,
             icon = {
-                Icon(imageVector = Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
+                PrototypeIcons.MenuList()
             },
             onClick = { onToggleDockTab(ReaderDockTab.Menu) }
         )
@@ -508,9 +502,8 @@ private fun ReaderBottomBar(
             label = "亮度",
             selected = activeDockTab == ReaderDockTab.Brightness,
             isNightMode = isNightMode,
-            contentColor = contentColor,
             icon = {
-                Icon(imageVector = Icons.Outlined.Brightness6, contentDescription = null)
+                PrototypeIcons.LightbulbBolt()
             },
             onClick = { onToggleDockTab(ReaderDockTab.Brightness) }
         )
@@ -518,12 +511,8 @@ private fun ReaderBottomBar(
             label = if (isNightMode) "日间" else "夜间",
             selected = false,
             isNightMode = isNightMode,
-            contentColor = contentColor,
             icon = {
-                Icon(
-                    imageVector = if (isNightMode) Icons.Outlined.WbSunny else Icons.Outlined.NightlightRound,
-                    contentDescription = null
-                )
+                PrototypeIcons.Moon()
             },
             onClick = onToggleNight
         )
@@ -531,9 +520,8 @@ private fun ReaderBottomBar(
             label = "设置",
             selected = activeDockTab == ReaderDockTab.Settings,
             isNightMode = isNightMode,
-            contentColor = contentColor,
             icon = {
-                Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
+                PrototypeIcons.SettingsHex()
             },
             onClick = { onToggleDockTab(ReaderDockTab.Settings) }
         )
@@ -545,32 +533,24 @@ private fun BottomItem(
     label: String,
     selected: Boolean,
     isNightMode: Boolean,
-    contentColor: Color,
     icon: @Composable () -> Unit,
     onClick: () -> Unit
 ) {
-    val selectedTint = if (isNightMode) ReaderTokens.Palette.AccentBlueNight else ReaderTokens.Palette.AccentBlue
-    val selectedBg = if (isNightMode) selectedTint.copy(alpha = 0.22f) else ReaderTokens.Palette.AccentBlueSoft
+    val selectedTint = ReaderTokens.Palette.PrototypeBlue
+    val normalTint = if (isNightMode) ReaderTokens.Palette.PrototypeTextTertiary else ReaderTokens.Palette.PrototypeTextSecondary
 
     TextButton(onClick = onClick) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            val tint = if (selected) selectedTint else normalTint
             Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .background(
-                        if (selected) selectedBg else Color.Transparent,
-                        CircleShape
-                    ),
+                modifier = Modifier.size(28.dp),
                 contentAlignment = Alignment.Center
             ) {
-                val tint = if (selected) selectedTint else contentColor
-                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides tint) {
-                    icon()
-                }
+                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides tint) { icon() }
             }
             Text(
                 text = label,
-                color = if (selected) selectedTint else contentColor,
+                color = tint,
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall
             )
         }
@@ -598,7 +578,10 @@ private fun ReaderDockPanel(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        shape = RoundedCornerShape(
+            topStart = ReaderTokens.Shape.PrototypeSheetTop,
+            topEnd = ReaderTokens.Shape.PrototypeSheetTop
+        ),
         color = panelColor,
         tonalElevation = 8.dp,
         shadowElevation = 12.dp
@@ -606,7 +589,7 @@ private fun ReaderDockPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(width = 1.dp, color = panelBorderColor)
+                .border(width = ReaderTokens.Border.Hairline, color = panelBorderColor)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -639,6 +622,7 @@ private fun ReaderDockPanel(
                 )
                 ReaderDockTab.Brightness -> ReaderBrightnessDockPanel(
                     prefs = state.displayPrefs,
+                    isNightMode = state.isNightMode,
                     contentColor = contentColor,
                     onBrightnessChange = onBrightnessChange,
                     onUseSystemBrightnessChange = onUseSystemBrightnessChange,
@@ -665,10 +649,12 @@ private fun ReaderMenuDockPanel(
     onOpenLocator: (String) -> Unit,
     onOpenAnnotations: () -> Unit
 ) {
+    val tabBg = if (state.isNightMode) Color(0xFF2E2E2E) else ReaderTokens.Palette.PrototypeSurfaceMuted
+    val dividerColor = if (state.isNightMode) Color(0xFF3A3A3A) else ReaderTokens.Palette.PrototypeBorder
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
+            .background(tabBg, RoundedCornerShape(999.dp))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -747,7 +733,7 @@ private fun ReaderMenuDockPanel(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = (item.depth * 10).dp),
-                                    color = if (index == 0) ReaderTokens.Palette.AccentBlue else contentColor,
+                                    color = if (index == 0) ReaderTokens.Palette.PrototypeBlue else contentColor,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -757,7 +743,7 @@ private fun ReaderMenuDockPanel(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(1.dp)
-                                        .background(contentColor.copy(alpha = 0.1f))
+                                        .background(dividerColor)
                                 )
                             }
                         }
@@ -791,24 +777,37 @@ private fun ReaderMenuDockPanel(
 @Composable
 private fun ReaderBrightnessDockPanel(
     prefs: ReaderDisplayPrefs,
+    isNightMode: Boolean,
     contentColor: Color,
     onBrightnessChange: (Float) -> Unit,
     onUseSystemBrightnessChange: (Boolean) -> Unit,
     onEyeProtectionChange: (Boolean) -> Unit
 ) {
+    val rowBg = if (isNightMode) Color(0xFF2C2C2C) else ReaderTokens.Palette.PrototypeSurfaceMuted
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Outlined.WbSunny, contentDescription = null, tint = contentColor.copy(alpha = 0.64f))
+        PrototypeIcons.LightbulbBolt(
+            modifier = Modifier.size(22.dp),
+            tint = contentColor.copy(alpha = 0.64f)
+        )
         Spacer(modifier = Modifier.width(8.dp))
         Slider(
             value = prefs.brightness,
             onValueChange = onBrightnessChange,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = ReaderTokens.Palette.PrototypeBlue,
+                inactiveTrackColor = ReaderTokens.Palette.PrototypeBorder
+            )
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Icon(Icons.Outlined.WbSunny, contentDescription = null, tint = contentColor)
+        PrototypeIcons.LightbulbBolt(
+            modifier = Modifier.size(24.dp),
+            tint = contentColor
+        )
     }
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -817,7 +816,7 @@ private fun ReaderBrightnessDockPanel(
         Surface(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(12.dp),
-            color = contentColor.copy(alpha = 0.08f)
+            color = rowBg
         ) {
             Row(
                 modifier = Modifier
@@ -833,7 +832,7 @@ private fun ReaderBrightnessDockPanel(
         Surface(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(12.dp),
-            color = contentColor.copy(alpha = 0.08f)
+            color = rowBg
         ) {
             Row(
                 modifier = Modifier
@@ -869,6 +868,8 @@ private fun ReaderSettingsDockPanel(
         )
         return
     }
+    val actionBg = if (state.isNightMode) Color(0xFF2C2C2C) else ReaderTokens.Palette.PrototypeSurfaceMuted
+    val actionBorder = if (state.isNightMode) Color(0xFF3A3A3A) else ReaderTokens.Palette.PrototypeBorder
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -877,7 +878,7 @@ private fun ReaderSettingsDockPanel(
         Surface(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(10.dp),
-            color = contentColor.copy(alpha = 0.08f)
+            color = actionBg
         ) {
             Row(
                 modifier = Modifier
@@ -906,14 +907,16 @@ private fun ReaderSettingsDockPanel(
         TextButton(
             onClick = { onOpenSubPanel(ReaderSettingsPanel.Font) },
             modifier = Modifier
-                .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                .background(actionBg, RoundedCornerShape(10.dp))
+                .border(ReaderTokens.Border.Hairline, actionBorder, RoundedCornerShape(10.dp))
         ) {
             Text("字体", color = contentColor)
         }
         TextButton(
             onClick = { onOpenSubPanel(ReaderSettingsPanel.Spacing) },
             modifier = Modifier
-                .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                .background(actionBg, RoundedCornerShape(10.dp))
+                .border(ReaderTokens.Border.Hairline, actionBorder, RoundedCornerShape(10.dp))
         ) {
             Text("间距", color = contentColor)
         }
@@ -927,7 +930,8 @@ private fun ReaderSettingsDockPanel(
             onClick = { onOpenSubPanel(ReaderSettingsPanel.PageTurn) },
             modifier = Modifier
                 .weight(1f)
-                .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                .background(actionBg, RoundedCornerShape(10.dp))
+                .border(ReaderTokens.Border.Hairline, actionBorder, RoundedCornerShape(10.dp))
         ) {
             Text("翻页方式", color = contentColor)
         }
@@ -935,7 +939,8 @@ private fun ReaderSettingsDockPanel(
             onClick = { onOpenSubPanel(ReaderSettingsPanel.MoreBackground) },
             modifier = Modifier
                 .weight(1f)
-                .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                .background(actionBg, RoundedCornerShape(10.dp))
+                .border(ReaderTokens.Border.Hairline, actionBorder, RoundedCornerShape(10.dp))
         ) {
             Text("更多背景", color = contentColor)
         }
@@ -984,7 +989,7 @@ private fun ReaderDockPlaceholder(
             Text(desc, color = contentColor.copy(alpha = 0.72f), style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
             Spacer(modifier = Modifier.height(10.dp))
             TextButton(onClick = onAction) {
-                Text(action, color = ReaderTokens.Palette.AccentBlue)
+                Text(action, color = ReaderTokens.Palette.PrototypeBlue)
             }
         }
     }
@@ -998,17 +1003,18 @@ private fun MenuTabButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val selectedBg = if (selected) Color.White else Color.Transparent
     TextButton(
         onClick = onClick,
         modifier = modifier
             .background(
-                color = if (selected) Color.White.copy(alpha = 0.24f) else Color.Transparent,
+                color = selectedBg,
                 shape = RoundedCornerShape(999.dp)
             )
     ) {
         Text(
             text = label,
-            color = if (selected) contentColor else contentColor.copy(alpha = 0.64f)
+            color = if (selected) ReaderTokens.Palette.PrototypeTextPrimary else contentColor.copy(alpha = 0.64f)
         )
     }
 }

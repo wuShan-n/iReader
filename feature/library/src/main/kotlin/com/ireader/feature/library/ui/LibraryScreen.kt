@@ -6,8 +6,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -26,25 +24,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.MoreHoriz
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.SentimentSatisfiedAlt
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Storefront
-import androidx.compose.material.icons.outlined.VerticalAlignTop
-import androidx.compose.material.icons.outlined.WorkspacePremium
-import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -52,7 +33,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -74,15 +54,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LibraryBookItem
 import com.ireader.core.data.book.LibrarySort
 import com.ireader.core.data.book.ReadingStatus
+import com.ireader.core.designsystem.PrototypeIcons
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.feature.library.presentation.LibraryUiState
 import com.ireader.feature.library.presentation.LibraryViewModel
@@ -168,6 +147,7 @@ fun LibraryScreen(
                         )
                     } else {
                         NormalTopBar(
+                            isDark = isDark,
                             onOpenSearch = { },
                             onOpenMore = { filterMenuExpanded = true },
                             onEnterEdit = { isEditMode = true }
@@ -354,10 +334,13 @@ fun LibraryScreen(
 
 @Composable
 private fun NormalTopBar(
+    isDark: Boolean,
     onOpenSearch: () -> Unit,
     onOpenMore: () -> Unit,
     onEnterEdit: () -> Unit
 ) {
+    val titleColor = if (isDark) Color(0xFFE4E4E4) else ReaderTokens.Palette.PrototypeTextPrimary
+    val bodyColor = if (isDark) ReaderTokens.Palette.PrototypeTextTertiary else ReaderTokens.Palette.PrototypeTextSecondary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -369,30 +352,23 @@ private fun NormalTopBar(
         Text(
             text = "书架",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = titleColor
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Badge(
-                containerColor = ReaderTokens.Palette.AccentBlue,
+                containerColor = ReaderTokens.Palette.PrototypeBlue,
                 contentColor = Color.White
             ) {
                 Text("福利")
             }
             CircleActionButton(onClick = onOpenSearch) {
-                Icon(
-                    imageVector = Icons.Outlined.Search,
-                    contentDescription = "search",
-                    modifier = Modifier.size(20.dp)
-                )
+                PrototypeIcons.Search(modifier = Modifier.size(22.dp), tint = bodyColor)
             }
             CircleActionButton(onClick = onOpenMore) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreHoriz,
-                    contentDescription = "more",
-                    modifier = Modifier.size(20.dp)
-                )
+                PrototypeIcons.MoreHorizontal(modifier = Modifier.size(22.dp), tint = bodyColor)
             }
-            TextButton(onClick = onEnterEdit) { Text("编辑") }
+            TextButton(onClick = onEnterEdit) { Text("编辑", color = titleColor) }
         }
     }
 }
@@ -402,13 +378,8 @@ private fun CircleActionButton(
     onClick: () -> Unit,
     icon: @Composable () -> Unit
 ) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
-    ) {
-        IconButton(onClick = onClick) {
-            icon()
-        }
+    IconButton(onClick = onClick) {
+        icon()
     }
 }
 
@@ -452,8 +423,9 @@ private fun StatusRow(
 ) {
     val progressPercent = (state.books.map { it.progression }.average().takeIf { !it.isNaN() } ?: 0.0) * 100.0
     val readTip = "本周读${(progressPercent * 0.6).toInt()}分钟"
-    val pillColor = if (isDark) ReaderTokens.Palette.LibraryPillNight else ReaderTokens.Palette.LibraryPillDay
-    val itemColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.SecondaryTextDay
+    val pillColor = if (isDark) ReaderTokens.Palette.LibraryPillNight else ReaderTokens.Palette.PrototypeSurfaceMuted
+    val itemColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextSecondary
+    val strongText = if (isDark) Color(0xFFE4E4E4) else ReaderTokens.Palette.PrototypeTextPrimary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -469,7 +441,7 @@ private fun StatusRow(
             Text(
                 text = readTip,
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = itemColor
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -478,7 +450,7 @@ private fun StatusRow(
                 Text(filterLabel(state), color = itemColor)
             }
             Text("｜", color = itemColor.copy(alpha = 0.5f))
-            TextButton(onClick = onEnterEdit) { Text("编辑", color = MaterialTheme.colorScheme.onSurface) }
+            TextButton(onClick = onEnterEdit) { Text("编辑", color = strongText) }
             TextButton(onClick = onImport) { Text("导入", color = itemColor) }
         }
     }
@@ -492,6 +464,8 @@ private fun LibrarySearchBar(
     onKeywordChange: (String) -> Unit
 ) {
     val searchBg = if (isDark) ReaderTokens.Palette.LibrarySearchNight else ReaderTokens.Palette.LibrarySearchDay
+    val placeholderColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextTertiary
+    val leadingTint = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextSecondary
     TextField(
         modifier = Modifier
             .fillMaxWidth()
@@ -500,9 +474,9 @@ private fun LibrarySearchBar(
         onValueChange = onKeywordChange,
         singleLine = true,
         shape = RoundedCornerShape(ReaderTokens.Shape.CapsuleRadius),
-        placeholder = { Text("搜索标题 / 作者 / 文件名", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        placeholder = { Text("搜索标题 / 作者 / 文件名", color = placeholderColor) },
         leadingIcon = {
-            Icon(imageVector = Icons.Outlined.Search, contentDescription = null)
+            PrototypeIcons.Search(modifier = Modifier.size(20.dp), tint = leadingTint)
         },
         colors = TextFieldDefaults.colors(
             focusedContainerColor = searchBg,
@@ -561,8 +535,8 @@ private fun BatchActionBar(
     onMarkRead: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val bg = if (isDark) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.ReaderPanelElevatedDay
-    val contentColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.SecondaryTextDay
+    val bg = if (isDark) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.PrototypeSurface
+    val contentColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextSecondary
     Surface(
         tonalElevation = 2.dp,
         shadowElevation = 10.dp,
@@ -577,42 +551,42 @@ private fun BatchActionBar(
         ) {
             BatchIconAction(
                 label = "置顶",
-                icon = Icons.Outlined.VerticalAlignTop,
+                icon = { tint -> PrototypeIcons.PinTop(tint = tint) },
                 enabled = enabled,
                 tint = contentColor,
                 onClick = onFavorite
             )
             BatchIconAction(
-                label = "书单",
-                icon = Icons.AutoMirrored.Outlined.PlaylistAdd,
+                label = "加入书单",
+                icon = { tint -> PrototypeIcons.FolderPlus(tint = tint) },
                 enabled = enabled,
                 tint = contentColor,
                 onClick = onMarkRead
             )
             BatchIconAction(
-                label = "移动",
-                icon = Icons.Outlined.Folder,
+                label = "移动至",
+                icon = { tint -> PrototypeIcons.Folder(tint = tint) },
                 enabled = enabled,
                 tint = contentColor,
                 onClick = onFavorite
             )
             BatchIconAction(
                 label = "分享",
-                icon = Icons.Outlined.Share,
+                icon = { tint -> PrototypeIcons.Share(tint = tint) },
                 enabled = enabled,
                 tint = contentColor,
                 onClick = onFavorite
             )
             BatchIconAction(
                 label = "删除",
-                icon = Icons.Outlined.Delete,
+                icon = { tint -> PrototypeIcons.Trash(tint = tint) },
                 enabled = enabled,
-                tint = ReaderTokens.Palette.AccentRed,
+                tint = ReaderTokens.Palette.PrototypeDanger,
                 onClick = onDelete
             )
             BatchIconAction(
                 label = "更多",
-                icon = Icons.Outlined.MoreHoriz,
+                icon = { tint -> PrototypeIcons.MoreHorizontal(tint = tint) },
                 enabled = enabled,
                 tint = contentColor,
                 onClick = onFavorite
@@ -624,19 +598,14 @@ private fun BatchActionBar(
 @Composable
 private fun BatchIconAction(
     label: String,
-    icon: ImageVector,
+    icon: @Composable (Color) -> Unit,
     enabled: Boolean,
     tint: Color,
     onClick: () -> Unit
 ) {
     TextButton(onClick = onClick, enabled = enabled) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = if (enabled) tint else tint.copy(alpha = 0.45f),
-                modifier = Modifier.size(20.dp)
-            )
+            icon(if (enabled) tint else tint.copy(alpha = 0.45f))
             Text(
                 text = label,
                 color = if (enabled) tint else tint.copy(alpha = 0.45f),
@@ -650,8 +619,8 @@ private fun BatchIconAction(
 private fun LibraryBottomBar(
     isDark: Boolean
 ) {
-    val bg = if (isDark) ReaderTokens.Palette.LibraryBackgroundBottomNight else ReaderTokens.Palette.LibraryBackgroundBottomDay
-    val divider = if (isDark) ReaderTokens.Palette.LibraryDividerNight else ReaderTokens.Palette.LibraryDividerDay
+    val bg = if (isDark) ReaderTokens.Palette.LibraryBackgroundBottomNight else ReaderTokens.Palette.PrototypeSurface
+    val divider = if (isDark) ReaderTokens.Palette.LibraryDividerNight else ReaderTokens.Palette.PrototypeBorder
     Surface(
         color = bg,
         tonalElevation = 4.dp,
@@ -667,22 +636,22 @@ private fun LibraryBottomBar(
         ) {
             LibraryTabItem(
                 label = "书架",
-                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                icon = { tint -> PrototypeIcons.Book(tint = tint) },
                 selected = true
             )
             LibraryTabItem(
                 label = "书城",
-                icon = Icons.Outlined.Storefront,
+                icon = { tint -> PrototypeIcons.Store(tint = tint) },
                 selected = false
             )
             LibraryTabItem(
                 label = "会员",
-                icon = Icons.Outlined.WorkspacePremium,
+                icon = { tint -> PrototypeIcons.Crown(tint = tint) },
                 selected = false
             )
             LibraryTabItem(
                 label = "我的",
-                icon = Icons.Outlined.SentimentSatisfiedAlt,
+                icon = { tint -> PrototypeIcons.Smile(tint = tint) },
                 selected = false
             )
         }
@@ -692,18 +661,16 @@ private fun LibraryBottomBar(
 @Composable
 private fun LibraryTabItem(
     label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    size: Dp = 22.dp
+    icon: @Composable (Color) -> Unit,
+    selected: Boolean
 ) {
-    val tint = if (selected) ReaderTokens.Palette.AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant
+    val tint = if (selected) {
+        ReaderTokens.Palette.PrototypeBlue
+    } else {
+        ReaderTokens.Palette.PrototypeTextSecondary
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(size)
-        )
+        icon(tint)
         Spacer(modifier = Modifier.size(2.dp))
         Text(
             text = label,
@@ -808,7 +775,7 @@ private fun BookActionDialog(
                     Text("加入合集")
                 }
 
-                TextButton(onClick = onDelete, colors = ButtonDefaults.textButtonColors(contentColor = ReaderTokens.Palette.AccentRed)) {
+                TextButton(onClick = onDelete, colors = ButtonDefaults.textButtonColors(contentColor = ReaderTokens.Palette.PrototypeDanger)) {
                     Text("删除书籍")
                 }
             }

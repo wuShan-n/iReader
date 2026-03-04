@@ -3,6 +3,7 @@ package com.ireader.feature.reader.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,10 +41,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
+import com.ireader.core.designsystem.PrototypeIcons
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.core.designsystem.ReaderTokens
@@ -82,7 +90,7 @@ fun SettingsSheet(
     onSelectBackground: (ReaderBackgroundPreset) -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
-    val container = if (isNightMode) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.ReaderPanelElevatedDay
+    val container = if (isNightMode) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.PrototypeSurface
 
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -179,12 +187,9 @@ private fun ReflowMainPanel(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("阅读设置", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-            Icon(
-                imageVector = Icons.Outlined.Tune,
-                contentDescription = null,
-                tint = textColor,
-                modifier = Modifier.padding(start = 4.dp)
-            )
+            Box(modifier = Modifier.padding(start = 4.dp)) {
+                PrototypeIcons.SettingsHex(modifier = Modifier.size(18.dp), tint = textColor)
+            }
         }
 
         Row(
@@ -336,7 +341,7 @@ private fun FontPanel(
     var selectedFamily by remember(current.fontFamilyName) { mutableStateOf(current.fontFamilyName) }
     val textColor = if (isNightMode) Color(0xFFEAE7E1) else Color(0xFF1D1B17)
     val cardBg = if (isNightMode) Color(0xFF2A2A2A) else Color(0xFFF3EFE7)
-    val unselectedBorder = if (isNightMode) Color(0x2EFFFFFF) else Color.LightGray
+    val unselectedBorder = if (isNightMode) Color(0x2EFFFFFF) else ReaderTokens.Palette.PrototypeBorder
 
     fun currentDraft(): RenderConfig.ReflowText {
         return current.copy(fontFamilyName = selectedFamily)
@@ -367,7 +372,7 @@ private fun FontPanel(
                         .height(70.dp)
                         .background(
                             if (selected) {
-                                if (isNightMode) ReaderTokens.Palette.AccentBlue.copy(alpha = 0.2f) else ReaderTokens.Palette.AccentBlueSoft
+                                if (isNightMode) ReaderTokens.Palette.PrototypeBlue.copy(alpha = 0.2f) else ReaderTokens.Palette.PrototypeBlueSoft
                             } else {
                                 cardBg
                             },
@@ -375,7 +380,7 @@ private fun FontPanel(
                         )
                         .border(
                             width = 1.dp,
-                            color = if (selected) ReaderTokens.Palette.AccentBlue else unselectedBorder,
+                            color = if (selected) ReaderTokens.Palette.PrototypeBlue else unselectedBorder,
                             shape = RoundedCornerShape(10.dp)
                         )
                         .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -823,7 +828,7 @@ private fun PageTurnPanel(
     }
 
     val optionBg = if (isNightMode) Color(0xFF2B2B2B) else Color(0xFFF4F5F6)
-    val optionBorder = if (isNightMode) Color(0x2EFFFFFF) else Color.LightGray
+    val optionBorder = if (isNightMode) Color(0x2EFFFFFF) else ReaderTokens.Palette.PrototypeBorder
     val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
     Column(
         modifier = Modifier
@@ -850,10 +855,16 @@ private fun PageTurnPanel(
                             .background(optionBg, RoundedCornerShape(8.dp))
                             .border(
                                 width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) ReaderTokens.Palette.AccentBlue else optionBorder,
+                                color = if (isSelected) ReaderTokens.Palette.PrototypeBlue else optionBorder,
                                 shape = RoundedCornerShape(8.dp)
-                            )
-                    )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        PageTurnGlyph(
+                            label = option.label,
+                            tint = if (isSelected) ReaderTokens.Palette.PrototypeBlue else ReaderTokens.Palette.PrototypeTextTertiary
+                        )
+                    }
                     TextButton(
                         onClick = {
                             selected = option.mode
@@ -863,7 +874,7 @@ private fun PageTurnPanel(
                     ) {
                         Text(
                             option.label,
-                            color = if (isSelected) ReaderTokens.Palette.AccentBlue else textColor.copy(alpha = 0.7f)
+                            color = if (isSelected) ReaderTokens.Palette.PrototypeBlue else textColor.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -907,6 +918,127 @@ private fun PageTurnPanel(
 private const val PAGE_TURN_STYLE_EXTRA_KEY = "page_turn_style"
 
 @Composable
+private fun PageTurnGlyph(
+    label: String,
+    tint: Color,
+    modifier: Modifier = Modifier.size(32.dp)
+) {
+    Canvas(modifier = modifier) {
+        val stroke = size.minDimension * 0.08f
+        when (label) {
+            "仿真翻页" -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.18f, size.height * 0.12f),
+                    size = Size(size.width * 0.58f, size.height * 0.76f),
+                    cornerRadius = CornerRadius(size.minDimension * 0.06f),
+                    style = Stroke(width = stroke)
+                )
+                val fold = Path().apply {
+                    moveTo(size.width * 0.62f, size.height * 0.44f)
+                    lineTo(size.width * 0.84f, size.height * 0.6f)
+                    lineTo(size.width * 0.62f, size.height * 0.6f)
+                }
+                drawPath(path = fold, color = tint, style = Stroke(width = stroke, join = StrokeJoin.Round))
+            }
+
+            "左右覆盖" -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.12f, size.height * 0.14f),
+                    size = Size(size.width * 0.52f, size.height * 0.72f),
+                    cornerRadius = CornerRadius(size.minDimension * 0.05f),
+                    style = Stroke(width = stroke)
+                )
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.34f, size.height * 0.14f),
+                    size = Size(size.width * 0.52f, size.height * 0.72f),
+                    cornerRadius = CornerRadius(size.minDimension * 0.05f),
+                    style = Stroke(width = stroke)
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.54f, size.height * 0.64f),
+                    end = Offset(size.width * 0.46f, size.height * 0.54f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.46f, size.height * 0.54f),
+                    end = Offset(size.width * 0.54f, size.height * 0.44f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            "上下滑动" -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.16f, size.height * 0.12f),
+                    size = Size(size.width * 0.68f, size.height * 0.76f),
+                    cornerRadius = CornerRadius(size.minDimension * 0.05f),
+                    style = Stroke(width = stroke)
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.5f, size.height * 0.3f),
+                    end = Offset(size.width * 0.5f, size.height * 0.7f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.42f, size.height * 0.38f),
+                    end = Offset(size.width * 0.5f, size.height * 0.3f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.58f, size.height * 0.62f),
+                    end = Offset(size.width * 0.5f, size.height * 0.7f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            else -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(size.width * 0.16f, size.height * 0.12f),
+                    size = Size(size.width * 0.68f, size.height * 0.76f),
+                    cornerRadius = CornerRadius(size.minDimension * 0.05f),
+                    style = Stroke(width = stroke)
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.3f, size.height * 0.36f),
+                    end = Offset(size.width * 0.7f, size.height * 0.36f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.3f, size.height * 0.52f),
+                    end = Offset(size.width * 0.7f, size.height * 0.52f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(size.width * 0.3f, size.height * 0.68f),
+                    end = Offset(size.width * 0.58f, size.height * 0.68f),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun MoreBackgroundPanel(
     isNightMode: Boolean,
     selectedPreset: ReaderBackgroundPreset,
@@ -923,7 +1055,7 @@ private fun MoreBackgroundPanel(
         ReaderBackgroundPreset.NAVY to Color(0xFF1A1F2B)
     )
     val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
-    val unselectedBorder = if (isNightMode) Color(0x2EFFFFFF) else Color.LightGray
+    val unselectedBorder = if (isNightMode) Color(0x2EFFFFFF) else ReaderTokens.Palette.PrototypeBorder
     Column(
         modifier = Modifier
             .fillMaxHeight(0.65f)
@@ -948,7 +1080,7 @@ private fun MoreBackgroundPanel(
                         .border(
                             width = if (selected) 2.dp else 1.dp,
                             color = if (selected) {
-                                ReaderTokens.Palette.AccentBlue
+                                ReaderTokens.Palette.PrototypeBlue
                             } else {
                                 unselectedBorder
                             },
@@ -1107,7 +1239,7 @@ private fun ChoiceButton(
     onClick: () -> Unit
 ) {
     val selectedColors = ButtonDefaults.buttonColors(
-        containerColor = ReaderTokens.Palette.AccentBlue,
+        containerColor = ReaderTokens.Palette.PrototypeBlue,
         contentColor = Color.White
     )
     val unselectedText = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF24201C)
