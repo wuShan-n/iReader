@@ -78,10 +78,11 @@ internal class EpubOpener(
                 prefix = "epub",
                 source = source
             )
+            val fixedLayout = publication.isFixedLayoutPublication()
 
             val capabilities = DocumentCapabilities(
-                reflowable = true,
-                fixedLayout = false,
+                reflowable = !fixedLayout,
+                fixedLayout = fixedLayout,
                 outline = publication.tableOfContents.isNotEmpty(),
                 search = publication.isSearchable,
                 textExtraction = true,
