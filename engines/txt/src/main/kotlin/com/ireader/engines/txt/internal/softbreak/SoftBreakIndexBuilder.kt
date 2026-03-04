@@ -20,7 +20,7 @@ import kotlin.coroutines.coroutineContext
 internal object SoftBreakIndexBuilder {
 
     private const val MAGIC = "SBX1"
-    private const val VERSION = 1
+    private const val VERSION = 2
     private const val BLOCK_NEWLINES = 4096
     private const val MAX_TITLE_CHARS = 80
     private const val CHUNK_CHARS = 128 * 1024
@@ -191,9 +191,11 @@ internal object SoftBreakIndexBuilder {
                         if (line1.len < (typical * 0.30).toInt()) {
                             return false
                         }
-                        val last = line0.lastNonSpace
-                        if (last != null && strongEndPunct.contains(last)) {
-                            return false
+                        if (!meta.hardWrapLikely) {
+                            val last = line0.lastNonSpace
+                            if (last != null && strongEndPunct.contains(last)) {
+                                return false
+                            }
                         }
                         return true
                     }

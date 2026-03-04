@@ -16,8 +16,14 @@ object SoftBreakProcessor {
         startsAtParagraphBoundary: Boolean
     ): CharSequence {
         val normalized = when {
-            hardWrapLikely -> normalizeSoftBreaks(rawText)
-            shouldForceNormalizeSoftBreaks(rawText) -> normalizeSoftBreaks(rawText)
+            hardWrapLikely -> normalizeSoftBreaks(
+                text = rawText,
+                preservePunctuationBoundaries = false
+            )
+            shouldForceNormalizeSoftBreaks(rawText) -> normalizeSoftBreaks(
+                text = rawText,
+                preservePunctuationBoundaries = true
+            )
             else -> NormalizedText(rawText, collectHardBreakPositions(rawText))
         }
         if (paragraphSpacingPx <= 0 && paragraphIndentPx <= 0) {
@@ -68,7 +74,10 @@ object SoftBreakProcessor {
         }
     }
 
-    private fun normalizeSoftBreaks(text: String): NormalizedText {
+    private fun normalizeSoftBreaks(
+        text: String,
+        preservePunctuationBoundaries: Boolean
+    ): NormalizedText {
         if (text.isEmpty()) {
             return NormalizedText("", intArrayOf())
         }
@@ -77,7 +86,13 @@ object SoftBreakProcessor {
         var i = 0
         while (i < chars.size) {
             if (chars[i] == '\n') {
-                if (shouldTreatAsSoftBreak(chars, i)) {
+                if (
+                    shouldTreatAsSoftBreak(
+                        chars = chars,
+                        index = i,
+                        preservePunctuationBoundaries = preservePunctuationBoundaries
+                    )
+                ) {
                     chars[i] = ' '
                 } else {
                     hardBreaks += i
@@ -111,7 +126,13 @@ object SoftBreakProcessor {
                     if (lineLength > 0) {
                         lineLengths += lineLength
                     }
-                    if (shouldTreatAsSoftBreak(chars, i)) {
+                    if (
+                        shouldTreatAsSoftBreak(
+                            chars = chars,
+                            index = i,
+                            preservePunctuationBoundaries = true
+                        )
+                    ) {
                         softBreaks++
                     }
                     if (startsWithListMarker(chars, i + 1)) {
@@ -281,7 +302,11 @@ object SoftBreakProcessor {
         return true
     }
 
-    private fun shouldTreatAsSoftBreak(chars: CharArray, index: Int): Boolean {
+    private fun shouldTreatAsSoftBreak(
+        chars: CharArray,
+        index: Int,
+        preservePunctuationBoundaries: Boolean
+    ): Boolean {
         val prev = if (index > 0) chars[index - 1] else null
         val next = if (index + 1 < chars.size) chars[index + 1] else null
 
@@ -291,7 +316,7 @@ object SoftBreakProcessor {
         if (prev == '\n' || next == '\n') {
             return false
         }
-        if (prev in STRONG_PARAGRAPH_PUNCTUATION) {
+        if (preservePunctuationBoundaries && prev in STRONG_PARAGRAPH_PUNCTUATION) {
             return false
         }
         if (next == ' ' || next == '\t' || next == '\u3000') {

@@ -22,7 +22,20 @@ class SoftBreakProcessorTest {
     }
 
     @Test
-    fun `line break after strong punctuation should remain paragraph break`() {
+    fun `line break after strong punctuation should remain paragraph break when hard wrap is not likely`() {
+        val output = SoftBreakProcessor.process(
+            rawText = "段落结束。\n下一段内容",
+            hardWrapLikely = false,
+            paragraphSpacingPx = 0,
+            paragraphIndentPx = 0,
+            startsAtParagraphBoundary = true
+        )
+
+        assertEquals("段落结束。\n下一段内容", output.toString())
+    }
+
+    @Test
+    fun `line break after strong punctuation should collapse when hard wrap is likely`() {
         val output = SoftBreakProcessor.process(
             rawText = "段落结束。\n下一段内容",
             hardWrapLikely = true,
@@ -31,7 +44,7 @@ class SoftBreakProcessorTest {
             startsAtParagraphBoundary = true
         )
 
-        assertEquals("段落结束。\n下一段内容", output.toString())
+        assertEquals("段落结束。 下一段内容", output.toString())
     }
 
     @Test

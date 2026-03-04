@@ -28,7 +28,7 @@ internal class SoftBreakIndex private constructor(
 
     companion object {
         private const val MAGIC = "SBX1"
-        private const val VERSION = 1
+        private const val VERSION = 2
 
         fun openIfValid(file: File, meta: TxtMeta): SoftBreakIndex? {
             if (!file.exists()) {
