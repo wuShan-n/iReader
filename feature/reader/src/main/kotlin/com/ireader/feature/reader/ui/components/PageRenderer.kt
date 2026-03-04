@@ -8,13 +8,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
@@ -219,25 +216,6 @@ private fun TextGestureOverlay(
                 }
             )
         }
-
-        PageTurnMode.SCROLL_VERTICAL -> Modifier.pointerInput(pageId, mode) {
-            detectVerticalDragGestures(
-                onDragStart = { dragDeltaPx = 0f },
-                onVerticalDrag = { change, amount ->
-                    change.consume()
-                    dragDeltaPx += amount
-                },
-                onDragCancel = { dragDeltaPx = 0f },
-                onDragEnd = {
-                    onDragEnd(
-                        GestureAxis.VERTICAL,
-                        dragDeltaPx,
-                        size.height
-                    )
-                    dragDeltaPx = 0f
-                }
-            )
-        }
     }
 
     Box(
@@ -262,9 +240,12 @@ private fun buildPageTransform(
     val durationMs = 220
     return when (resolvePageTurnAnimationKind(mode = mode, style = style)) {
         PageTurnAnimationKind.COVER_OVERLAY -> {
-            val enter = slideInHorizontally(
+            val enter = fadeIn(
                 animationSpec = tween(durationMs)
-            ) { full -> if (forward) full else -full } + fadeIn(animationSpec = tween(durationMs / 2))
+            ) + scaleIn(
+                initialScale = 0.99f,
+                animationSpec = tween(durationMs)
+            )
             (enter togetherWith ExitTransition.None).apply {
                 targetContentZIndex = 1f
             }
@@ -282,16 +263,6 @@ private fun buildPageTransform(
             (enter togetherWith ExitTransition.None).apply {
                 targetContentZIndex = 1.1f
             }
-        }
-
-        PageTurnAnimationKind.SCROLL_VERTICAL -> {
-            val enter = slideInVertically(
-                animationSpec = tween(durationMs)
-            ) { full -> if (forward) full else -full } + fadeIn(animationSpec = tween(durationMs / 2))
-            val exit = slideOutVertically(
-                animationSpec = tween(durationMs)
-            ) { full -> if (forward) -full else full } + fadeOut(animationSpec = tween(durationMs))
-            enter togetherWith exit
         }
 
         PageTurnAnimationKind.NONE -> {

@@ -91,7 +91,7 @@ class DatastoreReaderSettingsStoreTest {
     }
 
     @Test
-    fun `setReflow should persist page turn mode and recover in flow`() = runTest {
+    fun `setReflow should persist cover page turn mode and recover in flow`() = runTest {
         val dataStore = createDataStore(
             scope = this,
             testFile = File(temporaryFolder.root, "reader_settings_page_turn.preferences_pb")
@@ -99,17 +99,17 @@ class DatastoreReaderSettingsStoreTest {
         val store = DatastoreReaderSettingsStore(dataStore)
         val config = RenderConfig.ReflowText(
             extra = mapOf(
-                PAGE_TURN_EXTRA_KEY to "scroll_vertical"
+                PAGE_TURN_EXTRA_KEY to "cover_horizontal"
             )
         )
 
         store.setReflowConfig(config)
 
         val prefs = dataStore.data.first()
-        assertEquals("scroll_vertical", prefs[stringPreferencesKey("reader.reflow.pageTurnMode")])
-        assertEquals("scroll_vertical", prefs[stringPreferencesKey("reader.reflow.pageTurnStyle")])
-        assertEquals("scroll_vertical", store.getReflowConfig().extra[PAGE_TURN_EXTRA_KEY])
-        assertEquals("scroll_vertical", store.getReflowConfig().extra[PAGE_TURN_STYLE_EXTRA_KEY])
+        assertEquals("cover_horizontal", prefs[stringPreferencesKey("reader.reflow.pageTurnMode")])
+        assertEquals("cover_overlay", prefs[stringPreferencesKey("reader.reflow.pageTurnStyle")])
+        assertEquals("cover_horizontal", store.getReflowConfig().extra[PAGE_TURN_EXTRA_KEY])
+        assertEquals("cover_overlay", store.getReflowConfig().extra[PAGE_TURN_STYLE_EXTRA_KEY])
     }
 
     @Test
@@ -122,7 +122,7 @@ class DatastoreReaderSettingsStoreTest {
         val config = RenderConfig.ReflowText(
             extra = mapOf(
                 PAGE_TURN_EXTRA_KEY to "cover_horizontal",
-                PAGE_TURN_STYLE_EXTRA_KEY to "无动效"
+                PAGE_TURN_STYLE_EXTRA_KEY to "no_animation"
             )
         )
 
@@ -167,6 +167,7 @@ class DatastoreReaderSettingsStoreTest {
             backgroundPreset = ReaderBackgroundPreset.NAVY,
             showReadingProgress = false,
             fullScreenMode = false,
+            volumeKeyPagingEnabled = false,
             tapZonePreset = TapZonePreset.LEFT_HAND,
             preventAccidentalTurn = false
         )

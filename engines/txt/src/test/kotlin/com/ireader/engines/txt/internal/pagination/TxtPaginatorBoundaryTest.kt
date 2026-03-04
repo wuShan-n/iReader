@@ -39,4 +39,18 @@ class TxtPaginatorBoundaryTest {
 
         assertEquals(measuredEnd, adjusted)
     }
+
+    @Test
+    fun `adjustMeasuredEndForParagraphTail should rewind short sentence tail`() {
+        val raw = "这是第一句内容足够长用于分页边界测试。这是第二句尾巴很短"
+        val measuredEnd = raw.length - 1
+
+        val adjusted = ReflowPaginator.adjustMeasuredEndForParagraphTail(
+            raw = raw,
+            measuredEnd = measuredEnd,
+            rawLength = raw.length
+        )
+
+        assertEquals(raw.indexOf('。') + 1, adjusted)
+    }
 }

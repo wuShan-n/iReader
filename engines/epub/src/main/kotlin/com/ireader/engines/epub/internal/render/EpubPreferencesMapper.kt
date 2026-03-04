@@ -1,8 +1,6 @@
 package com.ireader.engines.epub.internal.render
 
 import com.ireader.reader.api.render.HyphenationMode
-import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
-import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.toTypographySpec
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -19,7 +17,6 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
             val fontScale = (typography.fontSizeSp / baseSp)
                 .toDouble()
                 .coerceIn(0.5, 4.0)
-            val pageTurnMode = PageTurnMode.fromStorageValue(extra[PAGE_TURN_EXTRA_KEY])
             val advanced = !respectPublisherStyles
             val textAlign = if (advanced) {
                 when (typography.textAlign) {
@@ -32,7 +29,7 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
 
             EpubPreferences(
                 fontSize = fontScale,
-                scroll = pageTurnMode == PageTurnMode.SCROLL_VERTICAL,
+                scroll = false,
                 pageMargins = (typography.pagePaddingDp / 16f).toDouble().coerceIn(0.0, 4.0),
                 publisherStyles = respectPublisherStyles,
                 lineHeight = if (advanced) typography.lineHeightMult.toDouble().coerceIn(1.0, 2.0) else null,

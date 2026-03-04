@@ -61,7 +61,6 @@ internal class ReaderGestureInterpreter {
     private fun isMatchingAxis(axis: GestureAxis, pageTurnMode: PageTurnMode): Boolean {
         return when (pageTurnMode) {
             PageTurnMode.COVER_HORIZONTAL -> axis == GestureAxis.HORIZONTAL
-            PageTurnMode.SCROLL_VERTICAL -> axis == GestureAxis.VERTICAL
         }
     }
 
@@ -75,12 +74,6 @@ internal class ReaderGestureInterpreter {
             PageTurnMode.COVER_HORIZONTAL -> {
                 val ratio = if (preventAccidentalTurn) 0.16f else 0.12f
                 val minPx = if (preventAccidentalTurn) 68f else 52f
-                max(viewport * ratio, minPx)
-            }
-
-            PageTurnMode.SCROLL_VERTICAL -> {
-                val ratio = if (preventAccidentalTurn) 0.18f else 0.14f
-                val minPx = if (preventAccidentalTurn) 84f else 56f
                 max(viewport * ratio, minPx)
             }
         }

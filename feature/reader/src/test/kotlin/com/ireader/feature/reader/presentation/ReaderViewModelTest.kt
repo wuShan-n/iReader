@@ -134,9 +134,9 @@ class ReaderViewModelTest {
     }
 
     @Test
-    fun `center tap should toggle immersive chrome in fullscreen`() = runTest {
+    fun `center tap shows chrome and next tap hides chrome`() = runTest {
         val vm = newViewModel(bookById = emptyMap())
-        assertTrue(vm.state.value.chromeVisible)
+        assertFalse(vm.state.value.chromeVisible)
 
         vm.dispatch(
             ReaderIntent.HandleTap(
@@ -147,7 +147,31 @@ class ReaderViewModelTest {
             )
         )
 
+        assertTrue(vm.state.value.chromeVisible)
+
+        vm.dispatch(
+            ReaderIntent.HandleTap(
+                xPx = 120f,
+                yPx = 960f,
+                viewportWidthPx = 1080,
+                viewportHeightPx = 1920
+            )
+        )
+
         assertFalse(vm.state.value.chromeVisible)
+    }
+
+    @Test
+    fun `set volume key paging should persist display prefs`() = runTest {
+        val settings = FakeReaderSettingsStore()
+        val vm = newViewModel(
+            bookById = emptyMap(),
+            settingsStore = settings
+        )
+
+        vm.dispatch(ReaderIntent.SetVolumeKeyPaging(false))
+
+        assertEquals(false, settings.lastDisplayPrefs?.volumeKeyPagingEnabled)
     }
 
     private fun newViewModel(

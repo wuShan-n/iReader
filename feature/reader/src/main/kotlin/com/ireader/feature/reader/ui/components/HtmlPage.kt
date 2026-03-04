@@ -265,7 +265,10 @@ internal fun buildReflowCss(
         html, body {
             font-size: var(--ireader-font-size) !important;
             line-height: var(--ireader-line-height) !important;
-            padding: var(--ireader-page-padding) !important;
+            padding-left: var(--ireader-page-padding) !important;
+            padding-right: var(--ireader-page-padding) !important;
+            padding-top: var(--ireader-page-padding) !important;
+            padding-bottom: var(--ireader-page-padding) !important;
             margin: 0 !important;
             text-align: ${textAlign} !important;
             line-break: $lineBreak !important;

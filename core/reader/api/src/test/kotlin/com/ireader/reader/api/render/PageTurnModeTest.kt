@@ -8,7 +8,6 @@ class PageTurnModeTest {
     @Test
     fun `fromStorageValue should decode known values`() {
         assertEquals(PageTurnMode.COVER_HORIZONTAL, PageTurnMode.fromStorageValue("cover_horizontal"))
-        assertEquals(PageTurnMode.SCROLL_VERTICAL, PageTurnMode.fromStorageValue("scroll_vertical"))
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.ireader
 
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -20,6 +21,7 @@ import com.ireader.feature.annotations.ui.AnnotationsScreen
 import com.ireader.feature.library.navigation.libraryNavGraph
 import com.ireader.feature.reader.navigation.ReaderRoute
 import com.ireader.feature.reader.navigation.readerNavGraph
+import com.ireader.feature.reader.presentation.ReaderHardwareKeyBridge
 import com.ireader.feature.search.ui.SearchScreen
 import com.ireader.feature.settings.ui.SettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
@@ -40,6 +42,16 @@ class MainActivity : FragmentActivity() {
                 iReaderApp()
             }
         }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (
+            (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) &&
+            ReaderHardwareKeyBridge.dispatchVolumeKey(event.keyCode, event.action)
+        ) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 }
 

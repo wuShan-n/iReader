@@ -10,44 +10,38 @@ import org.junit.Test
 class PageTurnSupportTest {
 
     @Test
-    fun `legacy page turn values should map to supported modes`() {
-        assertEquals(PageTurnMode.COVER_HORIZONTAL, parsePageTurnMode("仿真翻页"))
-        assertEquals(PageTurnMode.COVER_HORIZONTAL, parsePageTurnMode("无动效"))
-        assertEquals(PageTurnMode.COVER_HORIZONTAL, parsePageTurnMode("左右覆盖"))
-        assertEquals(PageTurnMode.SCROLL_VERTICAL, parsePageTurnMode("上下滑动"))
-        assertEquals(PageTurnMode.SCROLL_VERTICAL, parsePageTurnMode("上下滚动"))
+    fun `page turn mode should fallback to cover horizontal`() {
+        assertEquals(PageTurnMode.COVER_HORIZONTAL, parsePageTurnMode("cover_horizontal"))
+        assertEquals(PageTurnMode.COVER_HORIZONTAL, parsePageTurnMode("unknown"))
+        assertEquals(PageTurnMode.COVER_HORIZONTAL, parsePageTurnMode(null))
     }
 
     @Test
     fun `withPageTurnMode should write canonical raw value`() {
-        val config = RenderConfig.ReflowText().withPageTurnMode(PageTurnMode.SCROLL_VERTICAL)
+        val config = RenderConfig.ReflowText().withPageTurnMode(PageTurnMode.COVER_HORIZONTAL)
         assertEquals(
-            PageTurnMode.SCROLL_VERTICAL.storageValue,
+            PageTurnMode.COVER_HORIZONTAL.storageValue,
             config.extra[PAGE_TURN_EXTRA_KEY]
         )
         assertEquals(
-            PageTurnStyle.SCROLL_VERTICAL.storageValue,
+            PageTurnStyle.COVER_OVERLAY.storageValue,
             config.extra[PAGE_TURN_STYLE_EXTRA_KEY]
         )
     }
 
     @Test
-    fun `legacy page turn style values should map to supported styles`() {
+    fun `page turn style should map canonical values`() {
         assertEquals(
             PageTurnStyle.SIMULATION,
-            parsePageTurnStyle(raw = "仿真翻页", mode = PageTurnMode.COVER_HORIZONTAL)
+            parsePageTurnStyle(raw = "simulation", mode = PageTurnMode.COVER_HORIZONTAL)
         )
         assertEquals(
             PageTurnStyle.COVER_OVERLAY,
-            parsePageTurnStyle(raw = "左右覆盖", mode = PageTurnMode.COVER_HORIZONTAL)
+            parsePageTurnStyle(raw = "cover_overlay", mode = PageTurnMode.COVER_HORIZONTAL)
         )
         assertEquals(
             PageTurnStyle.NO_ANIMATION,
-            parsePageTurnStyle(raw = "无动效", mode = PageTurnMode.COVER_HORIZONTAL)
-        )
-        assertEquals(
-            PageTurnStyle.SCROLL_VERTICAL,
-            parsePageTurnStyle(raw = "上下滑动", mode = PageTurnMode.SCROLL_VERTICAL)
+            parsePageTurnStyle(raw = "no_animation", mode = PageTurnMode.COVER_HORIZONTAL)
         )
     }
 
@@ -65,14 +59,14 @@ class PageTurnSupportTest {
     }
 
     @Test
-    fun `page turn style should fallback to mode default when style mismatches mode`() {
+    fun `page turn style should fallback to default when raw is invalid`() {
         val config = RenderConfig.ReflowText(
             extra = mapOf(
-                PAGE_TURN_EXTRA_KEY to PageTurnMode.SCROLL_VERTICAL.storageValue,
-                PAGE_TURN_STYLE_EXTRA_KEY to PageTurnStyle.NO_ANIMATION.storageValue
+                PAGE_TURN_EXTRA_KEY to PageTurnMode.COVER_HORIZONTAL.storageValue,
+                PAGE_TURN_STYLE_EXTRA_KEY to "invalid-style"
             )
         )
 
-        assertEquals(PageTurnStyle.SCROLL_VERTICAL, config.pageTurnStyle())
+        assertEquals(PageTurnStyle.COVER_OVERLAY, config.pageTurnStyle())
     }
 }

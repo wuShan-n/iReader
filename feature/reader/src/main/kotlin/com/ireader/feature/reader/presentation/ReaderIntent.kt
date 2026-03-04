@@ -55,7 +55,7 @@ sealed interface ReaderIntent {
     data class SelectBackground(val preset: ReaderBackgroundPreset) : ReaderIntent
     data class SetReadingProgressVisible(val visible: Boolean) : ReaderIntent
     data class SetFullScreenMode(val enabled: Boolean) : ReaderIntent
-    data class SetVerticalPaging(val enabled: Boolean) : ReaderIntent
+    data class SetVolumeKeyPaging(val enabled: Boolean) : ReaderIntent
     data object CloseSheet : ReaderIntent
     data object BackInSheetHierarchy : ReaderIntent
 

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,7 +24,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,7 +47,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,7 +69,6 @@ import com.ireader.feature.reader.presentation.ReaderMenuTab
 import com.ireader.feature.reader.presentation.ReaderSheet
 import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.presentation.asString
-import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.feature.reader.ui.components.ErrorPane
 import com.ireader.feature.reader.ui.components.PageRenderer
 import com.ireader.feature.reader.ui.components.PasswordDialog
@@ -88,6 +86,9 @@ import android.content.ContextWrapper
 import android.app.Activity
 import android.os.BatteryManager
 import android.view.WindowManager
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -129,21 +130,21 @@ fun ReaderScaffold(
     val clock = rememberClockText()
     val batteryPercent = rememberBatteryPercent()
 
-    LaunchedEffect(prefs.fullScreenMode) {
-        if (!prefs.fullScreenMode && !state.chromeVisible) {
-            onIntent(ReaderIntent.ToggleImmersiveChrome)
-        }
-    }
     ApplyReaderBrightness(prefs = prefs)
+    ApplyReaderSystemBars(
+        prefs = prefs,
+        chromeVisible = state.chromeVisible,
+        isReadingLayer = state.layerState == com.ireader.feature.reader.presentation.ReaderLayerState.Reading
+    )
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        containerColor = bgColor
-    ) { padding ->
+        containerColor = bgColor,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) { _ ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .background(bgColor)
         ) {
             PageRenderer(
@@ -355,12 +356,11 @@ fun ReaderScaffold(
 
             ReaderSheet.FullSettings -> FullSettingsScreen(
                 prefs = prefs,
-                isVerticalPaging = state.pageTurnMode == PageTurnMode.SCROLL_VERTICAL,
                 isNightMode = state.isNightMode,
                 onBack = { onIntent(ReaderIntent.BackInSheetHierarchy) },
                 onShowReadingProgressChanged = { onIntent(ReaderIntent.SetReadingProgressVisible(it)) },
                 onFullScreenModeChanged = { onIntent(ReaderIntent.SetFullScreenMode(it)) },
-                onVerticalPagingChanged = { onIntent(ReaderIntent.SetVerticalPaging(it)) }
+                onVolumeKeyPagingChanged = { onIntent(ReaderIntent.SetVolumeKeyPaging(it)) }
             )
         }
     }
@@ -384,7 +384,6 @@ private fun ReaderTopBar(
             .fillMaxWidth()
             .background(panelColor)
             .border(width = ReaderTokens.Border.Hairline, color = panelBorderColor)
-            .statusBarsPadding()
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1223,12 +1222,11 @@ private fun GestureHintBar(
 @Composable
 private fun FullSettingsScreen(
     prefs: ReaderDisplayPrefs,
-    isVerticalPaging: Boolean,
     isNightMode: Boolean,
     onBack: () -> Unit,
     onShowReadingProgressChanged: (Boolean) -> Unit,
     onFullScreenModeChanged: (Boolean) -> Unit,
-    onVerticalPagingChanged: (Boolean) -> Unit
+    onVolumeKeyPagingChanged: (Boolean) -> Unit
 ) {
     val bg = if (isNightMode) Color(0xFF111111) else Color(0xFFF4F5F7)
     val card = if (isNightMode) Color(0xFF1C1C1C) else Color.White
@@ -1244,7 +1242,6 @@ private fun FullSettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1273,17 +1270,17 @@ private fun FullSettingsScreen(
                         )
                         SwitchRow(
                             "全屏模式",
-                            "关闭后常驻顶部和底部工具栏",
+                            "仅隐藏状态栏，保留系统导航栏",
                             prefs.fullScreenMode,
                             onChange = onFullScreenModeChanged,
                             textColor = textColor,
                             subColor = sub
                         )
                         SwitchRow(
-                            "竖向翻页",
-                            "启用上下滚动翻页",
-                            isVerticalPaging,
-                            onChange = onVerticalPagingChanged,
+                            "音量键翻页",
+                            "音量上键上一页，音量下键下一页",
+                            prefs.volumeKeyPagingEnabled,
+                            onChange = onVolumeKeyPagingChanged,
                             textColor = textColor,
                             subColor = sub
                         )
@@ -1340,6 +1337,38 @@ private fun ApplyReaderBrightness(prefs: ReaderDisplayPrefs) {
             val disposeAttrs = disposeWindow.attributes
             disposeAttrs.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             disposeWindow.attributes = disposeAttrs
+        }
+    }
+}
+
+@Composable
+private fun ApplyReaderSystemBars(
+    prefs: ReaderDisplayPrefs,
+    chromeVisible: Boolean,
+    isReadingLayer: Boolean
+) {
+    val context = LocalContext.current
+    DisposableEffect(context, prefs.fullScreenMode, chromeVisible, isReadingLayer) {
+        val activity = context.findActivity()
+        val window = activity?.window
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            val controller = WindowInsetsControllerCompat(window, window.decorView)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            val immersive = prefs.fullScreenMode && isReadingLayer && !chromeVisible
+            if (immersive) {
+                controller.hide(WindowInsetsCompat.Type.statusBars())
+                controller.show(WindowInsetsCompat.Type.navigationBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+
+        onDispose {
+            val disposeWindow = context.findActivity()?.window ?: return@onDispose
+            WindowCompat.setDecorFitsSystemWindows(disposeWindow, true)
+            WindowInsetsControllerCompat(disposeWindow, disposeWindow.decorView)
+                .show(WindowInsetsCompat.Type.systemBars())
         }
     }
 }

@@ -64,6 +64,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val backgroundPreset = stringPreferencesKey("reader.display.backgroundPreset")
             val showReadingProgress = booleanPreferencesKey("reader.display.showReadingProgress")
             val fullScreenMode = booleanPreferencesKey("reader.display.fullScreenMode")
+            val volumeKeyPagingEnabled = booleanPreferencesKey("reader.display.volumeKeyPagingEnabled")
             val tapZonePreset = stringPreferencesKey("reader.display.tapZonePreset")
             val preventAccidentalTurn = booleanPreferencesKey("reader.display.preventAccidentalTurn")
         }
@@ -114,8 +115,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
                 prefs[Keys.Reflow.pageTurnMode]
             )
             val pageTurnStyle = normalizePageTurnStyleRaw(
-                raw = prefs[Keys.Reflow.pageTurnStyle],
-                mode = pageTurnMode
+                raw = prefs[Keys.Reflow.pageTurnStyle]
             )
 
             defaultReflow.copy(
@@ -170,6 +170,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
                     ?: defaultDisplay.showReadingProgress,
                 fullScreenMode = prefs[Keys.Display.fullScreenMode]
                     ?: defaultDisplay.fullScreenMode,
+                volumeKeyPagingEnabled = prefs[Keys.Display.volumeKeyPagingEnabled]
+                    ?: defaultDisplay.volumeKeyPagingEnabled,
                 tapZonePreset = TapZonePreset.fromStorageValue(
                     prefs[Keys.Display.tapZonePreset]
                 ),
@@ -206,8 +208,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Reflow.respectPublisherStyles] = config.respectPublisherStyles
             val pageTurnMode = PageTurnMode.fromStorageValue(config.extra[PAGE_TURN_EXTRA_KEY])
             val pageTurnStyle = normalizePageTurnStyleRaw(
-                raw = config.extra[PAGE_TURN_STYLE_EXTRA_KEY],
-                mode = pageTurnMode
+                raw = config.extra[PAGE_TURN_STYLE_EXTRA_KEY]
             )
             prefs[Keys.Reflow.pageTurnMode] = pageTurnMode.storageValue
             prefs[Keys.Reflow.pageTurnStyle] = pageTurnStyle
@@ -232,6 +233,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
             mutablePrefs[Keys.Display.backgroundPreset] = prefs.backgroundPreset.storageValue
             mutablePrefs[Keys.Display.showReadingProgress] = prefs.showReadingProgress
             mutablePrefs[Keys.Display.fullScreenMode] = prefs.fullScreenMode
+            mutablePrefs[Keys.Display.volumeKeyPagingEnabled] = prefs.volumeKeyPagingEnabled
             mutablePrefs[Keys.Display.tapZonePreset] = prefs.tapZonePreset.storageValue
             mutablePrefs[Keys.Display.preventAccidentalTurn] = prefs.preventAccidentalTurn
         }
@@ -257,49 +259,24 @@ class DatastoreReaderSettingsStore @Inject constructor(
             .getOrElse { defaultReflow.pageInsetMode }
     }
 
-    private fun normalizePageTurnStyleRaw(raw: String?, mode: PageTurnMode): String {
+    private fun normalizePageTurnStyleRaw(raw: String?): String {
         val canonical = when (raw) {
-            STYLE_SIMULATION,
-            "仿真翻页" -> STYLE_SIMULATION
-
+            STYLE_SIMULATION -> STYLE_SIMULATION
             STYLE_COVER_OVERLAY,
-            "左右覆盖",
             PageTurnMode.COVER_HORIZONTAL.storageValue -> STYLE_COVER_OVERLAY
-
-            STYLE_SCROLL_VERTICAL,
-            "上下滑动",
-            "上下滚动",
-            PageTurnMode.SCROLL_VERTICAL.storageValue -> STYLE_SCROLL_VERTICAL
-
-            STYLE_NO_ANIMATION,
-            "无动效" -> STYLE_NO_ANIMATION
-
-            else -> defaultPageTurnStyleRaw(mode = mode)
+            STYLE_NO_ANIMATION -> STYLE_NO_ANIMATION
+            else -> defaultPageTurnStyleRaw()
         }
-        return when (mode) {
-            PageTurnMode.COVER_HORIZONTAL -> {
-                if (canonical == STYLE_SCROLL_VERTICAL) {
-                    defaultPageTurnStyleRaw(mode = mode)
-                } else {
-                    canonical
-                }
-            }
-
-            PageTurnMode.SCROLL_VERTICAL -> STYLE_SCROLL_VERTICAL
-        }
+        return canonical
     }
 
-    private fun defaultPageTurnStyleRaw(mode: PageTurnMode): String {
-        return when (mode) {
-            PageTurnMode.COVER_HORIZONTAL -> STYLE_COVER_OVERLAY
-            PageTurnMode.SCROLL_VERTICAL -> STYLE_SCROLL_VERTICAL
-        }
+    private fun defaultPageTurnStyleRaw(): String {
+        return STYLE_COVER_OVERLAY
     }
 
     private companion object {
         const val STYLE_SIMULATION = "simulation"
         const val STYLE_COVER_OVERLAY = "cover_overlay"
-        const val STYLE_SCROLL_VERTICAL = "scroll_vertical"
         const val STYLE_NO_ANIMATION = "no_animation"
     }
 }

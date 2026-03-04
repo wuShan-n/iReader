@@ -83,7 +83,7 @@ data class ReaderUiState(
     val title: String? = null,
     val isOpening: Boolean = false,
     val isRenderingFinal: Boolean = false,
-    val chromeVisible: Boolean = true,
+    val chromeVisible: Boolean = false,
     val layerState: ReaderLayerState = ReaderLayerState.Reading,
     val activeMenuTab: ReaderMenuTab = ReaderMenuTab.Toc,
     val capabilities: DocumentCapabilities? = null,

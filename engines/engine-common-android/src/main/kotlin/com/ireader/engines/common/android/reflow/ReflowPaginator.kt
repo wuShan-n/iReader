@@ -178,8 +178,10 @@ class ReflowPaginator(
     companion object {
         private const val MAX_WINDOW_CHARS = 96_000
         private const val MIN_TAIL_CHARS_FOR_REWIND = 14
+        private const val MIN_SENTENCE_TAIL_CHARS_FOR_REWIND = 12
         private const val MIN_PARAGRAPH_CHARS_FOR_REWIND = 24
         private const val MAX_REWIND_CHARS = 240
+        private val STRONG_SENTENCE_BREAKS = charArrayOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：')
 
         fun adjustMeasuredEndForParagraphTail(
             raw: String,
@@ -192,19 +194,67 @@ class ReflowPaginator(
             }
             val lineBreak = raw.lastIndexOf('\n', startIndex = clampedEnd - 1)
             if (lineBreak <= 0 || lineBreak >= clampedEnd) {
-                return clampedEnd
+                return adjustMeasuredEndForSentenceTail(
+                    raw = raw,
+                    clampedEnd = clampedEnd,
+                    rawLength = rawLength
+                )
             }
             val previousBreak = raw.lastIndexOf('\n', startIndex = lineBreak - 1)
             val paragraphStart = previousBreak + 1
             val tailChars = clampedEnd - (lineBreak + 1)
             if (tailChars <= 0 || tailChars >= MIN_TAIL_CHARS_FOR_REWIND) {
-                return clampedEnd
+                return adjustMeasuredEndForSentenceTail(
+                    raw = raw,
+                    clampedEnd = clampedEnd,
+                    rawLength = rawLength
+                )
             }
             val paragraphChars = clampedEnd - paragraphStart
             if (paragraphChars < MIN_PARAGRAPH_CHARS_FOR_REWIND) {
-                return clampedEnd
+                return adjustMeasuredEndForSentenceTail(
+                    raw = raw,
+                    clampedEnd = clampedEnd,
+                    rawLength = rawLength
+                )
             }
             val candidate = lineBreak + 1
+            if (clampedEnd - candidate > MAX_REWIND_CHARS) {
+                return adjustMeasuredEndForSentenceTail(
+                    raw = raw,
+                    clampedEnd = clampedEnd,
+                    rawLength = rawLength
+                )
+            }
+            return candidate
+        }
+
+        private fun adjustMeasuredEndForSentenceTail(
+            raw: String,
+            clampedEnd: Int,
+            rawLength: Int
+        ): Int {
+            if (clampedEnd <= 0 || clampedEnd >= rawLength) {
+                return clampedEnd
+            }
+            val sentenceBreak = raw.lastIndexOfAny(
+                chars = STRONG_SENTENCE_BREAKS,
+                startIndex = clampedEnd - 1
+            )
+            if (sentenceBreak <= 0 || sentenceBreak >= clampedEnd) {
+                return clampedEnd
+            }
+            val candidate = sentenceBreak + 1
+            val tailChars = clampedEnd - candidate
+            if (tailChars <= 0 || tailChars >= MIN_SENTENCE_TAIL_CHARS_FOR_REWIND) {
+                return clampedEnd
+            }
+            val previousBreak = raw.lastIndexOf('\n', startIndex = sentenceBreak - 1)
+            val blockStart = if (previousBreak >= 0) previousBreak + 1 else 0
+            val blockChars = clampedEnd - blockStart
+            if (blockChars < MIN_PARAGRAPH_CHARS_FOR_REWIND) {
+                return clampedEnd
+            }
             if (clampedEnd - candidate > MAX_REWIND_CHARS) {
                 return clampedEnd
             }

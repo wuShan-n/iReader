@@ -23,8 +23,7 @@ enum class PageInsetMode {
 }
 
 enum class PageTurnMode(val storageValue: String) {
-    COVER_HORIZONTAL("cover_horizontal"),
-    SCROLL_VERTICAL("scroll_vertical");
+    COVER_HORIZONTAL("cover_horizontal");
 
     companion object {
         fun fromStorageValue(raw: String?): PageTurnMode {

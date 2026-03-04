@@ -36,6 +36,7 @@ data class ReaderDisplayPrefs(
     val backgroundPreset: ReaderBackgroundPreset = ReaderBackgroundPreset.SYSTEM,
     val showReadingProgress: Boolean = true,
     val fullScreenMode: Boolean = true,
+    val volumeKeyPagingEnabled: Boolean = true,
     val tapZonePreset: TapZonePreset = TapZonePreset.CLASSIC_3_ZONE,
     val preventAccidentalTurn: Boolean = false
 )

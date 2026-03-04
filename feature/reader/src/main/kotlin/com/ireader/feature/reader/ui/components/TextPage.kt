@@ -34,7 +34,8 @@ fun TextPage(
     val config = reflowConfig ?: RenderConfig.ReflowText()
     val typography = config.toTypographySpec()
     val density = LocalDensity.current
-    val pagePaddingPx = with(density) { typography.pagePaddingDp.dp.roundToPx() }
+    val horizontalPaddingPx = with(density) { typography.pagePaddingDp.dp.roundToPx() }
+    val verticalPaddingPx = horizontalPaddingPx
 
     AndroidView(
         modifier = modifier.fillMaxSize(),
@@ -54,7 +55,12 @@ fun TextPage(
             textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, typography.fontSizeSp)
             textView.setLineSpacing(0f, typography.lineHeightMult)
             textView.includeFontPadding = typography.includeFontPadding
-            textView.setPadding(pagePaddingPx, pagePaddingPx, pagePaddingPx, pagePaddingPx)
+            textView.setPadding(
+                horizontalPaddingPx,
+                verticalPaddingPx,
+                horizontalPaddingPx,
+                verticalPaddingPx
+            )
             textView.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
             textView.gravity = Gravity.TOP or Gravity.START
             textView.setTextColor(textColor.toArgb())

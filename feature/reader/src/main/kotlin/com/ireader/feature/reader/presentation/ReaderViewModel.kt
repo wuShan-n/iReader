@@ -97,15 +97,10 @@ class ReaderViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { prefs ->
                     ui.update { current ->
-                        val chromeVisible = if (prefs.fullScreenMode) {
-                            current.chromeVisible
-                        } else {
-                            true
-                        }
                         current.copy(
                             displayPrefs = prefs,
                             isNightMode = prefs.nightMode,
-                            chromeVisible = chromeVisible
+                            chromeVisible = current.chromeVisible
                         )
                     }
                 }
@@ -224,7 +219,9 @@ class ReaderViewModel @Inject constructor(
             is ReaderIntent.SetFullScreenMode -> updateDisplayPrefs { prefs ->
                 prefs.copy(fullScreenMode = intent.enabled)
             }
-            is ReaderIntent.SetVerticalPaging -> updateVerticalPaging(intent.enabled)
+            is ReaderIntent.SetVolumeKeyPaging -> updateDisplayPrefs { prefs ->
+                prefs.copy(volumeKeyPagingEnabled = intent.enabled)
+            }
             ReaderIntent.CloseSheet -> closeLayerToReading()
 
             ReaderIntent.Next -> navigate(direction = PageTurnDirection.NEXT) { controller, policy ->
@@ -272,7 +269,7 @@ class ReaderViewModel @Inject constructor(
                 isOpening = true,
                 title = null,
                 layerState = ReaderLayerState.Reading,
-                chromeVisible = true,
+                chromeVisible = false,
                 page = null,
                 controller = null,
                 resources = null,
@@ -607,23 +604,12 @@ class ReaderViewModel @Inject constructor(
         }
 
         ui.update { state ->
-            val chromeVisible = if (updated.fullScreenMode) state.chromeVisible else true
             state.copy(
                 displayPrefs = updated,
                 isNightMode = updated.nightMode,
-                chromeVisible = chromeVisible
+                chromeVisible = state.chromeVisible
             )
         }
-    }
-
-    private suspend fun updateVerticalPaging(enabled: Boolean) {
-        val mode = if (enabled) PageTurnMode.SCROLL_VERTICAL else PageTurnMode.COVER_HORIZONTAL
-        val currentReflow = ui.state.value.currentConfig as? RenderConfig.ReflowText ?: return
-        if (currentReflow.pageTurnMode() == mode) return
-        applyConfig(
-            config = currentReflow.withPageTurnMode(mode),
-            persist = true
-        )
     }
 
     private fun buildShareText(state: ReaderUiState): String {
@@ -880,11 +866,7 @@ class ReaderViewModel @Inject constructor(
 
     private fun toggleImmersiveChrome() {
         ui.update { current ->
-            if (!current.displayPrefs.fullScreenMode) {
-                current.copy(chromeVisible = true)
-            } else {
-                current.copy(chromeVisible = !current.chromeVisible)
-            }
+            current.copy(chromeVisible = !current.chromeVisible)
         }
     }
 
@@ -934,7 +916,7 @@ class ReaderViewModel @Inject constructor(
         val current = ui.state.value
         when (val layer = current.layerState) {
             ReaderLayerState.Reading -> {
-                if (current.displayPrefs.fullScreenMode && !current.chromeVisible) {
+                if (!current.chromeVisible) {
                     ui.update { it.copy(chromeVisible = true) }
                 } else {
                     ui.emit(ReaderEffect.Back)
@@ -974,6 +956,11 @@ class ReaderViewModel @Inject constructor(
             ReaderLayerState.Reading -> Unit
         }
 
+        if (current.chromeVisible) {
+            ui.update { it.copy(chromeVisible = false) }
+            return
+        }
+
         if (current.displayPrefs.preventAccidentalTurn) {
             val height = intent.viewportHeightPx.coerceAtLeast(1).toFloat()
             val y = intent.yPx.coerceIn(0f, height)
@@ -1002,10 +989,8 @@ class ReaderViewModel @Inject constructor(
 
             ReaderTapAction.CENTER -> {
                 if (tryUndoPageTurn()) return
-                if (current.displayPrefs.fullScreenMode) {
-                    toggleImmersiveChrome()
-                    interactionTracker.track(ReaderInteractionEvent.CenterTapToggleChrome)
-                }
+                ui.update { it.copy(chromeVisible = true) }
+                interactionTracker.track(ReaderInteractionEvent.CenterTapToggleChrome)
             }
 
             ReaderTapAction.NONE -> Unit

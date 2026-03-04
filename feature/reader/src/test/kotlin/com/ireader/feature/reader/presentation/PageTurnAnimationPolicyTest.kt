@@ -39,14 +39,4 @@ class PageTurnAnimationPolicyTest {
         )
     }
 
-    @Test
-    fun `vertical mode should always resolve to scroll animation`() {
-        assertEquals(
-            PageTurnAnimationKind.SCROLL_VERTICAL,
-            resolvePageTurnAnimationKind(
-                mode = PageTurnMode.SCROLL_VERTICAL,
-                style = PageTurnStyle.NO_ANIMATION
-            )
-        )
-    }
 }

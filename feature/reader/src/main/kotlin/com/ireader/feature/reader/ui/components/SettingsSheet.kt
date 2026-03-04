@@ -633,7 +633,6 @@ private fun PageTurnPanel(
         listOf(
             PageTurnOption("仿真翻页", PageTurnStyle.SIMULATION),
             PageTurnOption("左右覆盖", PageTurnStyle.COVER_OVERLAY),
-            PageTurnOption("上下滑动", PageTurnStyle.SCROLL_VERTICAL),
             PageTurnOption("无动效", PageTurnStyle.NO_ANIMATION)
         )
     }
@@ -785,37 +784,6 @@ private fun PageTurnGlyph(
                     color = tint,
                     start = Offset(size.width * 0.46f, size.height * 0.54f),
                     end = Offset(size.width * 0.54f, size.height * 0.44f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round
-                )
-            }
-
-            "上下滑动" -> {
-                drawRoundRect(
-                    color = tint,
-                    topLeft = Offset(size.width * 0.16f, size.height * 0.12f),
-                    size = Size(size.width * 0.68f, size.height * 0.76f),
-                    cornerRadius = CornerRadius(size.minDimension * 0.05f),
-                    style = Stroke(width = stroke)
-                )
-                drawLine(
-                    color = tint,
-                    start = Offset(size.width * 0.5f, size.height * 0.3f),
-                    end = Offset(size.width * 0.5f, size.height * 0.7f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round
-                )
-                drawLine(
-                    color = tint,
-                    start = Offset(size.width * 0.42f, size.height * 0.38f),
-                    end = Offset(size.width * 0.5f, size.height * 0.3f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round
-                )
-                drawLine(
-                    color = tint,
-                    start = Offset(size.width * 0.58f, size.height * 0.62f),
-                    end = Offset(size.width * 0.5f, size.height * 0.7f),
                     strokeWidth = stroke,
                     cap = StrokeCap.Round
                 )

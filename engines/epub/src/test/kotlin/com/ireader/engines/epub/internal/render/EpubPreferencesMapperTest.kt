@@ -1,7 +1,5 @@
 package com.ireader.engines.epub.internal.render
 
-import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
-import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.TextAlignMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.RenderConfig
@@ -27,8 +25,7 @@ class EpubPreferencesMapperTest {
             fontFamilyName = "sans",
             hyphenationMode = HyphenationMode.FULL,
             textAlign = TextAlignMode.START,
-            paragraphIndentEm = 10f,
-            extra = mapOf(PAGE_TURN_EXTRA_KEY to PageTurnMode.SCROLL_VERTICAL.storageValue)
+            paragraphIndentEm = 10f
         ).toEpubPreferences()
 
         assertNotNull(prefs.fontSize)
@@ -44,7 +41,7 @@ class EpubPreferencesMapperTest {
         assertEquals(3.0, prefs.paragraphIndent!!, 0.0001)
         assertEquals(2.0, prefs.paragraphSpacing!!, 0.0001)
         assertEquals(4.0, prefs.pageMargins!!, 0.0001)
-        assertEquals(true, prefs.scroll)
+        assertEquals(false, prefs.scroll)
         assertEquals(false, prefs.publisherStyles)
         assertEquals(ReadiumTextAlign.START, prefs.textAlign)
         assertFalse(prefs.fontFamily == null)

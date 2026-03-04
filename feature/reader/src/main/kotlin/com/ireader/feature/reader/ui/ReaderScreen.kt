@@ -2,20 +2,24 @@ package com.ireader.feature.reader.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ireader.feature.reader.presentation.ReaderEffect
+import com.ireader.feature.reader.presentation.ReaderHardwareKeyBridge
 import com.ireader.feature.reader.presentation.ReaderIntent
 import com.ireader.feature.reader.presentation.UiText
 import com.ireader.feature.reader.presentation.ReaderViewModel
@@ -35,9 +39,41 @@ fun ReaderScreen(
     val snackbarHost = remember { SnackbarHostState() }
     val density = LocalDensity.current
     val context = LocalContext.current
+    val volumeKeyHandler = rememberUpdatedState(newValue = { keyCode: Int, action: Int ->
+        if (!state.displayPrefs.volumeKeyPagingEnabled) {
+            false
+        } else {
+            when (keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> {
+                    if (action == KeyEvent.ACTION_DOWN) {
+                        vm.dispatch(ReaderIntent.Prev)
+                    }
+                    true
+                }
+
+                KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    if (action == KeyEvent.ACTION_DOWN) {
+                        vm.dispatch(ReaderIntent.Next)
+                    }
+                    true
+                }
+
+                else -> false
+            }
+        }
+    })
 
     LaunchedEffect(bookId, locatorArg) {
         vm.dispatch(ReaderIntent.Start(bookId = bookId, locatorArg = locatorArg))
+    }
+
+    DisposableEffect(Unit) {
+        ReaderHardwareKeyBridge.setVolumeKeyListener { keyCode, action ->
+            volumeKeyHandler.value(keyCode, action)
+        }
+        onDispose {
+            ReaderHardwareKeyBridge.setVolumeKeyListener(null)
+        }
     }
 
     LaunchedEffect(Unit) {
