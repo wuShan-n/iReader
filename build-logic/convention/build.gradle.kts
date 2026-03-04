@@ -21,6 +21,9 @@ dependencies {
     implementation(libs.hilt.gradle.plugin)
     implementation(libs.detekt.gradle.plugin)
     implementation(libs.ktlint.gradle.plugin)
+
+    testImplementation(gradleTestKit())
+    testImplementation("junit:junit:4.13.2")
 }
 
 gradlePlugin {
@@ -58,4 +61,8 @@ gradlePlugin {
             implementationClass = "com.ireader.buildlogic.plugins.DependencyGuardPlugin"
         }
     }
+}
+
+tasks.test {
+    useJUnit()
 }

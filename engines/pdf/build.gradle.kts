@@ -16,8 +16,5 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(project(":feature:reader"))
-    testImplementation(project(":core:reader:runtime"))
-    testImplementation(project(":core:datastore"))
     testImplementation("org.robolectric:robolectric:4.16")
 }

@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -65,6 +66,35 @@ class OpenReaderSessionTest {
         )
 
         assertTrue(result is ReaderResult.Err)
+    }
+
+    @Test
+    fun `source options and locator should be forwarded to runtime`() = runTest {
+        val runtime = FakeRuntime(
+            openSessionResult = ReaderResult.Ok(ReaderSessionHandle(FakeDocument(), FakeSession())),
+            capabilitiesForConfig = reflowCapabilities()
+        )
+        val store = FakeReaderSettingsStore()
+        val useCase = OpenReaderSession(runtime = runtime, settings = store)
+        val source = FakeDocumentSource()
+        val options = OpenOptions(
+            hintFormat = BookFormat.EPUB,
+            password = "pwd",
+            textEncoding = "UTF-8",
+            extra = mapOf("k" to "v")
+        )
+        val locator = Locator("txt.offset", "42")
+
+        val result = useCase(
+            source = source,
+            options = options,
+            initialLocator = locator
+        )
+
+        assertTrue(result is ReaderResult.Ok)
+        assertSame(source, runtime.lastSource)
+        assertEquals(options, runtime.lastOptions)
+        assertEquals(locator, runtime.lastInitialLocator)
     }
 
     @Test
@@ -162,6 +192,9 @@ private class FakeRuntime(
     private val capabilitiesForConfig: DocumentCapabilities
 ) : ReaderRuntime {
     var lastResolvedConfig: RenderConfig? = null
+    var lastSource: DocumentSource? = null
+    var lastOptions: OpenOptions? = null
+    var lastInitialLocator: Locator? = null
 
     override suspend fun openDocument(
         source: DocumentSource,
@@ -175,6 +208,9 @@ private class FakeRuntime(
         initialConfig: RenderConfig?,
         resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)?
     ): ReaderResult<ReaderSessionHandle> {
+        lastSource = source
+        lastOptions = options
+        lastInitialLocator = initialLocator
         lastResolvedConfig = when {
             initialConfig != null -> initialConfig
             resolveInitialConfig != null -> resolveInitialConfig(capabilitiesForConfig)

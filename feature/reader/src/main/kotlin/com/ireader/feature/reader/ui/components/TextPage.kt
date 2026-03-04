@@ -15,10 +15,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.ireader.core.common.android.typography.prefersInterCharacterJustify
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
-import com.ireader.core.common.android.typography.prefersInterCharacterJustify
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.toTypographySpec

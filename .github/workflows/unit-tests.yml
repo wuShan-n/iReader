@@ -27,5 +27,11 @@ jobs:
       - name: Install Android platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Verify dependency guard on configuration
+        run: ./gradlew help --stacktrace
+
+      - name: Run dependency guard plugin tests
+        run: ./gradlew -p build-logic :convention:test --stacktrace
+
       - name: Run unit tests
         run: ./gradlew test --stacktrace
