@@ -11,6 +11,7 @@ import com.ireader.core.work.enrich.CoverRenderer
 import com.ireader.core.work.enrich.epub.EpubZipEnricher
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
+import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentMetadata
@@ -72,7 +73,8 @@ class DefaultBookIndexer @Inject constructor(
             probe = probe,
             file = file,
             force = force,
-            titleHint = resolvedTitle
+            titleHint = resolvedTitle,
+            source = source
         )
 
         bookRepo.updateMetadata(
@@ -122,12 +124,13 @@ class DefaultBookIndexer @Inject constructor(
             .toString()
     }
 
-    private fun resolveCoverPath(
+    private suspend fun resolveCoverPath(
         book: BookEntity,
         probe: BookProbeResult,
         file: File,
         force: Boolean,
-        titleHint: String?
+        titleHint: String?,
+        source: FileDocumentSource
     ): String? {
         val existing = book.coverPath?.takeIf { path -> path.isNotBlank() && File(path).exists() }
         if (existing != null && !force) {
@@ -140,26 +143,89 @@ class DefaultBookIndexer @Inject constructor(
         val extracted = when (probe.format) {
             BookFormat.EPUB -> {
                 val coverPathInZip = probe.metadata?.extra?.get("coverPath")
-                coverPathInZip?.let { pathInZip ->
+                if (!coverPathInZip.isNullOrBlank()) {
                     EpubZipEnricher.tryExtractCoverToPng(
                         file = file,
-                        coverPathInZip = pathInZip,
+                        coverPathInZip = coverPathInZip,
                         outFile = coverFile,
-                        reqWidth = 720,
-                        reqHeight = 960
+                        reqWidth = COVER_WIDTH,
+                        reqHeight = COVER_HEIGHT
                     )
-                } ?: false
+                } else {
+                    EpubZipEnricher.tryExtractCoverToPng(
+                        file = file,
+                        outFile = coverFile,
+                        reqWidth = COVER_WIDTH,
+                        reqHeight = COVER_HEIGHT
+                    )
+                }
             }
 
-            BookFormat.PDF,
+            BookFormat.PDF -> renderPdfCover(
+                source = source,
+                title = title,
+                outFile = coverFile
+            )
+
             BookFormat.TXT -> false
         }
 
         if (!extracted) {
-            val placeholder = CoverRenderer.placeholderBitmap(720, 960, title)
+            val placeholder = CoverRenderer.placeholderBitmap(COVER_WIDTH, COVER_HEIGHT, title)
             BitmapIO.savePng(coverFile, placeholder)
         }
 
         return coverFile.absolutePath
+    }
+
+    private suspend fun renderPdfCover(
+        source: FileDocumentSource,
+        title: String,
+        outFile: File
+    ): Boolean {
+        val sessionHandle = when (
+            val sessionResult = runtime.openSession(
+                source = source,
+                options = OpenOptions(hintFormat = BookFormat.PDF)
+            )
+        ) {
+            is ReaderResult.Ok -> sessionResult.value
+            is ReaderResult.Err -> return false
+        }
+
+        return try {
+            val layoutResult = sessionHandle.controller.setLayoutConstraints(
+                LayoutConstraints(
+                    viewportWidthPx = COVER_WIDTH,
+                    viewportHeightPx = COVER_HEIGHT,
+                    density = 1f,
+                    fontScale = 1f
+                )
+            )
+            if (layoutResult !is ReaderResult.Ok) {
+                return false
+            }
+
+            val page = when (val renderResult = sessionHandle.controller.render()) {
+                is ReaderResult.Ok -> renderResult.value
+                is ReaderResult.Err -> return false
+            }
+
+            val bitmap = CoverRenderer.renderCoverBitmap(
+                page = page,
+                desiredWidth = COVER_WIDTH,
+                desiredHeight = COVER_HEIGHT,
+                titleFallback = title
+            )
+            BitmapIO.savePng(outFile, bitmap)
+            true
+        } finally {
+            runCatching { sessionHandle.close() }
+        }
+    }
+
+    companion object {
+        private const val COVER_WIDTH = 720
+        private const val COVER_HEIGHT = 960
     }
 }

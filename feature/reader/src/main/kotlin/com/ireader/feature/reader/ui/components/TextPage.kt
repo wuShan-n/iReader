@@ -18,6 +18,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
+import com.ireader.core.common.android.typography.prefersInterCharacterJustify
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.toTypographySpec
@@ -58,6 +59,7 @@ fun TextPage(
             textView.gravity = Gravity.TOP or Gravity.START
             textView.setTextColor(textColor.toArgb())
             textView.setBackgroundColor(backgroundColor.toArgb())
+            val preferInterCharacterJustify = content.text.prefersInterCharacterJustify()
             val familyName = typography.fontFamilyName
             textView.typeface = if (familyName.isNullOrBlank()) {
                 Typeface.DEFAULT
@@ -71,7 +73,9 @@ fun TextPage(
                 textView.hyphenationFrequency = typography.hyphenationMode.toAndroidHyphenationFrequency()
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                textView.justificationMode = typography.textAlign.toAndroidJustificationMode()
+                textView.justificationMode = typography.textAlign.toAndroidJustificationMode(
+                    preferInterCharacter = preferInterCharacterJustify
+                )
             }
             textView.requestLayout()
         }

@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
 import java.io.File
 import kotlinx.coroutines.flow.first
@@ -97,14 +98,58 @@ class DatastoreReaderSettingsStoreTest {
         )
         val store = DatastoreReaderSettingsStore(dataStore)
         val config = RenderConfig.ReflowText(
-            extra = mapOf(PAGE_TURN_EXTRA_KEY to "scroll_vertical")
+            extra = mapOf(
+                PAGE_TURN_EXTRA_KEY to "scroll_vertical"
+            )
         )
 
         store.setReflowConfig(config)
 
         val prefs = dataStore.data.first()
         assertEquals("scroll_vertical", prefs[stringPreferencesKey("reader.reflow.pageTurnMode")])
+        assertEquals("scroll_vertical", prefs[stringPreferencesKey("reader.reflow.pageTurnStyle")])
         assertEquals("scroll_vertical", store.getReflowConfig().extra[PAGE_TURN_EXTRA_KEY])
+        assertEquals("scroll_vertical", store.getReflowConfig().extra[PAGE_TURN_STYLE_EXTRA_KEY])
+    }
+
+    @Test
+    fun `setReflow should persist canonical page turn style and recover in flow`() = runTest {
+        val dataStore = createDataStore(
+            scope = this,
+            testFile = File(temporaryFolder.root, "reader_settings_page_turn_style.preferences_pb")
+        )
+        val store = DatastoreReaderSettingsStore(dataStore)
+        val config = RenderConfig.ReflowText(
+            extra = mapOf(
+                PAGE_TURN_EXTRA_KEY to "cover_horizontal",
+                PAGE_TURN_STYLE_EXTRA_KEY to "无动效"
+            )
+        )
+
+        store.setReflowConfig(config)
+
+        val prefs = dataStore.data.first()
+        assertEquals("cover_horizontal", prefs[stringPreferencesKey("reader.reflow.pageTurnMode")])
+        assertEquals("no_animation", prefs[stringPreferencesKey("reader.reflow.pageTurnStyle")])
+        assertEquals("cover_horizontal", store.getReflowConfig().extra[PAGE_TURN_EXTRA_KEY])
+        assertEquals("no_animation", store.getReflowConfig().extra[PAGE_TURN_STYLE_EXTRA_KEY])
+    }
+
+    @Test
+    fun `legacy page turn mode without style should fallback to default style`() = runTest {
+        val dataStore = createDataStore(
+            scope = this,
+            testFile = File(temporaryFolder.root, "reader_settings_page_turn_legacy.preferences_pb")
+        )
+        val store = DatastoreReaderSettingsStore(dataStore)
+
+        dataStore.edit { prefs ->
+            prefs[stringPreferencesKey("reader.reflow.pageTurnMode")] = "cover_horizontal"
+        }
+
+        val config = store.getReflowConfig()
+        assertEquals("cover_horizontal", config.extra[PAGE_TURN_EXTRA_KEY])
+        assertEquals("cover_overlay", config.extra[PAGE_TURN_STYLE_EXTRA_KEY])
     }
 
     @Test

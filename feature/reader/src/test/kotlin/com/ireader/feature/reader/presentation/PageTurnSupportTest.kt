@@ -1,6 +1,7 @@
 package com.ireader.feature.reader.presentation
 
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import org.junit.Assert.assertEquals
@@ -24,5 +25,54 @@ class PageTurnSupportTest {
             PageTurnMode.SCROLL_VERTICAL.storageValue,
             config.extra[PAGE_TURN_EXTRA_KEY]
         )
+        assertEquals(
+            PageTurnStyle.SCROLL_VERTICAL.storageValue,
+            config.extra[PAGE_TURN_STYLE_EXTRA_KEY]
+        )
+    }
+
+    @Test
+    fun `legacy page turn style values should map to supported styles`() {
+        assertEquals(
+            PageTurnStyle.SIMULATION,
+            parsePageTurnStyle(raw = "仿真翻页", mode = PageTurnMode.COVER_HORIZONTAL)
+        )
+        assertEquals(
+            PageTurnStyle.COVER_OVERLAY,
+            parsePageTurnStyle(raw = "左右覆盖", mode = PageTurnMode.COVER_HORIZONTAL)
+        )
+        assertEquals(
+            PageTurnStyle.NO_ANIMATION,
+            parsePageTurnStyle(raw = "无动效", mode = PageTurnMode.COVER_HORIZONTAL)
+        )
+        assertEquals(
+            PageTurnStyle.SCROLL_VERTICAL,
+            parsePageTurnStyle(raw = "上下滑动", mode = PageTurnMode.SCROLL_VERTICAL)
+        )
+    }
+
+    @Test
+    fun `withPageTurnStyle should write canonical mode and style raw values`() {
+        val config = RenderConfig.ReflowText().withPageTurnStyle(PageTurnStyle.NO_ANIMATION)
+        assertEquals(
+            PageTurnMode.COVER_HORIZONTAL.storageValue,
+            config.extra[PAGE_TURN_EXTRA_KEY]
+        )
+        assertEquals(
+            PageTurnStyle.NO_ANIMATION.storageValue,
+            config.extra[PAGE_TURN_STYLE_EXTRA_KEY]
+        )
+    }
+
+    @Test
+    fun `page turn style should fallback to mode default when style mismatches mode`() {
+        val config = RenderConfig.ReflowText(
+            extra = mapOf(
+                PAGE_TURN_EXTRA_KEY to PageTurnMode.SCROLL_VERTICAL.storageValue,
+                PAGE_TURN_STYLE_EXTRA_KEY to PageTurnStyle.NO_ANIMATION.storageValue
+            )
+        )
+
+        assertEquals(PageTurnStyle.SCROLL_VERTICAL, config.pageTurnStyle())
     }
 }

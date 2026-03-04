@@ -2,11 +2,13 @@ package com.ireader.feature.reader.ui.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
@@ -28,8 +30,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
 import com.ireader.feature.reader.presentation.GestureAxis
+import com.ireader.feature.reader.presentation.PageTurnAnimationKind
 import com.ireader.feature.reader.presentation.PageTurnDirection
 import com.ireader.feature.reader.presentation.ReaderUiState
+import com.ireader.feature.reader.presentation.defaultPageTurnStyle
+import com.ireader.feature.reader.presentation.pageTurnStyle
+import com.ireader.feature.reader.presentation.resolvePageTurnAnimationKind
 import com.ireader.feature.reader.ui.ReaderSurface
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
@@ -129,6 +135,8 @@ private fun AnimatedTextPage(
     modifier: Modifier = Modifier
 ) {
     val mode = state.pageTurnMode
+    val reflowConfig = state.currentConfig as? RenderConfig.ReflowText
+    val style = reflowConfig?.pageTurnStyle() ?: defaultPageTurnStyle(mode = mode)
     val target = AnimatedTextTarget(
         page = page,
         transition = state.pageTransition
@@ -141,6 +149,7 @@ private fun AnimatedTextPage(
             } else {
                 buildPageTransform(
                     mode = mode,
+                    style = style,
                     direction = targetState.transition.direction
                 )
             }
@@ -160,7 +169,7 @@ private fun AnimatedTextPage(
         Box(modifier = Modifier.fillMaxSize()) {
             TextPage(
                 content = targetContent,
-                reflowConfig = state.currentConfig as? RenderConfig.ReflowText,
+                reflowConfig = reflowConfig,
                 textColor = textColor,
                 backgroundColor = backgroundColor,
                 modifier = Modifier.fillMaxSize()
@@ -246,20 +255,36 @@ private fun TextGestureOverlay(
 
 private fun buildPageTransform(
     mode: PageTurnMode,
+    style: com.ireader.feature.reader.presentation.PageTurnStyle,
     direction: PageTurnDirection
 ): ContentTransform {
     val forward = direction == PageTurnDirection.NEXT
     val durationMs = 220
-    return when (mode) {
-        PageTurnMode.COVER_HORIZONTAL -> {
+    return when (resolvePageTurnAnimationKind(mode = mode, style = style)) {
+        PageTurnAnimationKind.COVER_OVERLAY -> {
             val enter = slideInHorizontally(
                 animationSpec = tween(durationMs)
             ) { full -> if (forward) full else -full } + fadeIn(animationSpec = tween(durationMs / 2))
-            val exit = fadeOut(animationSpec = tween(durationMs / 2))
-            enter togetherWith exit
+            (enter togetherWith ExitTransition.None).apply {
+                targetContentZIndex = 1f
+            }
         }
 
-        PageTurnMode.SCROLL_VERTICAL -> {
+        PageTurnAnimationKind.SIMULATION -> {
+            val enter = slideInHorizontally(
+                animationSpec = tween(durationMs)
+            ) { full -> if (forward) full else -full } +
+                fadeIn(animationSpec = tween(durationMs / 2)) +
+                scaleIn(
+                    initialScale = 0.96f,
+                    animationSpec = tween(durationMs)
+                )
+            (enter togetherWith ExitTransition.None).apply {
+                targetContentZIndex = 1.1f
+            }
+        }
+
+        PageTurnAnimationKind.SCROLL_VERTICAL -> {
             val enter = slideInVertically(
                 animationSpec = tween(durationMs)
             ) { full -> if (forward) full else -full } + fadeIn(animationSpec = tween(durationMs / 2))
@@ -267,6 +292,10 @@ private fun buildPageTransform(
                 animationSpec = tween(durationMs)
             ) { full -> if (forward) -full else full } + fadeOut(animationSpec = tween(durationMs))
             enter togetherWith exit
+        }
+
+        PageTurnAnimationKind.NONE -> {
+            EnterTransition.None togetherWith ExitTransition.None
         }
     }
 }

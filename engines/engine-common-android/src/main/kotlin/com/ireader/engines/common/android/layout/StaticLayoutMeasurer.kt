@@ -30,7 +30,8 @@ object StaticLayoutMeasurer {
         textAlign: TextAlignMode,
         breakStrategy: BreakStrategyMode,
         hyphenationMode: HyphenationMode,
-        includeFontPadding: Boolean
+        includeFontPadding: Boolean,
+        preferInterCharacterJustify: Boolean
     ): MeasureResult {
         val builder = StaticLayout.Builder.obtain(
             text,
@@ -48,7 +49,11 @@ object StaticLayoutMeasurer {
             builder.setBreakStrategy(breakStrategy.toAndroidBreakStrategy())
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.setJustificationMode(textAlign.toAndroidJustificationMode())
+            builder.setJustificationMode(
+                textAlign.toAndroidJustificationMode(
+                    preferInterCharacter = preferInterCharacterJustify
+                )
+            )
         }
 
         val layout = builder.build()

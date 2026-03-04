@@ -31,7 +31,17 @@ class StaticLayoutMeasurerTest {
     fun `maps text alignment to android layout and justification modes`() {
         assertEquals(Layout.Alignment.ALIGN_NORMAL, TextAlignMode.START.toAndroidLayoutAlignment())
         assertEquals(Layout.Alignment.ALIGN_NORMAL, TextAlignMode.JUSTIFY.toAndroidLayoutAlignment())
-        assertEquals(Layout.JUSTIFICATION_MODE_NONE, TextAlignMode.START.toAndroidJustificationMode())
-        assertEquals(Layout.JUSTIFICATION_MODE_INTER_WORD, TextAlignMode.JUSTIFY.toAndroidJustificationMode())
+        assertEquals(
+            Layout.JUSTIFICATION_MODE_NONE,
+            TextAlignMode.START.toAndroidJustificationMode(preferInterCharacter = false)
+        )
+        assertEquals(
+            Layout.JUSTIFICATION_MODE_INTER_WORD,
+            TextAlignMode.JUSTIFY.toAndroidJustificationMode(preferInterCharacter = false)
+        )
+        assertEquals(
+            Layout.JUSTIFICATION_MODE_INTER_CHARACTER,
+            TextAlignMode.JUSTIFY.toAndroidJustificationMode(preferInterCharacter = true)
+        )
     }
 }

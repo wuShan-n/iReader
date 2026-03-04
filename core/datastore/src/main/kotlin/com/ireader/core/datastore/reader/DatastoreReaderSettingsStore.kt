@@ -12,6 +12,7 @@ import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.PageInsetMode
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.TextAlignMode
 import javax.inject.Inject
@@ -42,6 +43,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val hangingPunctuation = booleanPreferencesKey("reader.reflow.hangingPunctuation")
             val pageInsetMode = stringPreferencesKey("reader.reflow.pageInsetMode")
             val pageTurnMode = stringPreferencesKey("reader.reflow.pageTurnMode")
+            val pageTurnStyle = stringPreferencesKey("reader.reflow.pageTurnStyle")
             val respectPublisherStyles = booleanPreferencesKey("reader.reflow.respectPublisherStyles")
 
             // Backward-compat key. Removed after all users migrate to hyphenationMode.
@@ -82,7 +84,10 @@ class DatastoreReaderSettingsStore @Inject constructor(
         hangingPunctuation = false,
         pageInsetMode = PageInsetMode.RELAXED,
         respectPublisherStyles = false,
-        extra = mapOf(PAGE_TURN_EXTRA_KEY to PageTurnMode.COVER_HORIZONTAL.storageValue)
+        extra = mapOf(
+            PAGE_TURN_EXTRA_KEY to PageTurnMode.COVER_HORIZONTAL.storageValue,
+            PAGE_TURN_STYLE_EXTRA_KEY to STYLE_COVER_OVERLAY
+        )
     )
     private val defaultFixed = RenderConfig.FixedPage()
     private val defaultDisplay = ReaderDisplayPrefs()
@@ -108,6 +113,10 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val pageTurnMode = PageTurnMode.fromStorageValue(
                 prefs[Keys.Reflow.pageTurnMode]
             )
+            val pageTurnStyle = normalizePageTurnStyleRaw(
+                raw = prefs[Keys.Reflow.pageTurnStyle],
+                mode = pageTurnMode
+            )
 
             defaultReflow.copy(
                 fontSizeSp = prefs[Keys.Reflow.fontSizeSp] ?: defaultReflow.fontSizeSp,
@@ -125,7 +134,9 @@ class DatastoreReaderSettingsStore @Inject constructor(
                 pageInsetMode = pageInsetMode,
                 respectPublisherStyles = prefs[Keys.Reflow.respectPublisherStyles]
                     ?: defaultReflow.respectPublisherStyles,
-                extra = defaultReflow.extra + (PAGE_TURN_EXTRA_KEY to pageTurnMode.storageValue)
+                extra = defaultReflow.extra +
+                    (PAGE_TURN_EXTRA_KEY to pageTurnMode.storageValue) +
+                    (PAGE_TURN_STYLE_EXTRA_KEY to pageTurnStyle)
             )
         }.distinctUntilChanged()
 
@@ -194,7 +205,12 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Reflow.pageInsetMode] = config.pageInsetMode.name
             prefs[Keys.Reflow.respectPublisherStyles] = config.respectPublisherStyles
             val pageTurnMode = PageTurnMode.fromStorageValue(config.extra[PAGE_TURN_EXTRA_KEY])
+            val pageTurnStyle = normalizePageTurnStyleRaw(
+                raw = config.extra[PAGE_TURN_STYLE_EXTRA_KEY],
+                mode = pageTurnMode
+            )
             prefs[Keys.Reflow.pageTurnMode] = pageTurnMode.storageValue
+            prefs[Keys.Reflow.pageTurnStyle] = pageTurnStyle
             prefs[Keys.Reflow.legacyHyphenation] = config.hyphenationMode != HyphenationMode.NONE
         }
     }
@@ -239,5 +255,51 @@ class DatastoreReaderSettingsStore @Inject constructor(
     private fun parsePageInsetMode(raw: String): PageInsetMode {
         return runCatching { PageInsetMode.valueOf(raw) }
             .getOrElse { defaultReflow.pageInsetMode }
+    }
+
+    private fun normalizePageTurnStyleRaw(raw: String?, mode: PageTurnMode): String {
+        val canonical = when (raw) {
+            STYLE_SIMULATION,
+            "仿真翻页" -> STYLE_SIMULATION
+
+            STYLE_COVER_OVERLAY,
+            "左右覆盖",
+            PageTurnMode.COVER_HORIZONTAL.storageValue -> STYLE_COVER_OVERLAY
+
+            STYLE_SCROLL_VERTICAL,
+            "上下滑动",
+            "上下滚动",
+            PageTurnMode.SCROLL_VERTICAL.storageValue -> STYLE_SCROLL_VERTICAL
+
+            STYLE_NO_ANIMATION,
+            "无动效" -> STYLE_NO_ANIMATION
+
+            else -> defaultPageTurnStyleRaw(mode = mode)
+        }
+        return when (mode) {
+            PageTurnMode.COVER_HORIZONTAL -> {
+                if (canonical == STYLE_SCROLL_VERTICAL) {
+                    defaultPageTurnStyleRaw(mode = mode)
+                } else {
+                    canonical
+                }
+            }
+
+            PageTurnMode.SCROLL_VERTICAL -> STYLE_SCROLL_VERTICAL
+        }
+    }
+
+    private fun defaultPageTurnStyleRaw(mode: PageTurnMode): String {
+        return when (mode) {
+            PageTurnMode.COVER_HORIZONTAL -> STYLE_COVER_OVERLAY
+            PageTurnMode.SCROLL_VERTICAL -> STYLE_SCROLL_VERTICAL
+        }
+    }
+
+    private companion object {
+        const val STYLE_SIMULATION = "simulation"
+        const val STYLE_COVER_OVERLAY = "cover_overlay"
+        const val STYLE_SCROLL_VERTICAL = "scroll_vertical"
+        const val STYLE_NO_ANIMATION = "no_animation"
     }
 }

@@ -28,9 +28,17 @@ fun HyphenationMode.toAndroidHyphenationFrequency(): Int {
     }
 }
 
-fun TextAlignMode.toAndroidJustificationMode(): Int {
+fun TextAlignMode.toAndroidJustificationMode(
+    preferInterCharacter: Boolean = false
+): Int {
     return when (this) {
         TextAlignMode.START -> Layout.JUSTIFICATION_MODE_NONE
-        TextAlignMode.JUSTIFY -> Layout.JUSTIFICATION_MODE_INTER_WORD
+        TextAlignMode.JUSTIFY -> {
+            if (preferInterCharacter) {
+                Layout.JUSTIFICATION_MODE_INTER_CHARACTER
+            } else {
+                Layout.JUSTIFICATION_MODE_INTER_WORD
+            }
+        }
     }
 }

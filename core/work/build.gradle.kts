@@ -32,6 +32,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.androidx.room.runtime)
     testImplementation("org.robolectric:robolectric:4.16")
 }
 

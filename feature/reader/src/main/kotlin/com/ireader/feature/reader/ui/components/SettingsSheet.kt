@@ -57,11 +57,11 @@ import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.reader.api.render.PageInsetMode
-import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.TextAlignMode
-import com.ireader.feature.reader.presentation.pageTurnMode
-import com.ireader.feature.reader.presentation.withPageTurnMode
+import com.ireader.feature.reader.presentation.PageTurnStyle
+import com.ireader.feature.reader.presentation.pageTurnStyle
+import com.ireader.feature.reader.presentation.withPageTurnStyle
 import com.ireader.reader.model.DocumentCapabilities
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -627,31 +627,23 @@ private fun PageTurnPanel(
 ) {
     data class PageTurnOption(
         val label: String,
-        val mode: PageTurnMode
+        val style: PageTurnStyle
     )
     val options = remember {
         listOf(
-            PageTurnOption("仿真翻页", PageTurnMode.COVER_HORIZONTAL),
-            PageTurnOption("左右覆盖", PageTurnMode.COVER_HORIZONTAL),
-            PageTurnOption("上下滑动", PageTurnMode.SCROLL_VERTICAL),
-            PageTurnOption("无动效", PageTurnMode.COVER_HORIZONTAL)
+            PageTurnOption("仿真翻页", PageTurnStyle.SIMULATION),
+            PageTurnOption("左右覆盖", PageTurnStyle.COVER_OVERLAY),
+            PageTurnOption("上下滑动", PageTurnStyle.SCROLL_VERTICAL),
+            PageTurnOption("无动效", PageTurnStyle.NO_ANIMATION)
         )
     }
-    val defaultCoverStyle = "左右覆盖"
     var persist by remember { mutableStateOf(true) }
     var livePreview by remember { mutableStateOf(true) }
-    var selected by remember(current.extra) {
-        mutableStateOf(current.pageTurnMode())
-    }
     var selectedStyle by remember(current.extra) {
-        val raw = current.extra[PAGE_TURN_STYLE_EXTRA_KEY]
-        mutableStateOf(raw ?: if (selected == PageTurnMode.COVER_HORIZONTAL) defaultCoverStyle else "上下滑动")
+        mutableStateOf(current.pageTurnStyle())
     }
     fun draftConfig(): RenderConfig.ReflowText {
-        val withMode = current.withPageTurnMode(selected)
-        return withMode.copy(
-            extra = withMode.extra + (PAGE_TURN_STYLE_EXTRA_KEY to selectedStyle)
-        )
+        return current.withPageTurnStyle(selectedStyle)
     }
     fun previewIfEnabled() {
         if (livePreview) {
@@ -675,11 +667,7 @@ private fun PageTurnPanel(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             options.forEach { option ->
-                val isSelected = when {
-                    option.mode != selected -> false
-                    option.mode == PageTurnMode.COVER_HORIZONTAL -> option.label == selectedStyle
-                    else -> true
-                }
+                val isSelected = option.style == selectedStyle
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
                         modifier = Modifier
@@ -699,8 +687,7 @@ private fun PageTurnPanel(
                     }
                     TextButton(
                         onClick = {
-                            selected = option.mode
-                            selectedStyle = option.label
+                            selectedStyle = option.style
                             previewIfEnabled()
                         }
                     ) {
@@ -746,8 +733,6 @@ private fun PageTurnPanel(
         }
     }
 }
-
-private const val PAGE_TURN_STYLE_EXTRA_KEY = "page_turn_style"
 
 @Composable
 private fun PageTurnGlyph(
@@ -928,18 +913,6 @@ private fun MoreBackgroundPanel(
                     )
                 }
             }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("夜间模式状态", color = textColor)
-            Text(
-                text = if (isNightMode) "已开启" else "已关闭",
-                color = textColor.copy(alpha = 0.72f),
-                style = MaterialTheme.typography.bodySmall
-            )
         }
     }
 }

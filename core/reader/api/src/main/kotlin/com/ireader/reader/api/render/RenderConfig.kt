@@ -34,6 +34,7 @@ enum class PageTurnMode(val storageValue: String) {
 }
 
 const val PAGE_TURN_EXTRA_KEY: String = "page_turn"
+const val PAGE_TURN_STYLE_EXTRA_KEY: String = "page_turn_style"
 
 sealed interface RenderConfig {
 

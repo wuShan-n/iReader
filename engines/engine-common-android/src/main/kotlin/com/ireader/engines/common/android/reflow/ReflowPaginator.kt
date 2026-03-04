@@ -3,6 +3,7 @@
 package com.ireader.engines.common.android.reflow
 
 import android.text.SpannableStringBuilder
+import com.ireader.core.common.android.typography.prefersInterCharacterJustify
 import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
 import com.ireader.engines.common.android.layout.TextPaintFactory
 import com.ireader.reader.api.render.LayoutConstraints
@@ -78,6 +79,7 @@ class ReflowPaginator(
                 )
             }
             measuredText = display
+            val preferInterCharacterJustify = raw.prefersInterCharacterJustify()
 
             val measure = StaticLayoutMeasurer.measure(
                 text = display,
@@ -88,7 +90,8 @@ class ReflowPaginator(
                 textAlign = typography.textAlign,
                 breakStrategy = typography.breakStrategy,
                 hyphenationMode = typography.hyphenationMode,
-                includeFontPadding = typography.includeFontPadding
+                includeFontPadding = typography.includeFontPadding,
+                preferInterCharacterJustify = preferInterCharacterJustify
             )
             measuredEnd = measure.endChar.coerceIn(0, rawLength)
 
@@ -209,4 +212,3 @@ class ReflowPaginator(
         }
     }
 }
-

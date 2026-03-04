@@ -480,17 +480,15 @@ private fun ReaderBottomBar(
             },
             onClick = { onToggleDockTab(ReaderDockTab.Brightness) }
         )
-        if (ReaderChromeDefaults.nightModeEntryPolicy.showBottomBarToggle) {
-            BottomItem(
-                label = if (isNightMode) "日间" else "夜间",
-                selected = false,
-                isNightMode = isNightMode,
-                icon = {
-                    PrototypeIcons.Moon()
-                },
-                onClick = onToggleNight
-            )
-        }
+        BottomItem(
+            label = if (isNightMode) "日间" else "夜间",
+            selected = false,
+            isNightMode = isNightMode,
+            icon = {
+                PrototypeIcons.Moon()
+            },
+            onClick = onToggleNight
+        )
         BottomItem(
             label = "设置",
             selected = activeDockTab == ReaderDockTab.Settings,
@@ -920,13 +918,8 @@ private fun ReaderSettingsDockPanel(
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement = Arrangement.End
     ) {
-        Text(
-            text = "夜间模式：${if (state.isNightMode) "已开启" else "已关闭"}",
-            color = contentColor
-        )
         TextButton(onClick = onOpenFullSettings) {
             Text("更多设置 >", color = contentColor.copy(alpha = 0.72f))
         }
@@ -1297,23 +1290,6 @@ private fun FullSettingsScreen(
                     }
                 }
 
-                Surface(shape = RoundedCornerShape(14.dp), color = card) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("主题", color = ReaderTokens.Palette.PrototypeBlue)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("夜间模式", color = textColor)
-                            Text(
-                                text = if (isNightMode) "已开启" else "已关闭",
-                                color = sub,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
             }
         }
     }
