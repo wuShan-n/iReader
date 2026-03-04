@@ -3,10 +3,12 @@ package com.ireader.engines.txt.internal.render
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.Utf16LeFileWriter
+import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.model.Locator
@@ -73,6 +75,25 @@ class TxtControllerTest {
     }
 
     @Test
+    fun `next should move chapter title to page start`() = runBlocking {
+        val fixture = createFixture(text = chapterBoundaryText())
+        try {
+            fixture.controller.setLayoutConstraints(defaultConstraints().copy(viewportHeightPx = 620))
+            val first = fixture.controller.render(RenderPolicy.Default).requireOk()
+            val second = fixture.controller.next(RenderPolicy.Default).requireOk()
+
+            val firstText = (first.content as RenderContent.Text).text.toString()
+            val secondText = (second.content as RenderContent.Text).text.toString()
+
+            assertTrue(first.id.value != second.id.value)
+            assertFalse(firstText.contains("第12章 新章节"))
+            assertTrue(secondText.trimStart().startsWith("第12章 新章节"))
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `goTo should reject unsupported locator`() = runBlocking {
         val fixture = createFixture(text = sampleText(paragraphs = 20))
         try {
@@ -96,6 +117,17 @@ class TxtControllerTest {
         }
     }
 
+    private fun chapterBoundaryText(): String {
+        return buildString {
+            append("上一章正文推进剧情用于分页测试A。\n")
+            append("上一章正文推进剧情用于分页测试B。\n")
+            append("第12章 新章节\n")
+            repeat(24) { index ->
+                append("新章节正文第${index + 1}段继续描述故事发展并用于翻页验证。\n")
+            }
+        }
+    }
+
     private fun defaultConstraints(): LayoutConstraints {
         return LayoutConstraints(
             viewportWidthPx = 1080,
@@ -105,27 +137,33 @@ class TxtControllerTest {
         )
     }
 
-    private fun createFixture(text: String): ControllerFixture {
+    private suspend fun createFixture(text: String): ControllerFixture {
         val dir = Files.createTempDirectory("txt_controller_test").toFile()
         val files = createBookFiles(dir)
         Utf16LeFileWriter(files.contentU16).use { writer ->
             text.forEach(writer::writeChar)
         }
         val store = Utf16TextStore(files.contentU16)
+        val meta = TxtMeta(
+            version = 1,
+            sourceUri = "file://test.txt",
+            displayName = "test.txt",
+            sizeBytes = text.length.toLong(),
+            sampleHash = "sample",
+            originalCharset = "UTF-8",
+            lengthChars = store.lengthChars,
+            hardWrapLikely = false,
+            createdAtEpochMs = 0L
+        )
+        SoftBreakIndexBuilder.buildIfNeeded(
+            files = files,
+            meta = meta,
+            ioDispatcher = Dispatchers.IO
+        )
         val controller = TxtController(
             documentKey = "doc-test",
             store = store,
-            meta = TxtMeta(
-                version = 1,
-                sourceUri = "file://test.txt",
-                displayName = "test.txt",
-                sizeBytes = text.length.toLong(),
-                sampleHash = "sample",
-                originalCharset = "UTF-8",
-                lengthChars = store.lengthChars,
-                hardWrapLikely = false,
-                createdAtEpochMs = 0L
-            ),
+            meta = meta,
             initialOffset = 0L,
             initialConfig = RenderConfig.ReflowText(),
             maxPageCache = 8,

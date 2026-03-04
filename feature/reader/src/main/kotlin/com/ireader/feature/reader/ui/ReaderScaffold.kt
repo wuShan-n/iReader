@@ -53,14 +53,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
@@ -94,6 +98,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
+import com.ireader.reader.api.render.LayoutConstraints
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,7 +107,8 @@ fun ReaderScaffold(
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onIntent: (ReaderIntent) -> Unit,
-    onOpenLocator: (String) -> Unit
+    onOpenLocator: (String) -> Unit,
+    onReadingViewportChanged: (LayoutConstraints) -> Unit
 ) {
     val prefs = state.displayPrefs
     val bgColor = resolveReaderBackgroundColor(
@@ -132,6 +138,23 @@ fun ReaderScaffold(
     val footerTextColor = if (darkSurface) Color(0xFF8E8B84) else Color(0xFF87817B)
     val clock = rememberClockText()
     val batteryPercent = rememberBatteryPercent()
+    val density = LocalDensity.current
+    val readingViewportSize = remember { mutableStateOf(IntSize.Zero) }
+
+    LaunchedEffect(readingViewportSize.value, density.density, density.fontScale) {
+        val size = readingViewportSize.value
+        if (size.width <= 0 || size.height <= 0) {
+            return@LaunchedEffect
+        }
+        onReadingViewportChanged(
+            LayoutConstraints(
+                viewportWidthPx = size.width,
+                viewportHeightPx = size.height,
+                density = density.density,
+                fontScale = density.fontScale
+            )
+        )
+    }
 
     ApplyReaderBrightness(prefs = prefs)
     ApplyReaderSystemBars(
@@ -155,6 +178,7 @@ fun ReaderScaffold(
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical))
                     .padding(top = 8.dp, bottom = 32.dp)
+                    .onSizeChanged { readingViewportSize.value = it }
             ) {
                 PageRenderer(
                     state = state,

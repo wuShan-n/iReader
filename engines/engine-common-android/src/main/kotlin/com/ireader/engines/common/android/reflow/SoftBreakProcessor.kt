@@ -219,6 +219,39 @@ object SoftBreakProcessor {
         return next == '.' || next == '、' || next == ')' || next == '）'
     }
 
+    private fun lineStartsBoundaryMarker(chars: CharArray, startIndex: Int): Boolean {
+        var index = startIndex
+        while (index < chars.size) {
+            val ch = chars[index]
+            if (ch == '\n') {
+                return false
+            }
+            if (ch != ' ' && ch != '\t' && ch != '\u3000') {
+                break
+            }
+            index++
+        }
+        if (index >= chars.size) {
+            return false
+        }
+
+        var endExclusive = index
+        while (endExclusive < chars.size && chars[endExclusive] != '\n' && (endExclusive - index) < 80) {
+            endExclusive++
+        }
+        if (endExclusive <= index) {
+            return false
+        }
+
+        val line = String(chars, index, endExclusive - index).trim()
+        if (line.isEmpty()) {
+            return false
+        }
+        return CHINESE_CHAPTER_REGEX.matches(line) ||
+            ENGLISH_CHAPTER_REGEX.containsMatchIn(line) ||
+            DIRECTORY_TITLE_REGEX.matches(line)
+    }
+
     private fun collectHardBreakPositions(text: String): IntArray {
         if (text.isEmpty()) {
             return intArrayOf()
@@ -326,11 +359,8 @@ object SoftBreakProcessor {
             return false
         }
 
-        // Chapter markers usually should remain as paragraph boundaries.
-        if (next == '第' || next == '章' || next == '回' || next == '卷') {
-            return false
-        }
-        if (next == 'C' || next == 'c' || next == 'P' || next == 'p') {
+        // Chapter and directory markers should remain as paragraph boundaries.
+        if (lineStartsBoundaryMarker(chars, index + 1)) {
             return false
         }
         return true
@@ -349,6 +379,7 @@ object SoftBreakProcessor {
     private const val HARD_WRAP_PROFILE_LIST_MARKER_RATIO_MAX = 0.25
     private val CHINESE_CHAPTER_REGEX = Regex("^\\s*第[0-9一二三四五六七八九十百千零〇两\\d]+[章节卷回部篇集].*")
     private val ENGLISH_CHAPTER_REGEX = Regex("^\\s*(chapter|part|prologue|epilogue)\\b", RegexOption.IGNORE_CASE)
+    private val DIRECTORY_TITLE_REGEX = Regex("^(目录|目\\s*录|contents)$", RegexOption.IGNORE_CASE)
 
     private data class NormalizedText(
         val text: String,

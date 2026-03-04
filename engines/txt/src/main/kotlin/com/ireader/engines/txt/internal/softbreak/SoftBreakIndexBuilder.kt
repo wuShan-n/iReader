@@ -148,7 +148,7 @@ internal object SoftBreakIndexBuilder {
 
                     fun finishLine(): LineInfo {
                         val titleText = lineTitle.toString().trim()
-                        val isTitle = titleText.isNotEmpty() && detector.isChapterTitle(titleText)
+                        val isTitle = titleText.isNotEmpty() && detector.isChapterBoundaryTitle(titleText)
                         val startsBullet = firstNonSpace == '-' || firstNonSpace == '*' || firstNonSpace == '•'
                         val info = LineInfo(
                             len = lineLength,

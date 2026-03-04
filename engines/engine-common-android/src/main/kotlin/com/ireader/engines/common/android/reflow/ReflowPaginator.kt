@@ -12,10 +12,24 @@ import com.ireader.reader.api.render.toTypographySpec
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+fun interface ReflowPageEndAdjuster {
+    fun adjust(
+        raw: String,
+        measuredEnd: Int,
+        rawLength: Int,
+        pageStartOffset: Long
+    ): Int
+
+    companion object {
+        val NONE: ReflowPageEndAdjuster = ReflowPageEndAdjuster { _, measuredEnd, _, _ -> measuredEnd }
+    }
+}
+
 class ReflowPaginator(
     private val source: ReflowTextSource,
     private val hardWrapLikely: Boolean,
-    private var softBreakIndex: ReflowSoftBreakIndex? = null
+    private var softBreakIndex: ReflowSoftBreakIndex? = null,
+    private val pageEndAdjuster: ReflowPageEndAdjuster = ReflowPageEndAdjuster.NONE
 ) {
 
     fun setSoftBreakIndex(index: ReflowSoftBreakIndex?) {
@@ -103,14 +117,15 @@ class ReflowPaginator(
             windowChars = (windowChars * 2).coerceAtMost(MAX_WINDOW_CHARS)
         }
 
-        var end = start + measuredEnd.toLong()
-        if (measuredEnd in 1 until rawLength && start + rawLength.toLong() < source.lengthChars) {
-            val adjusted = adjustMeasuredEndForParagraphTail(measuredRaw, measuredEnd, rawLength)
-            if (adjusted in 1 until measuredEnd) {
-                measuredEnd = adjusted
-                end = start + measuredEnd.toLong()
-            }
+        if (measuredEnd in 1 until rawLength) {
+            measuredEnd = pageEndAdjuster.adjust(
+                raw = measuredRaw,
+                measuredEnd = measuredEnd,
+                rawLength = rawLength,
+                pageStartOffset = start
+            ).coerceIn(1, measuredEnd)
         }
+        var end = start + measuredEnd.toLong()
         if (end <= start) {
             end = (start + 1L).coerceAtMost(source.lengthChars)
             measuredEnd = (end - start).toInt()

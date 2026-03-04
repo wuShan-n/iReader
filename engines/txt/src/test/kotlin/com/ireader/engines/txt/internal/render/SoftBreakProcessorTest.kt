@@ -61,6 +61,19 @@ class SoftBreakProcessorTest {
     }
 
     @Test
+    fun `line break before directory marker should remain paragraph break`() {
+        val output = SoftBreakProcessor.process(
+            rawText = "上一段内容\n目录",
+            hardWrapLikely = true,
+            paragraphSpacingPx = 0,
+            paragraphIndentPx = 0,
+            startsAtParagraphBoundary = true
+        )
+
+        assertEquals("上一段内容\n目录", output.toString())
+    }
+
+    @Test
     fun `consecutive newlines should be preserved`() {
         val output = SoftBreakProcessor.process(
             rawText = "第一段\n\n第二段",

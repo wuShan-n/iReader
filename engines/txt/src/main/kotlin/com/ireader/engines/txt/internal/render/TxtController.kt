@@ -18,6 +18,7 @@ import com.ireader.engines.txt.internal.link.LinkDetector
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
+import com.ireader.engines.txt.internal.provider.ChapterDetector
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
@@ -112,7 +113,8 @@ internal class TxtController(
     private val paginator = ReflowPaginator(
         source = TxtTextSource(store),
         hardWrapLikely = meta.hardWrapLikely,
-        softBreakIndex = softBreakIndex
+        softBreakIndex = softBreakIndex,
+        pageEndAdjuster = TxtPageEndAdjuster(ChapterDetector())
     )
     private val sliceCache = ReflowPageSliceCache(
         paginator = paginator,

@@ -4,8 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -13,9 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ireader.feature.reader.presentation.ReaderEffect
@@ -24,7 +20,6 @@ import com.ireader.feature.reader.presentation.ReaderIntent
 import com.ireader.feature.reader.presentation.UiText
 import com.ireader.feature.reader.presentation.ReaderViewModel
 import com.ireader.feature.reader.web.ExternalLinkPolicy
-import com.ireader.reader.api.render.LayoutConstraints
 
 @Composable
 @Suppress("FunctionNaming")
@@ -37,7 +32,6 @@ fun ReaderScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
-    val density = LocalDensity.current
     val context = LocalContext.current
     val volumeKeyHandler = rememberUpdatedState(newValue = { keyCode: Int, action: Int ->
         if (!state.displayPrefs.volumeKeyPagingEnabled) {
@@ -125,29 +119,14 @@ fun ReaderScreen(
         vm.dispatch(ReaderIntent.BackPressed)
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val wPx = with(density) { maxWidth.roundToPx() }
-        val hPx = with(density) { maxHeight.roundToPx() }
-
-        LaunchedEffect(wPx, hPx, density.density, density.fontScale) {
-            vm.dispatch(
-                ReaderIntent.LayoutChanged(
-                    LayoutConstraints(
-                        viewportWidthPx = wPx,
-                        viewportHeightPx = hPx,
-                        density = density.density,
-                        fontScale = density.fontScale
-                    )
-                )
-            )
+    ReaderScaffold(
+        state = state,
+        snackbarHostState = snackbarHost,
+        onBack = onBack,
+        onIntent = vm::dispatch,
+        onOpenLocator = vm::openLocator,
+        onReadingViewportChanged = { constraints ->
+            vm.dispatch(ReaderIntent.LayoutChanged(constraints))
         }
-
-        ReaderScaffold(
-            state = state,
-            snackbarHostState = snackbarHost,
-            onBack = onBack,
-            onIntent = vm::dispatch,
-            onOpenLocator = vm::openLocator
-        )
-    }
+    )
 }
