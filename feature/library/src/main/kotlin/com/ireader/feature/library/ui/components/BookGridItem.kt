@@ -1,6 +1,5 @@
 package com.ireader.feature.library.ui.components
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -28,7 +27,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,21 +50,18 @@ internal fun BookGridItem(
     val entity = book.book
     val title = bookTitle(entity.title, entity.fileName)
     val progressText = progressionText(book.progression)
-    val coverElevation = animateDpAsState(
-        targetValue = if (isEditMode && isSelected) 12.dp else 6.dp,
-        animationSpec = tween(durationMillis = ReaderTokens.Motion.Fast),
-        label = "book_item_cover_elevation"
-    )
+    val showSelectionBorder = isEditMode && isSelected
+    val coverShape = RoundedCornerShape(9.dp)
     val cardStroke = animateColorAsState(
-        targetValue = if (isEditMode && isSelected) {
+        targetValue = if (showSelectionBorder) {
             ReaderTokens.Palette.PrototypeBlue
         } else {
-            ReaderTokens.Palette.PrototypeBorder
+            Color.Transparent
         },
         animationSpec = tween(durationMillis = ReaderTokens.Motion.Fast),
         label = "book_item_stroke"
     )
-    val metaColor = if (isEditMode && isSelected) {
+    val metaColor = if (showSelectionBorder) {
         ReaderTokens.Palette.PrototypeBlue
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
@@ -84,21 +79,17 @@ internal fun BookGridItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(
-                    width = 1.dp,
+                    width = if (showSelectionBorder) 1.dp else 0.dp,
                     color = cardStroke.value,
-                    shape = RoundedCornerShape(9.dp)
+                    shape = coverShape
                 )
         ) {
             BookCover(
                 coverPath = entity.coverPath,
                 titleFallback = title,
+                shape = coverShape,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(
-                        elevation = coverElevation.value,
-                        shape = RoundedCornerShape(9.dp),
-                        clip = false
-                    )
             )
 
             if (isEditMode) {

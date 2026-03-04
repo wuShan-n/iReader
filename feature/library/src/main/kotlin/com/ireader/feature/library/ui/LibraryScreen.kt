@@ -26,7 +26,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -148,8 +147,9 @@ fun LibraryScreen(
                     } else {
                         NormalTopBar(
                             isDark = isDark,
-                            onOpenSearch = { },
-                            onOpenMore = { filterMenuExpanded = true },
+                            onOpenSort = { sortMenuExpanded = true },
+                            onOpenFilter = { filterMenuExpanded = true },
+                            onImport = { importLauncher.launch(arrayOf("*/*")) },
                             onEnterEdit = { isEditMode = true }
                         )
                     }
@@ -194,21 +194,6 @@ fun LibraryScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                AnimatedVisibility(
-                    visible = !isEditMode,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    StatusRow(
-                        state = state,
-                        isDark = isDark,
-                        onSort = { sortMenuExpanded = true },
-                        onFilter = { filterMenuExpanded = true },
-                        onImport = { importLauncher.launch(arrayOf("*/*")) },
-                        onEnterEdit = { isEditMode = true }
-                    )
-                }
-
                 LibrarySearchBar(
                     keyword = state.keyword,
                     isDark = isDark,
@@ -335,12 +320,14 @@ fun LibraryScreen(
 @Composable
 private fun NormalTopBar(
     isDark: Boolean,
-    onOpenSearch: () -> Unit,
-    onOpenMore: () -> Unit,
+    onOpenSort: () -> Unit,
+    onOpenFilter: () -> Unit,
+    onImport: () -> Unit,
     onEnterEdit: () -> Unit
 ) {
     val titleColor = if (isDark) Color(0xFFE4E4E4) else ReaderTokens.Palette.PrototypeTextPrimary
     val bodyColor = if (isDark) ReaderTokens.Palette.PrototypeTextTertiary else ReaderTokens.Palette.PrototypeTextSecondary
+    var topActionMenuExpanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -355,31 +342,44 @@ private fun NormalTopBar(
             fontWeight = FontWeight.SemiBold,
             color = titleColor
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Badge(
-                containerColor = ReaderTokens.Palette.PrototypeBlue,
-                contentColor = Color.White
+        Box {
+            IconButton(onClick = { topActionMenuExpanded = true }) {
+                PrototypeIcons.MoreVertical(modifier = Modifier.size(22.dp), tint = bodyColor)
+            }
+            DropdownMenu(
+                expanded = topActionMenuExpanded,
+                onDismissRequest = { topActionMenuExpanded = false }
             ) {
-                Text("福利")
+                DropdownMenuItem(
+                    text = { Text("排序") },
+                    onClick = {
+                        topActionMenuExpanded = false
+                        onOpenSort()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("筛选") },
+                    onClick = {
+                        topActionMenuExpanded = false
+                        onOpenFilter()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("导入") },
+                    onClick = {
+                        topActionMenuExpanded = false
+                        onImport()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("编辑") },
+                    onClick = {
+                        topActionMenuExpanded = false
+                        onEnterEdit()
+                    }
+                )
             }
-            CircleActionButton(onClick = onOpenSearch) {
-                PrototypeIcons.Search(modifier = Modifier.size(22.dp), tint = bodyColor)
-            }
-            CircleActionButton(onClick = onOpenMore) {
-                PrototypeIcons.MoreHorizontal(modifier = Modifier.size(22.dp), tint = bodyColor)
-            }
-            TextButton(onClick = onEnterEdit) { Text("编辑", color = titleColor) }
         }
-    }
-}
-
-@Composable
-private fun CircleActionButton(
-    onClick: () -> Unit,
-    icon: @Composable () -> Unit
-) {
-    IconButton(onClick = onClick) {
-        icon()
     }
 }
 
@@ -408,50 +408,6 @@ private fun EditModeTopBar(
         )
         TextButton(onClick = onDone) {
             Text("完成")
-        }
-    }
-}
-
-@Composable
-private fun StatusRow(
-    state: LibraryUiState,
-    isDark: Boolean,
-    onSort: () -> Unit,
-    onFilter: () -> Unit,
-    onImport: () -> Unit,
-    onEnterEdit: () -> Unit
-) {
-    val progressPercent = (state.books.map { it.progression }.average().takeIf { !it.isNaN() } ?: 0.0) * 100.0
-    val readTip = "本周读${(progressPercent * 0.6).toInt()}分钟"
-    val pillColor = if (isDark) ReaderTokens.Palette.LibraryPillNight else ReaderTokens.Palette.PrototypeSurfaceMuted
-    val itemColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextSecondary
-    val strongText = if (isDark) Color(0xFFE4E4E4) else ReaderTokens.Palette.PrototypeTextPrimary
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .background(color = pillColor, shape = RoundedCornerShape(999.dp))
-                .padding(horizontal = 14.dp, vertical = 7.dp)
-        ) {
-            Text(
-                text = readTip,
-                style = MaterialTheme.typography.labelLarge,
-                color = itemColor
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onSort) { Text("排序", color = itemColor) }
-            TextButton(onClick = onFilter) {
-                Text(filterLabel(state), color = itemColor)
-            }
-            Text("｜", color = itemColor.copy(alpha = 0.5f))
-            TextButton(onClick = onEnterEdit) { Text("编辑", color = strongText) }
-            TextButton(onClick = onImport) { Text("导入", color = itemColor) }
         }
     }
 }
@@ -850,12 +806,6 @@ private fun EmptyLibrary(
             }
         }
     }
-}
-
-private fun filterLabel(state: LibraryUiState): String {
-    val count = state.statuses.size + state.indexStates.size + (if (state.onlyFavorites) 1 else 0) +
-        (if (state.selectedCollectionId != null) 1 else 0)
-    return if (count <= 0) "筛选" else "筛选($count)"
 }
 
 private fun Set<Long>.toggle(id: Long): Set<Long> {
