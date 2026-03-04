@@ -1,5 +1,9 @@
 package com.ireader.feature.library.ui.components
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -8,16 +12,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LibraryBookItem
 import java.util.Locale
@@ -45,6 +53,27 @@ internal fun BookGridItem(
     val entity = book.book
     val title = bookTitle(entity.title, entity.fileName)
     val progressText = progressionText(book.progression)
+    val selectionProgress = animateFloatAsState(
+        targetValue = if (isEditMode && isSelected) 1f else 0f,
+        animationSpec = tween(durationMillis = ReaderTokens.Motion.Medium),
+        label = "book_item_selection"
+    )
+    val coverElevation = animateDpAsState(
+        targetValue = if (isEditMode && isSelected) 10.dp else 5.dp,
+        animationSpec = tween(durationMillis = ReaderTokens.Motion.Fast),
+        label = "book_item_cover_elevation"
+    )
+    val cardStroke = animateColorAsState(
+        targetValue = if (isEditMode && isSelected) {
+            ReaderTokens.Palette.AccentBlue
+        } else {
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+        },
+        animationSpec = tween(durationMillis = ReaderTokens.Motion.Fast),
+        label = "book_item_stroke"
+    )
+    val metaColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceColor = MaterialTheme.colorScheme.surface
 
     Column(
         modifier = modifier
@@ -54,18 +83,25 @@ internal fun BookGridItem(
                 onLongClick = onLongClick
             )
     ) {
-        Box {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(surfaceColor, RoundedCornerShape(14.dp))
+                .border(width = 1.dp, color = cardStroke.value, shape = RoundedCornerShape(14.dp))
+                .padding(6.dp)
+        ) {
             BookCover(
                 coverPath = entity.coverPath,
                 titleFallback = title,
                 modifier = Modifier
                     .fillMaxWidth()
                     .shadow(
-                        elevation = if (isEditMode && isSelected) 8.dp else 4.dp,
+                        elevation = coverElevation.value,
                         shape = MaterialTheme.shapes.medium,
                         clip = false
                     )
             )
+
             if (isEditMode) {
                 Box(
                     modifier = Modifier
@@ -73,7 +109,7 @@ internal fun BookGridItem(
                         .padding(8.dp)
                         .size(22.dp)
                         .background(
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0x78000000),
+                            color = if (isSelected) ReaderTokens.Palette.AccentBlue else Color(0x78000000),
                             shape = CircleShape
                         )
                         .border(width = 1.dp, color = Color.White, shape = CircleShape),
@@ -104,17 +140,24 @@ internal fun BookGridItem(
         Text(
             text = progressText,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = metaColor
         )
 
         val status = statusLabel(entity.indexState)
         if (status != null) {
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = status,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.secondary
-            )
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                modifier = Modifier.defaultMinSize(minHeight = 18.dp)
+            ) {
+                Text(
+                    text = status,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         } else {
             Spacer(modifier = Modifier.height(4.dp))
         }
@@ -123,27 +166,30 @@ internal fun BookGridItem(
         LinearProgressIndicator(
             progress = { book.progression.toFloat().coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+            trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
         )
 
         Spacer(modifier = Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = entity.format.name,
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = metaColor
             )
             Spacer(modifier = Modifier.width(8.dp))
             if (entity.favorite) {
                 Text(
                     text = "收藏",
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ReaderTokens.Palette.Warning
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
             Text(
                 text = sizeText(entity.fileSizeBytes),
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = metaColor.copy(alpha = 0.9f * (1f - 0.15f * selectionProgress.value))
             )
         }
     }

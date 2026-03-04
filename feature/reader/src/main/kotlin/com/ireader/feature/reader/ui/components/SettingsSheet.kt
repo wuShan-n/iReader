@@ -25,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -81,10 +82,16 @@ fun SettingsSheet(
     onSelectBackground: (ReaderBackgroundPreset) -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onClose) {
+    val container = if (isNightMode) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.ReaderPanelElevatedDay
+
+    ModalBottomSheet(
+        onDismissRequest = onClose,
+        containerColor = container
+    ) {
         if (capabilities?.fixedLayout == true) {
             FixedLayoutSettings(
                 config = config as? RenderConfig.FixedPage ?: RenderConfig.FixedPage(),
+                isNightMode = isNightMode,
                 onApply = onApply
             )
             return@ModalBottomSheet
@@ -103,18 +110,21 @@ fun SettingsSheet(
 
             ReaderSettingsPanel.Font -> FontPanel(
                 current = current,
+                isNightMode = isNightMode,
                 onBack = onBackToMain,
                 onApply = onApply
             )
 
             ReaderSettingsPanel.Spacing -> SpacingPanel(
                 current = current,
+                isNightMode = isNightMode,
                 onBack = onBackToMain,
                 onApply = onApply
             )
 
             ReaderSettingsPanel.PageTurn -> PageTurnPanel(
                 current = current,
+                isNightMode = isNightMode,
                 onBack = onBackToMain,
                 onApply = onApply
             )
@@ -316,6 +326,7 @@ private fun ReflowMainPanel(
 @Composable
 private fun FontPanel(
     current: RenderConfig.ReflowText,
+    isNightMode: Boolean,
     onBack: () -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
@@ -323,6 +334,9 @@ private fun FontPanel(
     var persist by remember { mutableStateOf(true) }
     var livePreview by remember { mutableStateOf(true) }
     var selectedFamily by remember(current.fontFamilyName) { mutableStateOf(current.fontFamilyName) }
+    val textColor = if (isNightMode) Color(0xFFEAE7E1) else Color(0xFF1D1B17)
+    val cardBg = if (isNightMode) Color(0xFF2A2A2A) else Color(0xFFF3EFE7)
+    val unselectedBorder = if (isNightMode) Color(0x2EFFFFFF) else Color.LightGray
 
     fun currentDraft(): RenderConfig.ReflowText {
         return current.copy(fontFamilyName = selectedFamily)
@@ -352,12 +366,16 @@ private fun FontPanel(
                     modifier = Modifier
                         .height(70.dp)
                         .background(
-                            if (selected) ReaderTokens.Palette.AccentBlueSoft else Color.Transparent,
+                            if (selected) {
+                                if (isNightMode) ReaderTokens.Palette.AccentBlue.copy(alpha = 0.2f) else ReaderTokens.Palette.AccentBlueSoft
+                            } else {
+                                cardBg
+                            },
                             RoundedCornerShape(10.dp)
                         )
                         .border(
                             width = 1.dp,
-                            color = if (selected) ReaderTokens.Palette.AccentBlue else Color.LightGray,
+                            color = if (selected) ReaderTokens.Palette.AccentBlue else unselectedBorder,
                             shape = RoundedCornerShape(10.dp)
                         )
                         .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -369,7 +387,7 @@ private fun FontPanel(
                             previewIfEnabled()
                         }
                     ) {
-                        Text(name)
+                        Text(name, color = textColor)
                     }
                 }
             }
@@ -380,7 +398,7 @@ private fun FontPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("实时预览")
+            Text("实时预览", color = textColor)
             Switch(
                 checked = livePreview,
                 onCheckedChange = {
@@ -400,7 +418,7 @@ private fun FontPanel(
                     checked = persist,
                     onCheckedChange = { persist = it }
                 )
-                Text("保存为默认")
+                Text("保存为默认", color = textColor)
             }
             Button(onClick = { onApply(currentDraft(), persist) }) {
                 Text("应用")
@@ -412,6 +430,7 @@ private fun FontPanel(
 @Composable
 private fun SpacingPanel(
     current: RenderConfig.ReflowText,
+    isNightMode: Boolean,
     onBack: () -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
@@ -429,6 +448,7 @@ private fun SpacingPanel(
     var cjkLineBreakStrict by remember(current.cjkLineBreakStrict) { mutableStateOf(current.cjkLineBreakStrict) }
     var hangingPunctuation by remember(current.hangingPunctuation) { mutableStateOf(current.hangingPunctuation) }
     var pageInsetMode by remember(current.pageInsetMode) { mutableStateOf(current.pageInsetMode) }
+    val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
 
     fun draftConfig(): RenderConfig.ReflowText {
         return current.copy(
@@ -484,6 +504,7 @@ private fun SpacingPanel(
             valueLabel = "%.2f".format(lineHeight),
             value = lineHeight,
             range = 1.1f..2.4f,
+            textColor = textColor,
             onChange = {
                 lineHeight = it
                 previewIfEnabled()
@@ -494,6 +515,7 @@ private fun SpacingPanel(
             valueLabel = "${"%.1f".format(paragraphIndent)}em",
             value = paragraphIndent,
             range = 0f..3.2f,
+            textColor = textColor,
             onChange = {
                 paragraphIndent = it
                 previewIfEnabled()
@@ -504,6 +526,7 @@ private fun SpacingPanel(
             valueLabel = "${paragraph.roundToInt()}dp",
             value = paragraph,
             range = 0f..24f,
+            textColor = textColor,
             onChange = {
                 paragraph = it
                 previewIfEnabled()
@@ -514,17 +537,19 @@ private fun SpacingPanel(
             valueLabel = "${padding.roundToInt()}dp",
             value = padding,
             range = 8f..42f,
+            textColor = textColor,
             onChange = {
                 padding = it
                 previewIfEnabled()
             }
         )
 
-        Text("对齐方式")
+        Text("对齐方式", color = textColor)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ChoiceButton(
                 label = "左对齐",
                 selected = textAlign == TextAlignMode.START,
+                isNightMode = isNightMode,
                 onClick = {
                     textAlign = TextAlignMode.START
                     previewIfEnabled()
@@ -533,6 +558,7 @@ private fun SpacingPanel(
             ChoiceButton(
                 label = "两端对齐",
                 selected = textAlign == TextAlignMode.JUSTIFY,
+                isNightMode = isNightMode,
                 onClick = {
                     textAlign = TextAlignMode.JUSTIFY
                     previewIfEnabled()
@@ -540,11 +566,12 @@ private fun SpacingPanel(
             )
         }
 
-        Text("断行策略")
+        Text("断行策略", color = textColor)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ChoiceButton(
                 label = "快速",
                 selected = breakStrategy == BreakStrategyMode.SIMPLE,
+                isNightMode = isNightMode,
                 onClick = {
                     breakStrategy = BreakStrategyMode.SIMPLE
                     previewIfEnabled()
@@ -553,6 +580,7 @@ private fun SpacingPanel(
             ChoiceButton(
                 label = "平衡",
                 selected = breakStrategy == BreakStrategyMode.BALANCED,
+                isNightMode = isNightMode,
                 onClick = {
                     breakStrategy = BreakStrategyMode.BALANCED
                     previewIfEnabled()
@@ -561,6 +589,7 @@ private fun SpacingPanel(
             ChoiceButton(
                 label = "高质量",
                 selected = breakStrategy == BreakStrategyMode.HIGH_QUALITY,
+                isNightMode = isNightMode,
                 onClick = {
                     breakStrategy = BreakStrategyMode.HIGH_QUALITY
                     previewIfEnabled()
@@ -568,11 +597,12 @@ private fun SpacingPanel(
             )
         }
 
-        Text("断词")
+        Text("断词", color = textColor)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ChoiceButton(
                 label = "关闭",
                 selected = hyphenationMode == HyphenationMode.NONE,
+                isNightMode = isNightMode,
                 onClick = {
                     hyphenationMode = HyphenationMode.NONE
                     previewIfEnabled()
@@ -581,6 +611,7 @@ private fun SpacingPanel(
             ChoiceButton(
                 label = "普通",
                 selected = hyphenationMode == HyphenationMode.NORMAL,
+                isNightMode = isNightMode,
                 onClick = {
                     hyphenationMode = HyphenationMode.NORMAL
                     previewIfEnabled()
@@ -589,6 +620,7 @@ private fun SpacingPanel(
             ChoiceButton(
                 label = "增强",
                 selected = hyphenationMode == HyphenationMode.FULL,
+                isNightMode = isNightMode,
                 onClick = {
                     hyphenationMode = HyphenationMode.FULL
                     previewIfEnabled()
@@ -596,11 +628,12 @@ private fun SpacingPanel(
             )
         }
 
-        Text("页面留白")
+        Text("页面留白", color = textColor)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ChoiceButton(
                 label = "舒适",
                 selected = pageInsetMode == PageInsetMode.RELAXED,
+                isNightMode = isNightMode,
                 onClick = {
                     pageInsetMode = PageInsetMode.RELAXED
                     previewIfEnabled()
@@ -609,6 +642,7 @@ private fun SpacingPanel(
             ChoiceButton(
                 label = "紧凑",
                 selected = pageInsetMode == PageInsetMode.COMPACT,
+                isNightMode = isNightMode,
                 onClick = {
                     pageInsetMode = PageInsetMode.COMPACT
                     previewIfEnabled()
@@ -621,7 +655,7 @@ private fun SpacingPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("字体安全留白")
+            Text("字体安全留白", color = textColor)
             Switch(
                 checked = includeFontPadding,
                 onCheckedChange = {
@@ -635,7 +669,7 @@ private fun SpacingPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("CJK 严格换行")
+            Text("CJK 严格换行", color = textColor)
             Switch(
                 checked = cjkLineBreakStrict,
                 onCheckedChange = {
@@ -649,7 +683,7 @@ private fun SpacingPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("标点悬挂")
+            Text("标点悬挂", color = textColor)
             Switch(
                 checked = hangingPunctuation,
                 onCheckedChange = {
@@ -664,7 +698,7 @@ private fun SpacingPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("实时预览")
+            Text("实时预览", color = textColor)
             Switch(
                 checked = livePreview,
                 onCheckedChange = {
@@ -684,7 +718,7 @@ private fun SpacingPanel(
                     checked = persist,
                     onCheckedChange = { persist = it }
                 )
-                Text("保存为默认")
+                Text("保存为默认", color = textColor)
             }
             Button(onClick = { onApply(draftConfig(), persist) }) {
                 Text("应用")
@@ -696,6 +730,7 @@ private fun SpacingPanel(
 @Composable
 private fun PageTurnPanel(
     current: RenderConfig.ReflowText,
+    isNightMode: Boolean,
     onBack: () -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
@@ -714,6 +749,9 @@ private fun PageTurnPanel(
     }
 
     val options = PageTurnMode.entries
+    val optionBg = if (isNightMode) Color(0xFF2B2B2B) else Color(0xFFF4F5F6)
+    val optionBorder = if (isNightMode) Color(0x2EFFFFFF) else Color.LightGray
+    val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -732,10 +770,10 @@ private fun PageTurnPanel(
                     Box(
                         modifier = Modifier
                             .size(width = 66.dp, height = 86.dp)
-                            .background(Color(0xFFF4F5F6), RoundedCornerShape(8.dp))
+                            .background(optionBg, RoundedCornerShape(8.dp))
                             .border(
                                 width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) ReaderTokens.Palette.AccentBlue else Color.LightGray,
+                                color = if (isSelected) ReaderTokens.Palette.AccentBlue else optionBorder,
                                 shape = RoundedCornerShape(8.dp)
                             )
                     )
@@ -747,7 +785,7 @@ private fun PageTurnPanel(
                     ) {
                         Text(
                             option.displayLabel(),
-                            color = if (isSelected) ReaderTokens.Palette.AccentBlue else Color.Gray
+                            color = if (isSelected) ReaderTokens.Palette.AccentBlue else textColor.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -759,7 +797,7 @@ private fun PageTurnPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("实时预览")
+            Text("实时预览", color = textColor)
             Switch(
                 checked = livePreview,
                 onCheckedChange = {
@@ -779,7 +817,7 @@ private fun PageTurnPanel(
                     checked = persist,
                     onCheckedChange = { persist = it }
                 )
-                Text("保存为默认")
+                Text("保存为默认", color = textColor)
             }
             Button(onClick = { onApply(draftConfig(), persist) }) {
                 Text("应用")
@@ -804,6 +842,8 @@ private fun MoreBackgroundPanel(
         ReaderBackgroundPreset.DARK to Color(0xFF2B2B2B),
         ReaderBackgroundPreset.NAVY to Color(0xFF1A1F2B)
     )
+    val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
+    val unselectedBorder = if (isNightMode) Color(0x2EFFFFFF) else Color.LightGray
     Column(
         modifier = Modifier
             .fillMaxHeight(0.65f)
@@ -811,7 +851,7 @@ private fun MoreBackgroundPanel(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         SheetHeader(title = "更多背景", onBack = onBack)
-        Text("背景色", fontWeight = FontWeight.Medium)
+        Text("背景色", fontWeight = FontWeight.Medium, color = textColor)
         LazyVerticalGrid(
             columns = GridCells.Fixed(6),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -830,7 +870,7 @@ private fun MoreBackgroundPanel(
                             color = if (selected) {
                                 ReaderTokens.Palette.AccentBlue
                             } else {
-                                Color.LightGray
+                                unselectedBorder
                             },
                             shape = CircleShape
                         )
@@ -851,7 +891,7 @@ private fun MoreBackgroundPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("跟随夜间模式")
+            Text("跟随夜间模式", color = textColor)
             Switch(checked = isNightMode, onCheckedChange = { onToggleNightMode() })
         }
     }
@@ -860,12 +900,14 @@ private fun MoreBackgroundPanel(
 @Composable
 private fun FixedLayoutSettings(
     config: RenderConfig.FixedPage,
+    isNightMode: Boolean,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
     var persist by remember { mutableStateOf(true) }
     var zoom by remember(config.zoom) { mutableFloatStateOf(config.zoom) }
     var rotation by remember(config.rotationDegrees) { mutableIntStateOf(config.rotationDegrees) }
     var fitMode by remember(config.fitMode) { mutableStateOf(config.fitMode) }
+    val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
 
     Column(
         modifier = Modifier
@@ -873,8 +915,8 @@ private fun FixedLayoutSettings(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("版式设置")
-        Text("缩放 ${"%.2f".format(zoom)}")
+        Text("版式设置", color = textColor)
+        Text("缩放 ${"%.2f".format(zoom)}", color = textColor)
         Slider(
             value = zoom,
             valueRange = 0.6f..4f,
@@ -884,7 +926,7 @@ private fun FixedLayoutSettings(
             }
         )
 
-        Text("旋转")
+        Text("旋转", color = textColor)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(0, 90, 180, 270).forEach { degree ->
                 OutlinedButton(onClick = {
@@ -896,7 +938,7 @@ private fun FixedLayoutSettings(
             }
         }
 
-        Text("适配")
+        Text("适配", color = textColor)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RenderConfig.FitMode.entries.forEach { mode ->
                 OutlinedButton(onClick = {
@@ -913,7 +955,7 @@ private fun FixedLayoutSettings(
                 checked = persist,
                 onCheckedChange = { persist = it }
             )
-            Text("保存为默认")
+            Text("保存为默认", color = textColor)
         }
         Button(
             onClick = {
@@ -938,9 +980,13 @@ private fun SheetHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         TextButton(onClick = onBack) {
-            Icon(imageVector = Icons.Outlined.KeyboardArrowDown, contentDescription = "返回")
+            Icon(
+                imageVector = Icons.Outlined.KeyboardArrowDown,
+                contentDescription = "返回",
+                tint = MaterialTheme.colorScheme.onSurface
+            )
         }
-        Text(text = title, fontWeight = FontWeight.Medium)
+        Text(text = title, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
         if (actionText.isBlank()) {
             Box(modifier = Modifier.width(42.dp))
         } else {
@@ -957,6 +1003,7 @@ private fun SettingSliderRow(
     valueLabel: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    textColor: Color,
     onChange: (Float) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -965,8 +1012,8 @@ private fun SettingSliderRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(label)
-            Text(valueLabel, color = Color.Gray)
+            Text(label, color = textColor)
+            Text(valueLabel, color = textColor.copy(alpha = 0.7f))
         }
         Slider(value = value, valueRange = range, onValueChange = onChange)
     }
@@ -976,15 +1023,22 @@ private fun SettingSliderRow(
 private fun ChoiceButton(
     label: String,
     selected: Boolean,
+    isNightMode: Boolean,
     onClick: () -> Unit
 ) {
+    val selectedColors = ButtonDefaults.buttonColors(
+        containerColor = ReaderTokens.Palette.AccentBlue,
+        contentColor = Color.White
+    )
+    val unselectedText = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF24201C)
+
     if (selected) {
-        Button(onClick = onClick) {
+        Button(onClick = onClick, colors = selectedColors) {
             Text(label)
         }
     } else {
         OutlinedButton(onClick = onClick) {
-            Text(label)
+            Text(label, color = unselectedText)
         }
     }
 }

@@ -2,7 +2,14 @@ package com.ireader.feature.library.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,13 +24,16 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,11 +41,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,7 +58,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -55,6 +67,7 @@ import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LibraryBookItem
 import com.ireader.core.data.book.LibrarySort
 import com.ireader.core.data.book.ReadingStatus
+import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.feature.library.presentation.LibraryUiState
 import com.ireader.feature.library.presentation.LibraryViewModel
 import com.ireader.feature.library.ui.components.BookGridItem
@@ -68,6 +81,7 @@ fun LibraryScreen(
     vm: LibraryViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsState()
+    val isDark = isSystemInDarkTheme()
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
     var selectedBook by remember { mutableStateOf<LibraryBookItem?>(null) }
@@ -101,41 +115,59 @@ fun LibraryScreen(
         selectedBookIds = selectedBookIds.intersect(allIds)
     }
 
+    val topColor = if (isDark) {
+        ReaderTokens.Palette.LibraryBackgroundTopNight
+    } else {
+        ReaderTokens.Palette.LibraryBackgroundTopDay
+    }
+    val bottomColor = if (isDark) {
+        ReaderTokens.Palette.LibraryBackgroundBottomNight
+    } else {
+        ReaderTokens.Palette.LibraryBackgroundBottomDay
+    }
+
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             Surface(
                 tonalElevation = 0.dp,
-                color = MaterialTheme.colorScheme.background
+                color = Color.Transparent
             ) {
-                if (isEditMode) {
-                    EditModeTopBar(
-                        selectedCount = selectedBookIds.size,
-                        allSelected = selectedBookIds.size == state.books.size && state.books.isNotEmpty(),
-                        onToggleSelectAll = {
-                            selectedBookIds = if (selectedBookIds.size == state.books.size) {
-                                emptySet()
-                            } else {
-                                state.books.map { it.book.bookId }.toSet()
+                Crossfade(targetState = isEditMode, label = "library_top_bar") { editing ->
+                    if (editing) {
+                        EditModeTopBar(
+                            selectedCount = selectedBookIds.size,
+                            allSelected = selectedBookIds.size == state.books.size && state.books.isNotEmpty(),
+                            onToggleSelectAll = {
+                                selectedBookIds = if (selectedBookIds.size == state.books.size) {
+                                    emptySet()
+                                } else {
+                                    state.books.map { it.book.bookId }.toSet()
+                                }
+                            },
+                            onDone = {
+                                isEditMode = false
+                                selectedBookIds = emptySet()
                             }
-                        },
-                        onDone = {
-                            isEditMode = false
-                            selectedBookIds = emptySet()
-                        }
-                    )
-                } else {
-                    NormalTopBar(
-                        onOpenSearch = { },
-                        onOpenMore = { filterMenuExpanded = true },
-                        onEnterEdit = { isEditMode = true }
-                    )
+                        )
+                    } else {
+                        NormalTopBar(
+                            onOpenSearch = { },
+                            onOpenMore = { filterMenuExpanded = true },
+                            onEnterEdit = { isEditMode = true }
+                        )
+                    }
                 }
             }
         },
         bottomBar = {
-            if (isEditMode && selectedBookIds.isNotEmpty()) {
+            AnimatedVisibility(
+                visible = isEditMode && selectedBookIds.isNotEmpty(),
+                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut()
+            ) {
                 BatchActionBar(
+                    isDark = isDark,
                     onFavorite = {
                         state.books
                             .filter { it.book.bookId in selectedBookIds }
@@ -156,90 +188,89 @@ fun LibraryScreen(
             }
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Brush.verticalGradient(listOf(topColor, bottomColor)))
                 .padding(padding)
         ) {
-            if (!isEditMode) {
-                StatusRow(
-                    state = state,
-                    onSort = { sortMenuExpanded = true },
-                    onFilter = { filterMenuExpanded = true },
-                    onImport = { importLauncher.launch(arrayOf("*/*")) },
-                    onSettings = onOpenSettings
-                )
-            }
-
-            OutlinedTextField(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .alpha(if (isEditMode) 0.75f else 1f),
-                value = state.keyword,
-                onValueChange = vm::setKeyword,
-                singleLine = true,
-                label = { Text("搜索标题 / 作者 / 文件名") }
-            )
-
-            if (!state.importStatusText.isNullOrBlank()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = state.importStatusText.orEmpty(),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    TextButton(onClick = vm::dismissImportStatus) {
-                        Text("关闭")
-                    }
-                }
-            }
-
-            if (state.books.isEmpty()) {
-                EmptyLibrary(
-                    onImportBooks = { importLauncher.launch(arrayOf("*/*")) },
-                    modifier = Modifier.fillMaxSize()
-                )
-                return@Column
-            }
-
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 124.dp),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(22.dp)
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(
-                    items = state.books,
-                    key = { item -> item.book.bookId }
-                ) { item ->
-                    val id = item.book.bookId
-                    val selected = id in selectedBookIds
-                    BookGridItem(
-                        book = item,
-                        isEditMode = isEditMode,
-                        isSelected = selected,
-                        onClick = {
-                            if (isEditMode) {
-                                selectedBookIds = selectedBookIds.toggle(id)
-                            } else {
-                                onOpenBook(id)
-                            }
-                        },
-                        onLongClick = {
-                            if (isEditMode) {
-                                selectedBookIds = selectedBookIds.toggle(id)
-                            } else {
-                                selectedBook = item
-                            }
-                        }
+                AnimatedVisibility(
+                    visible = !isEditMode,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    StatusRow(
+                        state = state,
+                        isDark = isDark,
+                        onSort = { sortMenuExpanded = true },
+                        onFilter = { filterMenuExpanded = true },
+                        onImport = { importLauncher.launch(arrayOf("*/*")) },
+                        onSettings = onOpenSettings
                     )
+                }
+
+                LibrarySearchBar(
+                    keyword = state.keyword,
+                    isDark = isDark,
+                    isEditMode = isEditMode,
+                    onKeywordChange = vm::setKeyword
+                )
+
+                AnimatedVisibility(
+                    visible = !state.importStatusText.isNullOrBlank(),
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    ImportStatusCard(
+                        statusText = state.importStatusText.orEmpty(),
+                        isDark = isDark,
+                        onClose = vm::dismissImportStatus
+                    )
+                }
+
+                if (state.books.isEmpty()) {
+                    EmptyLibrary(
+                        onImportBooks = { importLauncher.launch(arrayOf("*/*")) },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 124.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(22.dp)
+                    ) {
+                        items(
+                            items = state.books,
+                            key = { item -> item.book.bookId }
+                        ) { item ->
+                            val id = item.book.bookId
+                            val selected = id in selectedBookIds
+                            BookGridItem(
+                                book = item,
+                                isEditMode = isEditMode,
+                                isSelected = selected,
+                                onClick = {
+                                    if (isEditMode) {
+                                        selectedBookIds = selectedBookIds.toggle(id)
+                                    } else {
+                                        onOpenBook(id)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (isEditMode) {
+                                        selectedBookIds = selectedBookIds.toggle(id)
+                                    } else {
+                                        selectedBook = item
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -323,24 +354,39 @@ private fun NormalTopBar(
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onEnterEdit) {
                 Text("编辑")
             }
-            IconButton(onClick = onOpenSearch) {
+            CircleActionButton(onClick = onOpenSearch) {
                 Icon(
                     imageVector = Icons.Outlined.Search,
                     contentDescription = "search",
                     modifier = Modifier.size(20.dp)
                 )
             }
-            IconButton(onClick = onOpenMore) {
+            CircleActionButton(onClick = onOpenMore) {
                 Icon(
                     imageVector = Icons.Outlined.MoreHoriz,
                     contentDescription = "more",
                     modifier = Modifier.size(20.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CircleActionButton(
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit
+) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+    ) {
+        IconButton(onClick = onClick) {
+            icon()
         }
     }
 }
@@ -365,7 +411,8 @@ private fun EditModeTopBar(
         }
         Text(
             text = "已选择${selectedCount}本书",
-            style = MaterialTheme.typography.titleMedium
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
         )
         TextButton(onClick = onDone) {
             Text("完成")
@@ -376,6 +423,7 @@ private fun EditModeTopBar(
 @Composable
 private fun StatusRow(
     state: LibraryUiState,
+    isDark: Boolean,
     onSort: () -> Unit,
     onFilter: () -> Unit,
     onImport: () -> Unit,
@@ -383,6 +431,7 @@ private fun StatusRow(
 ) {
     val progressPercent = (state.books.map { it.progression }.average().takeIf { !it.isNaN() } ?: 0.0) * 100.0
     val readTip = "本周阅读 ${progressPercent.toInt()}%"
+    val pillColor = if (isDark) ReaderTokens.Palette.LibraryPillNight else ReaderTokens.Palette.LibraryPillDay
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -392,11 +441,8 @@ private fun StatusRow(
     ) {
         Box(
             modifier = Modifier
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(20.dp)
-                )
-                .padding(horizontal = 12.dp, vertical = 7.dp)
+                .background(color = pillColor, shape = RoundedCornerShape(999.dp))
+                .padding(horizontal = 14.dp, vertical = 7.dp)
         ) {
             Text(
                 text = readTip,
@@ -405,23 +451,99 @@ private fun StatusRow(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            AssistChip(onClick = onSort, label = { Text("排序") })
-            AssistChip(onClick = onFilter, label = { Text(filterLabel(state)) })
-            AssistChip(onClick = onImport, label = { Text("导入") })
-            AssistChip(onClick = onSettings, label = { Text("设置") })
+            val chipColors = AssistChipDefaults.assistChipColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                labelColor = MaterialTheme.colorScheme.onSurface
+            )
+            AssistChip(onClick = onSort, label = { Text("排序") }, colors = chipColors)
+            AssistChip(onClick = onFilter, label = { Text(filterLabel(state)) }, colors = chipColors)
+            AssistChip(onClick = onImport, label = { Text("导入") }, colors = chipColors)
+            AssistChip(onClick = onSettings, label = { Text("设置") }, colors = chipColors)
+        }
+    }
+}
+
+@Composable
+private fun LibrarySearchBar(
+    keyword: String,
+    isDark: Boolean,
+    isEditMode: Boolean,
+    onKeywordChange: (String) -> Unit
+) {
+    val searchBg = if (isDark) ReaderTokens.Palette.LibrarySearchNight else ReaderTokens.Palette.LibrarySearchDay
+    TextField(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        value = keyword,
+        onValueChange = onKeywordChange,
+        singleLine = true,
+        shape = RoundedCornerShape(ReaderTokens.Shape.InputRadius),
+        placeholder = { Text("搜索标题 / 作者 / 文件名") },
+        leadingIcon = {
+            Icon(imageVector = Icons.Outlined.Search, contentDescription = null)
+        },
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = searchBg,
+            unfocusedContainerColor = searchBg,
+            disabledContainerColor = searchBg,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent
+        ),
+        enabled = !isEditMode
+    )
+}
+
+@Composable
+private fun ImportStatusCard(
+    statusText: String,
+    isDark: Boolean,
+    onClose: () -> Unit
+) {
+    val bg = if (isDark) {
+        ReaderTokens.Palette.ReaderPanelElevatedNight
+    } else {
+        ReaderTokens.Palette.ReaderPanelElevatedDay
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = bg,
+        tonalElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = statusText,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall
+            )
+            TextButton(onClick = onClose) {
+                Text("关闭")
+            }
         }
     }
 }
 
 @Composable
 private fun BatchActionBar(
+    isDark: Boolean,
     onFavorite: () -> Unit,
     onMarkRead: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val bg = if (isDark) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.ReaderPanelElevatedDay
     Surface(
         tonalElevation = 2.dp,
-        shadowElevation = 8.dp
+        shadowElevation = 10.dp,
+        color = bg
     ) {
         Row(
             modifier = Modifier
@@ -432,7 +554,9 @@ private fun BatchActionBar(
         ) {
             TextButton(onClick = onFavorite) { Text("收藏/取消") }
             TextButton(onClick = onMarkRead) { Text("标记已读") }
-            TextButton(onClick = onDelete) { Text("删除") }
+            TextButton(onClick = onDelete, colors = ButtonDefaults.textButtonColors(contentColor = ReaderTokens.Palette.AccentRed)) {
+                Text("删除")
+            }
         }
     }
 }
@@ -515,7 +639,7 @@ private fun BookActionDialog(
                 TextButton(onClick = onReindex) { Text("重新解析元数据") }
                 TextButton(onClick = onRelink) { Text("重新定位文件") }
 
-                OutlinedTextField(
+                TextField(
                     value = newCollectionName,
                     onValueChange = { newCollectionName = it },
                     singleLine = true,
@@ -531,7 +655,7 @@ private fun BookActionDialog(
                     Text("加入合集")
                 }
 
-                TextButton(onClick = onDelete) {
+                TextButton(onClick = onDelete, colors = ButtonDefaults.textButtonColors(contentColor = ReaderTokens.Palette.AccentRed)) {
                     Text("删除书籍")
                 }
             }
@@ -582,12 +706,28 @@ private fun EmptyLibrary(
 ) {
     Column(
         modifier = modifier.padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "书架为空")
-        Button(onClick = onImportBooks) {
-            Text("导入书籍")
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "书架为空", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "导入后将自动解析封面和元数据",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(onClick = onImportBooks) {
+                    Text("导入书籍")
+                }
+            }
         }
     }
 }

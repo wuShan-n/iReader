@@ -1,13 +1,14 @@
 package com.ireader.core.designsystem
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -46,63 +47,75 @@ private val IReaderDarkColorScheme = darkColorScheme(
     outline = Color(0xFF928B80)
 )
 
+private val IReaderSansFamily = FontFamily(
+    Font(R.font.source_han_sans_sc_var, weight = FontWeight.Normal),
+    Font(R.font.source_han_sans_sc_var, weight = FontWeight.Medium),
+    Font(R.font.source_han_sans_sc_var, weight = FontWeight.SemiBold)
+)
+
+private val IReaderSerifFamily = FontFamily(
+    Font(R.font.source_han_serif_sc_var, weight = FontWeight.Normal),
+    Font(R.font.source_han_serif_sc_var, weight = FontWeight.Medium),
+    Font(R.font.source_han_serif_sc_var, weight = FontWeight.SemiBold)
+)
+
 private val IReaderTypography = Typography(
     headlineLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = IReaderSerifFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 32.sp,
+        fontSize = 30.sp,
         lineHeight = 38.sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = IReaderSerifFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 28.sp,
+        fontSize = 26.sp,
         lineHeight = 34.sp
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = IReaderSerifFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 22.sp,
-        lineHeight = 28.sp
+        lineHeight = 30.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
+        fontSize = 17.sp,
         lineHeight = 22.sp
     ),
     bodyLarge = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 17.sp,
-        lineHeight = 28.sp
+        lineHeight = 29.sp
     ),
     bodyMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-        lineHeight = 20.sp
+        fontSize = 15.sp,
+        lineHeight = 22.sp
     ),
     bodySmall = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp
+        fontSize = 13.sp,
+        lineHeight = 18.sp
     ),
     labelLarge = TextStyle(
-        fontFamily = FontFamily.Monospace,
+        fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 18.sp
     ),
     labelMedium = TextStyle(
-        fontFamily = FontFamily.Monospace,
+        fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = FontFamily.Monospace,
+        fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 11.sp,
         lineHeight = 14.sp
@@ -122,9 +135,9 @@ fun IReaderTheme(content: @Composable () -> Unit) {
         typography = IReaderTypography,
         shapes = androidx.compose.material3.Shapes(
             extraSmall = RoundedCornerShape(4.dp),
-            small = RoundedCornerShape(10.dp),
-            medium = RoundedCornerShape(14.dp),
-            large = RoundedCornerShape(20.dp),
+            small = RoundedCornerShape(12.dp),
+            medium = RoundedCornerShape(16.dp),
+            large = RoundedCornerShape(22.dp),
             extraLarge = RoundedCornerShape(28.dp)
         ),
         content = content

@@ -1,6 +1,7 @@
 package com.ireader.feature.reader.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -10,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +39,8 @@ import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -62,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.core.designsystem.ReaderTokens
@@ -111,14 +116,15 @@ fun ReaderScaffold(
         ReaderBackgroundPreset.NAVY
     )
     val panelColor = if (darkSurface) {
-        ReaderTokens.Palette.ReaderPanelNight
+        ReaderTokens.Palette.ReaderPanelElevatedNight
     } else {
-        ReaderTokens.Palette.ReaderPanelDay
+        ReaderTokens.Palette.ReaderPanelElevatedDay
     }
+    val panelBorder = if (darkSurface) ReaderTokens.Palette.ReaderDividerNight else ReaderTokens.Palette.ReaderDividerDay
     val panelTextColor = if (darkSurface) {
-        Color(0xFFD8D8D8)
+        Color(0xFFE8E3DA)
     } else {
-        Color(0xFF1E1E1E)
+        Color(0xFF24201C)
     }
     val readerTextColor = if (darkSurface) {
         ReaderTokens.Palette.ReaderTextNight
@@ -200,13 +206,16 @@ fun ReaderScaffold(
 
             AnimatedVisibility(
                 visible = state.chromeVisible && state.sheet != ReaderSheet.FullSettings,
-                enter = fadeIn() + slideInVertically(initialOffsetY = { -it / 2 }),
-                exit = fadeOut() + slideOutVertically(targetOffsetY = { -it / 2 }),
+                enter = fadeIn(animationSpec = tween(ReaderTokens.Motion.Medium)) +
+                    slideInVertically(initialOffsetY = { -it / 2 }, animationSpec = tween(ReaderTokens.Motion.Medium)),
+                exit = fadeOut(animationSpec = tween(ReaderTokens.Motion.Fast)) +
+                    slideOutVertically(targetOffsetY = { -it / 2 }, animationSpec = tween(ReaderTokens.Motion.Fast)),
                 modifier = Modifier.align(Alignment.TopCenter)
             ) {
                 ReaderTopBar(
                     title = state.title ?: "阅读中",
                     panelColor = panelColor.copy(alpha = 0.98f),
+                    panelBorderColor = panelBorder,
                     contentColor = panelTextColor,
                     onBack = onBack,
                     onMore = { onIntent(ReaderIntent.OpenReaderMore) }
@@ -215,14 +224,17 @@ fun ReaderScaffold(
 
             AnimatedVisibility(
                 visible = state.chromeVisible && state.sheet != ReaderSheet.FullSettings,
-                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
-                exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
+                enter = fadeIn(animationSpec = tween(ReaderTokens.Motion.Medium)) +
+                    slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tween(ReaderTokens.Motion.Medium)),
+                exit = fadeOut(animationSpec = tween(ReaderTokens.Motion.Fast)) +
+                    slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = tween(ReaderTokens.Motion.Fast)),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 ReaderBottomBar(
                     sheet = state.sheet,
                     isNightMode = state.isNightMode,
                     panelColor = panelColor.copy(alpha = 0.98f),
+                    panelBorderColor = panelBorder,
                     contentColor = panelTextColor,
                     onOpenToc = { onIntent(ReaderIntent.OpenToc) },
                     onOpenBrightness = { onIntent(ReaderIntent.OpenBrightness) },
@@ -313,6 +325,7 @@ fun ReaderScaffold(
             ReaderSheet.ReaderMore -> ReaderMoreSheet(
                 panelColor = panelColor,
                 textColor = panelTextColor,
+                darkSurface = darkSurface,
                 onClose = { onIntent(ReaderIntent.CloseSheet) },
                 onOpenSearch = { onIntent(ReaderIntent.OpenSearch) },
                 onOpenAnnotations = { onIntent(ReaderIntent.OpenAnnotations) },
@@ -358,6 +371,7 @@ private fun handleReaderTap(
 private fun ReaderTopBar(
     title: String,
     panelColor: Color,
+    panelBorderColor: Color,
     contentColor: Color,
     onBack: () -> Unit,
     onMore: () -> Unit
@@ -366,21 +380,36 @@ private fun ReaderTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(panelColor)
+            .border(width = 1.dp, color = panelBorderColor)
             .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(onClick = onBack) {
+        IconButton(
+            onClick = onBack,
+            colors = IconButtonDefaults.iconButtonColors(
+                containerColor = contentColor.copy(alpha = 0.12f),
+                contentColor = contentColor
+            )
+        ) {
             Icon(imageVector = Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回", tint = contentColor)
         }
         Text(
             text = title,
             color = contentColor,
             maxLines = 1,
-            style = androidx.compose.material3.MaterialTheme.typography.titleSmall
+            overflow = TextOverflow.Ellipsis,
+            style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+            modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
         )
-        TextButton(onClick = onMore) {
+        IconButton(
+            onClick = onMore,
+            colors = IconButtonDefaults.iconButtonColors(
+                containerColor = contentColor.copy(alpha = 0.12f),
+                contentColor = contentColor
+            )
+        ) {
             Icon(imageVector = Icons.Outlined.MoreVert, contentDescription = "更多", tint = contentColor)
         }
     }
@@ -391,6 +420,7 @@ private fun ReaderBottomBar(
     sheet: ReaderSheet,
     isNightMode: Boolean,
     panelColor: Color,
+    panelBorderColor: Color,
     contentColor: Color,
     onOpenToc: () -> Unit,
     onOpenBrightness: () -> Unit,
@@ -401,13 +431,15 @@ private fun ReaderBottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(panelColor)
+            .border(width = 1.dp, color = panelBorderColor)
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceAround
     ) {
         BottomItem(
             label = "目录",
             selected = sheet == ReaderSheet.Toc,
+            isNightMode = isNightMode,
             contentColor = contentColor,
             icon = {
                 Icon(imageVector = Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
@@ -417,6 +449,7 @@ private fun ReaderBottomBar(
         BottomItem(
             label = "亮度",
             selected = sheet == ReaderSheet.Brightness,
+            isNightMode = isNightMode,
             contentColor = contentColor,
             icon = {
                 Icon(imageVector = Icons.Outlined.Brightness6, contentDescription = null)
@@ -426,6 +459,7 @@ private fun ReaderBottomBar(
         BottomItem(
             label = if (isNightMode) "日间" else "夜间",
             selected = false,
+            isNightMode = isNightMode,
             contentColor = contentColor,
             icon = {
                 Icon(
@@ -442,6 +476,7 @@ private fun ReaderBottomBar(
                 sheet == ReaderSheet.SettingsSpacing ||
                 sheet == ReaderSheet.SettingsPageTurn ||
                 sheet == ReaderSheet.SettingsMoreBackground,
+            isNightMode = isNightMode,
             contentColor = contentColor,
             icon = {
                 Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
@@ -455,29 +490,33 @@ private fun ReaderBottomBar(
 private fun BottomItem(
     label: String,
     selected: Boolean,
+    isNightMode: Boolean,
     contentColor: Color,
     icon: @Composable () -> Unit,
     onClick: () -> Unit
 ) {
+    val selectedTint = if (isNightMode) ReaderTokens.Palette.AccentBlueNight else ReaderTokens.Palette.AccentBlue
+    val selectedBg = if (isNightMode) selectedTint.copy(alpha = 0.22f) else ReaderTokens.Palette.AccentBlueSoft
+
     TextButton(onClick = onClick) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
                     .size(34.dp)
                     .background(
-                        if (selected) ReaderTokens.Palette.AccentBlueSoft else Color.Transparent,
+                        if (selected) selectedBg else Color.Transparent,
                         CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                val tint = if (selected) ReaderTokens.Palette.AccentBlue else contentColor
+                val tint = if (selected) selectedTint else contentColor
                 CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides tint) {
                     icon()
                 }
             }
             Text(
                 text = label,
-                color = if (selected) ReaderTokens.Palette.AccentBlue else contentColor,
+                color = if (selected) selectedTint else contentColor,
                 style = androidx.compose.material3.MaterialTheme.typography.labelSmall
             )
         }
@@ -496,8 +535,13 @@ private fun BrightnessSheet(
     onUseSystemBrightnessChange: (Boolean) -> Unit,
     onEyeProtectionChange: (Boolean) -> Unit
 ) {
-    val textColor = if (isNightMode) Color(0xFFE5E5E5) else Color(0xFF1B1B1B)
-    ModalBottomSheet(onDismissRequest = onClose) {
+    val textColor = if (isNightMode) Color(0xFFE9E7E2) else Color(0xFF221F1B)
+    val container = if (isNightMode) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.ReaderPanelElevatedDay
+    val rowBg = if (isNightMode) Color(0xFF2C2C2C) else Color(0xFFF0ECE4)
+    ModalBottomSheet(
+        onDismissRequest = onClose,
+        containerColor = container
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -521,16 +565,36 @@ private fun BrightnessSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("系统亮度", color = textColor)
-                Switch(checked = useSystemBrightness, onCheckedChange = onUseSystemBrightnessChange)
+                Surface(shape = RoundedCornerShape(12.dp), color = rowBg) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("系统亮度", color = textColor)
+                        Switch(checked = useSystemBrightness, onCheckedChange = onUseSystemBrightnessChange)
+                    }
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("护眼模式", color = textColor)
-                Switch(checked = eyeProtection, onCheckedChange = onEyeProtectionChange)
+                Surface(shape = RoundedCornerShape(12.dp), color = rowBg) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("护眼模式", color = textColor)
+                        Switch(checked = eyeProtection, onCheckedChange = onEyeProtectionChange)
+                    }
+                }
             }
         }
     }
@@ -541,12 +605,16 @@ private fun BrightnessSheet(
 private fun ReaderMoreSheet(
     panelColor: Color,
     textColor: Color,
+    darkSurface: Boolean,
     onClose: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenAnnotations: () -> Unit,
     onShare: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = panelColor) {
+    ModalBottomSheet(
+        onDismissRequest = onClose,
+        containerColor = panelColor
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -555,16 +623,19 @@ private fun ReaderMoreSheet(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text("更多功能", style = androidx.compose.material3.MaterialTheme.typography.titleMedium, color = textColor)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MoreActionItem(label = "搜索", icon = Icons.Outlined.Search, onClick = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MoreActionItem(label = "搜索", icon = Icons.Outlined.Search, darkSurface = darkSurface, onClick = {
                     onClose()
                     onOpenSearch()
                 })
-                MoreActionItem(label = "笔记", icon = Icons.Outlined.Bookmarks, onClick = {
+                MoreActionItem(label = "笔记", icon = Icons.Outlined.Bookmarks, darkSurface = darkSurface, onClick = {
                     onClose()
                     onOpenAnnotations()
                 })
-                MoreActionItem(label = "分享", icon = Icons.Outlined.Share, onClick = {
+                MoreActionItem(label = "分享", icon = Icons.Outlined.Share, darkSurface = darkSurface, onClick = {
                     onClose()
                     onShare()
                 })
@@ -583,20 +654,32 @@ private fun ReaderMoreSheet(
 private fun MoreActionItem(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    darkSurface: Boolean,
     onClick: () -> Unit
 ) {
+    val iconBg = if (darkSurface) Color(0xFF2F2F2F) else Color(0xFFF5F2EC)
+    val iconBorder = if (darkSurface) Color(0x1FFFFFFF) else Color(0x22000000)
+    val tint = if (darkSurface) Color(0xFFE5E5E5) else Color(0xFF585858)
+    val textColor = if (darkSurface) Color(0xFFE2DED7) else Color(0xFF6A6865)
     TextButton(onClick = onClick) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.defaultMinSize(minWidth = 72.dp)
+        ) {
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(Color(0xFFF5F5F5), CircleShape)
-                    .border(1.dp, Color(0x22000000), CircleShape),
+                    .background(iconBg, CircleShape)
+                    .border(1.dp, iconBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = label, tint = Color.Gray)
+                Icon(imageVector = icon, contentDescription = label, tint = tint)
             }
-            Text(label, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+            Text(
+                text = label,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                color = textColor
+            )
         }
     }
 }
@@ -624,7 +707,7 @@ private fun ReaderFooter(
         if (showProgress) {
             Text(
                 progressText,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 color = textColor
             )
         } else {
@@ -633,7 +716,7 @@ private fun ReaderFooter(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 currentTimeText,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
                 color = textColor
             )
             Spacer(modifier = Modifier.width(5.dp))
