@@ -64,7 +64,7 @@ internal class TxtPaginator(
                 return PageSlice(start, start, "")
             }
 
-            val display = if (softBreakIndex != null && meta.hardWrapLikely) {
+            val display = if (softBreakIndex != null) {
                 applySoftBreakIndex(
                     start = start,
                     raw = raw,

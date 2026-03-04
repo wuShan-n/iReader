@@ -38,7 +38,7 @@ internal class TxtOpener(
 ) {
 
     private val encodingDetector = EncodingDetector()
-    private val schemaVersion = 1
+    private val schemaVersion = 2
 
     suspend fun open(source: DocumentSource, options: OpenOptions): ReaderResult<TxtOpenResult> {
         return withContext(ioDispatcher) {
@@ -351,7 +351,7 @@ internal class TxtOpener(
         }
 
         fun snapshot(): LineStatsSnapshot {
-            if (lineLengths.size < 40) {
+            if (lineLengths.size < MIN_SAMPLE_LINES) {
                 return LineStatsSnapshot(hardWrapLikely = false)
             }
 
@@ -363,14 +363,16 @@ internal class TxtOpener(
                 acc + delta * delta
             } / lineLengths.size.toDouble()
             val std = sqrt(variance)
+            val coefficientOfVariation = if (mean <= 0.0) Double.POSITIVE_INFINITY else std / mean
 
             val blankRatio = if (totalLines == 0L) 0.0 else blankLines.toDouble() / totalLines.toDouble()
             val endPunctRatio = if (totalLines == 0L) 0.0 else sentenceEndLines.toDouble() / totalLines.toDouble()
 
-            val likely = median in 24..120 &&
-                std <= 22.0 &&
-                blankRatio <= 0.12 &&
-                endPunctRatio <= 0.48
+            val likely = median in HARD_WRAP_MEDIAN_MIN..HARD_WRAP_MEDIAN_MAX &&
+                std <= HARD_WRAP_STD_MAX &&
+                blankRatio <= HARD_WRAP_BLANK_RATIO_MAX &&
+                endPunctRatio <= HARD_WRAP_END_PUNCT_RATIO_MAX &&
+                coefficientOfVariation <= HARD_WRAP_COEFFICIENT_OF_VARIATION_MAX
 
             return LineStatsSnapshot(hardWrapLikely = likely)
         }
@@ -378,5 +380,12 @@ internal class TxtOpener(
 
     private companion object {
         private val STRONG_END_PUNCTUATION = setOf('。', '！', '？', '.', '!', '?')
+        private const val MIN_SAMPLE_LINES = 60
+        private const val HARD_WRAP_MEDIAN_MIN = 18
+        private const val HARD_WRAP_MEDIAN_MAX = 140
+        private const val HARD_WRAP_STD_MAX = 30.0
+        private const val HARD_WRAP_BLANK_RATIO_MAX = 0.22
+        private const val HARD_WRAP_END_PUNCT_RATIO_MAX = 0.72
+        private const val HARD_WRAP_COEFFICIENT_OF_VARIATION_MAX = 0.42
     }
 }

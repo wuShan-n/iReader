@@ -37,5 +37,5 @@ data class ReaderDisplayPrefs(
     val showReadingProgress: Boolean = true,
     val fullScreenMode: Boolean = true,
     val tapZonePreset: TapZonePreset = TapZonePreset.CLASSIC_3_ZONE,
-    val preventAccidentalTurn: Boolean = true
+    val preventAccidentalTurn: Boolean = false
 )

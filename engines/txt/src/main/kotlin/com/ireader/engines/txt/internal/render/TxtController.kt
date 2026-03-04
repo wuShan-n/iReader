@@ -117,7 +117,7 @@ internal class TxtController(
     override val state: StateFlow<RenderState> = stateMutable.asStateFlow()
 
     init {
-        if (meta.hardWrapLikely && softBreakIndex == null) {
+        if (softBreakIndex == null) {
             launchSafely("soft-break-index") {
                 SoftBreakIndexBuilder.buildIfNeeded(files, meta, ioDispatcher)
                 val loaded = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)

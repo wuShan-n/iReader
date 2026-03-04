@@ -33,7 +33,7 @@ internal object SoftBreakIndexBuilder {
         meta: TxtMeta,
         ioDispatcher: CoroutineDispatcher
     ) = withContext(ioDispatcher) {
-        if (!meta.hardWrapLikely || !files.contentU16.exists()) {
+        if (!files.contentU16.exists()) {
             return@withContext
         }
         SoftBreakIndex.openIfValid(files.softBreakIdx, meta)?.close()?.also {

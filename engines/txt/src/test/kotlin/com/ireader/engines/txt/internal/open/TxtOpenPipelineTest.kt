@@ -105,6 +105,53 @@ class TxtOpenPipelineTest {
         }
     }
 
+    @Test
+    fun `open should mark fixed-width wrapped text as hard wrap likely`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_hard_wrap_detect").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/hard-wrap.txt"),
+                payload = fixedWidthWrappedText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            val meta = readSingleMeta(cacheDir)
+
+            assertTrue(meta.getBoolean("hardWrapLikely"))
+            assertEquals(2, meta.getInt("version"))
+            cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `open should rebuild cache when cached schema version is outdated`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_cache_schema_upgrade").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/schema-upgrade.txt"),
+                payload = sampleText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            val metaFile = readSingleMetaFile(cacheDir)
+            val firstMeta = JSONObject(metaFile.readText())
+            val firstCreatedAt = firstMeta.getLong("createdAtEpochMs")
+
+            val outdated = JSONObject(firstMeta.toString()).apply { put("version", 1) }
+            metaFile.writeText(outdated.toString())
+
+            Thread.sleep(20L)
+            engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            val rebuiltMeta = readSingleMeta(cacheDir)
+
+            assertEquals(2, rebuiltMeta.getInt("version"))
+            assertTrue(rebuiltMeta.getLong("createdAtEpochMs") > firstCreatedAt)
+            cacheDir.deleteRecursively()
+        }
+    }
+
     private fun sampleText(): String {
         return buildString {
             repeat(160) { idx ->
@@ -114,7 +161,24 @@ class TxtOpenPipelineTest {
         }
     }
 
+    private fun fixedWidthWrappedText(): String {
+        return buildString {
+            repeat(180) { idx ->
+                append("这是固定宽度换行样本第")
+                append(idx + 1)
+                append("行用于检测硬换行概率并保持行宽稳定")
+                if (idx < 179) {
+                    append('\n')
+                }
+            }
+        }
+    }
+
     private fun readSingleMeta(cacheDir: File): JSONObject {
+        return JSONObject(readSingleMetaFile(cacheDir).readText())
+    }
+
+    private fun readSingleMetaFile(cacheDir: File): File {
         val matches = cacheDir
             .walkTopDown()
             .filter { it.isFile && it.name == "meta.json" }
@@ -122,7 +186,7 @@ class TxtOpenPipelineTest {
         assertEquals(1, matches.size)
         val file = matches.firstOrNull()
         assertNotNull(file)
-        return JSONObject(file!!.readText())
+        return file!!
     }
 
     private fun <T> ReaderResult<T>.requireOk(): T {

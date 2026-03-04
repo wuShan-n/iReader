@@ -1001,7 +1001,6 @@ class ReaderViewModel @Inject constructor(
             direction = direction,
             expiresAtMs = System.currentTimeMillis() + UNDO_WINDOW_MS
         )
-        ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("翻页完成，800ms 内点击中间区域可撤销")))
     }
 
     private suspend fun tryUndoPageTurn(): Boolean {
@@ -1026,7 +1025,6 @@ class ReaderViewModel @Inject constructor(
         }
         if (!succeeded) return false
         interactionTracker.track(ReaderInteractionEvent.UndoPageTurn)
-        ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("已撤销上一次翻页")))
         return true
     }
 

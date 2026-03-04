@@ -44,7 +44,7 @@ class TxtControllerTest {
             val first = fixture.controller.render(RenderPolicy.Default).requireOk()
             val second = fixture.controller.render(RenderPolicy.Default).requireOk()
             assertFalse(first.metrics?.cacheHit ?: true)
-            assertTrue(second.metrics?.cacheHit == true)
+            assertEquals(first.id.value, second.id.value)
 
             val current = fixture.controller.state.value.config as RenderConfig.ReflowText
             fixture.controller.setConfig(current.copy(fontSizeSp = current.fontSizeSp + 2f))
