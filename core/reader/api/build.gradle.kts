@@ -10,4 +10,5 @@ dependencies {
     api(project(":core:model"))
     api(project(":core:files"))
     implementation(libs.kotlinx.coroutines.core)
+    testImplementation(libs.junit)
 }

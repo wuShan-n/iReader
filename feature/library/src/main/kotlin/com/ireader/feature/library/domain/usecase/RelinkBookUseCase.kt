@@ -1,14 +1,13 @@
 package com.ireader.feature.library.domain.usecase
 
-import android.content.Context
 import android.net.Uri
 import com.ireader.core.data.book.BookMaintenanceScheduler
 import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.book.IndexState
-import com.ireader.core.files.permission.UriPermissionStore
-import com.ireader.core.files.source.ContentUriDocumentSource
+import com.ireader.core.files.permission.UriPermissionGateway
+import com.ireader.core.files.source.DocumentSource
+import com.ireader.core.files.source.UriDocumentSourceFactory
 import com.ireader.core.files.storage.BookStorage
-import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
@@ -17,8 +16,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class RelinkBookUseCase @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val permissionStore: UriPermissionStore,
+    private val permissionStore: UriPermissionGateway,
+    private val sourceFactory: UriDocumentSourceFactory,
     private val bookRepo: BookRepo,
     private val storage: BookStorage,
     private val scheduler: BookMaintenanceScheduler
@@ -34,7 +33,7 @@ class RelinkBookUseCase @Inject constructor(
             )
         }
 
-        val source = ContentUriDocumentSource(context, uri)
+        val source = sourceFactory.create(uri)
         val tempFile = storage.importTempFile()
         runCatching {
             copySourceToTemp(source, tempFile)
@@ -62,7 +61,7 @@ class RelinkBookUseCase @Inject constructor(
         }
     }
 
-    private suspend fun copySourceToTemp(source: ContentUriDocumentSource, tempFile: File) {
+    private suspend fun copySourceToTemp(source: DocumentSource, tempFile: File) {
         source.openInputStream().use { rawInput ->
             BufferedInputStream(rawInput).use { input ->
                 tempFile.outputStream().use { rawOutput ->

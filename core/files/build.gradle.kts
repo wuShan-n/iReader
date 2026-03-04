@@ -13,4 +13,9 @@ dependencies {
     implementation(project(":core:model"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.documentfile)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("org.robolectric:robolectric:4.16")
+    testImplementation(project(":core:testing"))
 }

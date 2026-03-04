@@ -16,8 +16,8 @@ data class UriPermissionResult(
 @Singleton
 class UriPermissionStore @Inject constructor(
     @ApplicationContext private val context: Context
-) {
-    fun takePersistableRead(uri: Uri): UriPermissionResult {
+) : UriPermissionGateway {
+    override fun takePersistableRead(uri: Uri): UriPermissionResult {
         if (uri.scheme != "content") {
             return UriPermissionResult(granted = true)
         }
@@ -51,7 +51,7 @@ class UriPermissionStore @Inject constructor(
         }
     }
 
-    fun hasPersistedRead(uri: Uri): Boolean {
+    override fun hasPersistedRead(uri: Uri): Boolean {
         return context.contentResolver.persistedUriPermissions.any {
             it.uri == uri && it.isReadPermission
         }

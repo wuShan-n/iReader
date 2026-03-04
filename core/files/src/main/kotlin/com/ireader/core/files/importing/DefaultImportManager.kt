@@ -1,6 +1,5 @@
 package com.ireader.core.files.importing
 
-import android.content.Context
 import android.net.Uri
 import com.ireader.core.data.importing.ImportItemRepo
 import com.ireader.core.data.importing.ImportJobRepo
@@ -8,9 +7,8 @@ import com.ireader.core.database.importing.ImportItemEntity
 import com.ireader.core.database.importing.ImportItemStatus
 import com.ireader.core.database.importing.ImportJobEntity
 import com.ireader.core.database.importing.ImportStatus
-import com.ireader.core.files.permission.UriPermissionStore
-import com.ireader.core.files.source.ContentUriDocumentSource
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.ireader.core.files.permission.UriPermissionGateway
+import com.ireader.core.files.source.UriDocumentSourceFactory
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -20,10 +18,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class DefaultImportManager @Inject constructor(
-    @ApplicationContext private val appContext: Context,
     private val jobRepo: ImportJobRepo,
     private val itemRepo: ImportItemRepo,
-    private val permissionStore: UriPermissionStore,
+    private val permissionStore: UriPermissionGateway,
+    private val sourceFactory: UriDocumentSourceFactory,
     private val workScheduler: ImportWorkScheduler
 ) : ImportManager {
 
@@ -39,7 +37,7 @@ class DefaultImportManager @Inject constructor(
         request.uris.forEach(::requirePersistedRead)
 
         val items = request.uris.map { uri ->
-            val source = ContentUriDocumentSource(appContext, uri)
+            val source = sourceFactory.create(uri)
             ImportItemEntity(
                 jobId = jobId,
                 uri = uri.toString(),
