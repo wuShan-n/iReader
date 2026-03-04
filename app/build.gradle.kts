@@ -39,6 +39,7 @@ dependencies {
     implementation(project(":core:navigation"))
     implementation(project(":core:data"))
     implementation(project(":core:database"))
+    implementation(project(":core:datastore"))
     implementation(project(":core:files"))
     implementation(project(":core:work"))
     implementation(project(":core:reader:runtime"))

@@ -127,8 +127,11 @@ private val IReaderTypography = Typography(
 
 @Composable
 @Suppress("FunctionNaming")
-fun IReaderTheme(content: @Composable () -> Unit) {
-    val colorScheme = if (isSystemInDarkTheme()) {
+fun IReaderTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit
+) {
+    val colorScheme = if (darkTheme) {
         IReaderDarkColorScheme
     } else {
         IReaderLightColorScheme

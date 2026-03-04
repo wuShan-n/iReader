@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +24,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -32,6 +33,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -53,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -75,12 +78,13 @@ fun LibraryScreen(
     vm: LibraryViewModel = hiltViewModel()
 ) {
     val state by vm.uiState.collectAsState()
-    val isDark = isSystemInDarkTheme()
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var filterMenuExpanded by remember { mutableStateOf(false) }
     var selectedBook by remember { mutableStateOf<LibraryBookItem?>(null) }
     var relinkTargetBookId by remember { mutableLongStateOf(-1L) }
     var isEditMode by rememberSaveable { mutableStateOf(false) }
+    var searchBarExpanded by rememberSaveable { mutableStateOf(false) }
     var selectedBookIds by rememberSaveable { mutableStateOf<Set<Long>>(emptySet()) }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -107,6 +111,11 @@ fun LibraryScreen(
     LaunchedEffect(state.books.size) {
         val allIds = state.books.map { it.book.bookId }.toSet()
         selectedBookIds = selectedBookIds.intersect(allIds)
+    }
+    LaunchedEffect(state.keyword) {
+        if (state.keyword.isNotBlank()) {
+            searchBarExpanded = true
+        }
     }
 
     val topColor = if (isDark) {
@@ -147,6 +156,7 @@ fun LibraryScreen(
                     } else {
                         NormalTopBar(
                             isDark = isDark,
+                            onOpenSearch = { searchBarExpanded = true },
                             onOpenSort = { sortMenuExpanded = true },
                             onOpenFilter = { filterMenuExpanded = true },
                             onImport = { importLauncher.launch(arrayOf("*/*")) },
@@ -194,12 +204,22 @@ fun LibraryScreen(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                LibrarySearchBar(
-                    keyword = state.keyword,
-                    isDark = isDark,
-                    isEditMode = isEditMode,
-                    onKeywordChange = vm::setKeyword
-                )
+                AnimatedVisibility(
+                    visible = !isEditMode && searchBarExpanded,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    LibrarySearchBar(
+                        keyword = state.keyword,
+                        isDark = isDark,
+                        isEditMode = isEditMode,
+                        onKeywordChange = vm::setKeyword,
+                        onCloseSearch = {
+                            searchBarExpanded = false
+                            vm.setKeyword("")
+                        }
+                    )
+                }
 
                 AnimatedVisibility(
                     visible = !state.importStatusText.isNullOrBlank(),
@@ -320,6 +340,7 @@ fun LibraryScreen(
 @Composable
 private fun NormalTopBar(
     isDark: Boolean,
+    onOpenSearch: () -> Unit,
     onOpenSort: () -> Unit,
     onOpenFilter: () -> Unit,
     onImport: () -> Unit,
@@ -350,6 +371,13 @@ private fun NormalTopBar(
                 expanded = topActionMenuExpanded,
                 onDismissRequest = { topActionMenuExpanded = false }
             ) {
+                DropdownMenuItem(
+                    text = { Text("搜索") },
+                    onClick = {
+                        topActionMenuExpanded = false
+                        onOpenSearch()
+                    }
+                )
                 DropdownMenuItem(
                     text = { Text("排序") },
                     onClick = {
@@ -417,7 +445,8 @@ private fun LibrarySearchBar(
     keyword: String,
     isDark: Boolean,
     isEditMode: Boolean,
-    onKeywordChange: (String) -> Unit
+    onKeywordChange: (String) -> Unit,
+    onCloseSearch: () -> Unit
 ) {
     val searchBg = if (isDark) ReaderTokens.Palette.LibrarySearchNight else ReaderTokens.Palette.LibrarySearchDay
     val placeholderColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.PrototypeTextTertiary
@@ -433,6 +462,15 @@ private fun LibrarySearchBar(
         placeholder = { Text("搜索标题 / 作者 / 文件名", color = placeholderColor) },
         leadingIcon = {
             PrototypeIcons.Search(modifier = Modifier.size(20.dp), tint = leadingTint)
+        },
+        trailingIcon = {
+            IconButton(onClick = onCloseSearch, enabled = !isEditMode) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = "收起搜索",
+                    tint = leadingTint
+                )
+            }
         },
         colors = TextFieldDefaults.colors(
             focusedContainerColor = searchBg,
