@@ -10,6 +10,8 @@ import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -24,6 +26,8 @@ import com.ireader.reader.api.render.toTypographySpec
 fun TextPage(
     content: RenderContent.Text,
     reflowConfig: RenderConfig.ReflowText?,
+    textColor: Color,
+    backgroundColor: Color,
     modifier: Modifier = Modifier
 ) {
     val config = reflowConfig ?: RenderConfig.ReflowText()
@@ -52,6 +56,8 @@ fun TextPage(
             textView.setPadding(pagePaddingPx, pagePaddingPx, pagePaddingPx, pagePaddingPx)
             textView.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
             textView.gravity = Gravity.TOP or Gravity.START
+            textView.setTextColor(textColor.toArgb())
+            textView.setBackgroundColor(backgroundColor.toArgb())
             val familyName = typography.fontFamilyName
             textView.typeface = if (familyName.isNullOrBlank()) {
                 Typeface.DEFAULT

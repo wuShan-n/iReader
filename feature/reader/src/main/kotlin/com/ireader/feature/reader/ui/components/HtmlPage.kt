@@ -1,6 +1,5 @@
 package com.ireader.feature.reader.ui.components
 
-import android.graphics.Color
 import android.net.Uri
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -8,6 +7,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.BlockingResourceProvider
@@ -26,6 +27,8 @@ fun HtmlPage(
     content: RenderContent.Html,
     resourceProvider: ResourceProvider?,
     reflowConfig: RenderConfig.ReflowText?,
+    textColor: Color,
+    backgroundColor: Color,
     onWebSchemeUrl: (String) -> Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -33,7 +36,7 @@ fun HtmlPage(
         modifier = modifier,
         factory = { context ->
             WebView(context).apply {
-                setBackgroundColor(Color.WHITE)
+                setBackgroundColor(backgroundColor.toArgb())
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = false
@@ -44,10 +47,13 @@ fun HtmlPage(
                 resourceProvider = resourceProvider,
                 content = content,
                 reflowConfig = reflowConfig,
+                textColor = textColor,
+                backgroundColor = backgroundColor,
                 onWebSchemeUrl = onWebSchemeUrl
             )
 
-            val themeKey = buildThemeKey(content, reflowConfig)
+            webView.setBackgroundColor(backgroundColor.toArgb())
+            val themeKey = buildThemeKey(content, reflowConfig, textColor, backgroundColor)
             val previous = webView.tag as? HtmlViewState
             val samePage = previous?.pageId == pageId
 
@@ -67,7 +73,13 @@ fun HtmlPage(
             }
 
             if (!samePage || previous.themeKey != themeKey) {
-                injectTheme(webView, content, reflowConfig)
+                injectTheme(
+                    webView = webView,
+                    content = content,
+                    reflowConfig = reflowConfig,
+                    textColor = textColor,
+                    backgroundColor = backgroundColor
+                )
             }
             webView.tag = HtmlViewState(pageId = pageId, themeKey = themeKey)
         }
@@ -78,6 +90,8 @@ private class ReaderHtmlWebViewClient(
     private val resourceProvider: ResourceProvider?,
     private val content: RenderContent.Html,
     private val reflowConfig: RenderConfig.ReflowText?,
+    private val textColor: Color,
+    private val backgroundColor: Color,
     private val onWebSchemeUrl: (String) -> Boolean
 ) : WebViewClient() {
 
@@ -132,7 +146,13 @@ private class ReaderHtmlWebViewClient(
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
         view ?: return
-        injectTheme(view, content, reflowConfig)
+        injectTheme(
+            webView = view,
+            content = content,
+            reflowConfig = reflowConfig,
+            textColor = textColor,
+            backgroundColor = backgroundColor
+        )
     }
 }
 
@@ -166,10 +186,18 @@ private fun buildBaseUrl(
 private fun injectTheme(
     webView: WebView,
     content: RenderContent.Html,
-    reflowConfig: RenderConfig.ReflowText?
+    reflowConfig: RenderConfig.ReflowText?,
+    textColor: Color,
+    backgroundColor: Color
 ) {
     val css = buildString {
-        append(buildReflowCss(reflowConfig))
+        append(
+            buildReflowCss(
+                config = reflowConfig,
+                textColorHex = textColor.toCssHex(),
+                backgroundColorHex = backgroundColor.toCssHex()
+            )
+        )
         content.themeInjection?.css?.takeIf { it.isNotBlank() }?.let {
             append('\n')
             append(it)
@@ -198,7 +226,11 @@ private fun injectTheme(
     }
 }
 
-internal fun buildReflowCss(config: RenderConfig.ReflowText?): String {
+internal fun buildReflowCss(
+    config: RenderConfig.ReflowText?,
+    textColorHex: String? = null,
+    backgroundColorHex: String? = null
+): String {
     if (config == null) return ""
     val typography = config.toTypographySpec()
     val textAlign = when (typography.textAlign) {
@@ -220,6 +252,8 @@ internal fun buildReflowCss(config: RenderConfig.ReflowText?): String {
     val pagePaddingPx = formatCssNumber(typography.pagePaddingDp)
     val paragraphSpacingPx = formatCssNumber(typography.paragraphSpacingDp)
     val paragraphIndentEm = formatCssNumber(typography.paragraphIndentEm)
+    val colorRule = textColorHex?.let { "color: $it !important;" }.orEmpty()
+    val bgRule = backgroundColorHex?.let { "background-color: $it !important;" }.orEmpty()
     return """
         :root {
             --ireader-font-size: ${fontSizePx}px;
@@ -240,6 +274,8 @@ internal fun buildReflowCss(config: RenderConfig.ReflowText?): String {
             hyphens: $hyphens !important;
             -webkit-hyphens: $hyphens !important;
             hanging-punctuation: $hangingPunctuation !important;
+            $colorRule
+            $bgRule
             $family
         }
         p {
@@ -255,10 +291,18 @@ internal fun buildReflowCss(config: RenderConfig.ReflowText?): String {
 
 private fun buildThemeKey(
     content: RenderContent.Html,
-    reflowConfig: RenderConfig.ReflowText?
+    reflowConfig: RenderConfig.ReflowText?,
+    textColor: Color,
+    backgroundColor: Color
 ): String {
     return buildString {
-        append(buildReflowCss(reflowConfig).hashCode())
+        append(
+            buildReflowCss(
+                config = reflowConfig,
+                textColorHex = textColor.toCssHex(),
+                backgroundColorHex = backgroundColor.toCssHex()
+            ).hashCode()
+        )
         append(':')
         append(content.themeInjection?.css.orEmpty().hashCode())
         append(':')
@@ -270,6 +314,13 @@ private fun formatCssNumber(value: Float): String {
     return String.format(Locale.US, "%.3f", value)
         .trimEnd('0')
         .trimEnd('.')
+}
+
+private fun Color.toCssHex(): String {
+    val r = (red * 255f).toInt().coerceIn(0, 255)
+    val g = (green * 255f).toInt().coerceIn(0, 255)
+    val b = (blue * 255f).toInt().coerceIn(0, 255)
+    return String.format(Locale.US, "#%02X%02X%02X", r, g, b)
 }
 
 private fun toReaderBaseUrl(path: String): String {

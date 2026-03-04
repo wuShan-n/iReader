@@ -53,6 +53,19 @@ fun ReaderScreen(
                         )
                     }
                 }
+                is ReaderEffect.ShareText -> {
+                    runCatching {
+                        val chooser = Intent.createChooser(
+                            Intent(Intent.ACTION_SEND)
+                                .setType("text/plain")
+                                .putExtra(Intent.EXTRA_TEXT, effect.text),
+                            null
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(chooser)
+                    }.onFailure {
+                        snackbarHost.showSnackbar("分享失败")
+                    }
+                }
                 is ReaderEffect.Snackbar -> {
                     val message = when (val text = effect.message) {
                         is UiText.Dynamic -> text.value
@@ -68,7 +81,7 @@ fun ReaderScreen(
         vm.dispatch(ReaderIntent.BackInSheetHierarchy)
     }
     BackHandler(enabled = state.sheet == ReaderSheet.None && !state.chromeVisible) {
-        vm.dispatch(ReaderIntent.ToggleChrome)
+        onBack()
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {

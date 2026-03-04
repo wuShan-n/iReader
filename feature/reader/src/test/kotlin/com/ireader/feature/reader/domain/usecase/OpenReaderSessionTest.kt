@@ -2,6 +2,7 @@ package com.ireader.feature.reader.domain.usecase
 
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.core.datastore.reader.ReaderSettingsStore
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.reader.api.engine.ReaderDocument
@@ -135,6 +136,7 @@ private class FakeReaderSettingsStore(
 
     override val reflowConfig: Flow<RenderConfig.ReflowText> = flowOf(reflow)
     override val fixedConfig: Flow<RenderConfig.FixedPage> = flowOf(fixed)
+    override val displayPrefs: Flow<ReaderDisplayPrefs> = flowOf(ReaderDisplayPrefs())
 
     override suspend fun getReflowConfig(): RenderConfig.ReflowText {
         reflowGetCount++
@@ -146,9 +148,13 @@ private class FakeReaderSettingsStore(
         return fixed
     }
 
+    override suspend fun getDisplayPrefs(): ReaderDisplayPrefs = ReaderDisplayPrefs()
+
     override suspend fun setReflowConfig(config: RenderConfig.ReflowText) = Unit
 
     override suspend fun setFixedConfig(config: RenderConfig.FixedPage) = Unit
+
+    override suspend fun setDisplayPrefs(prefs: ReaderDisplayPrefs) = Unit
 }
 
 private class FakeRuntime(

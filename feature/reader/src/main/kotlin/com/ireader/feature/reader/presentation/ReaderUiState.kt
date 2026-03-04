@@ -1,6 +1,8 @@
 package com.ireader.feature.reader.presentation
 
+import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.reader.api.render.ReaderController
+import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderState
@@ -66,6 +68,9 @@ data class ReaderUiState(
     val toc: TocState = TocState(),
     val search: SearchState = SearchState(),
     val currentConfig: RenderConfig? = null,
+    val pageTurnMode: PageTurnMode = PageTurnMode.COVER_HORIZONTAL,
+    val pageTransition: PageTurnTransition = PageTurnTransition(),
+    val displayPrefs: ReaderDisplayPrefs = ReaderDisplayPrefs(),
     val isNightMode: Boolean = false,
     val passwordPrompt: PasswordPrompt? = null,
     val error: ReaderUiError? = null

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
 import java.io.File
 import kotlinx.coroutines.flow.first
@@ -84,6 +85,46 @@ class DatastoreReaderSettingsStoreTest {
 
         val config = store.getFixedConfig()
         assertEquals(RenderConfig.FixedPage().fitMode, config.fitMode)
+    }
+
+    @Test
+    fun `setReflow should persist page turn mode and recover in flow`() = runTest {
+        val dataStore = createDataStore(
+            scope = this,
+            testFile = File(temporaryFolder.root, "reader_settings_page_turn.preferences_pb")
+        )
+        val store = DatastoreReaderSettingsStore(dataStore)
+        val config = RenderConfig.ReflowText(
+            extra = mapOf(PAGE_TURN_EXTRA_KEY to "scroll_vertical")
+        )
+
+        store.setReflowConfig(config)
+
+        val prefs = dataStore.data.first()
+        assertEquals("scroll_vertical", prefs[stringPreferencesKey("reader.reflow.pageTurnMode")])
+        assertEquals("scroll_vertical", store.getReflowConfig().extra[PAGE_TURN_EXTRA_KEY])
+    }
+
+    @Test
+    fun `display prefs should round-trip in datastore`() = runTest {
+        val dataStore = createDataStore(
+            scope = this,
+            testFile = File(temporaryFolder.root, "reader_display.preferences_pb")
+        )
+        val store = DatastoreReaderSettingsStore(dataStore)
+        val prefs = ReaderDisplayPrefs(
+            brightness = 0.72f,
+            useSystemBrightness = false,
+            eyeProtection = true,
+            nightMode = true,
+            backgroundPreset = ReaderBackgroundPreset.NAVY,
+            showReadingProgress = false,
+            fullScreenMode = false
+        )
+
+        store.setDisplayPrefs(prefs)
+
+        assertEquals(prefs, store.getDisplayPrefs())
     }
 
     private fun createDataStore(scope: TestScope, testFile: File): DataStore<Preferences> {

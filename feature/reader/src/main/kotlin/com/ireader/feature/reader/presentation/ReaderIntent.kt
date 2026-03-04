@@ -1,5 +1,6 @@
 package com.ireader.feature.reader.presentation
 
+import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.model.DocumentLink
@@ -23,7 +24,15 @@ sealed interface ReaderIntent {
     data class OpenSettingsSub(val sheet: ReaderSheet) : ReaderIntent
     data object OpenReaderMore : ReaderIntent
     data object OpenFullSettings : ReaderIntent
+    data object ShareBook : ReaderIntent
     data object ToggleNightMode : ReaderIntent
+    data class UpdateBrightness(val value: Float) : ReaderIntent
+    data class SetUseSystemBrightness(val enabled: Boolean) : ReaderIntent
+    data class SetEyeProtection(val enabled: Boolean) : ReaderIntent
+    data class SelectBackground(val preset: ReaderBackgroundPreset) : ReaderIntent
+    data class SetReadingProgressVisible(val visible: Boolean) : ReaderIntent
+    data class SetFullScreenMode(val enabled: Boolean) : ReaderIntent
+    data class SetVerticalPaging(val enabled: Boolean) : ReaderIntent
     data object CloseSheet : ReaderIntent
     data object BackInSheetHierarchy : ReaderIntent
 

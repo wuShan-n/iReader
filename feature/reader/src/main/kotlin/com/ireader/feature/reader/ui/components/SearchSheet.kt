@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -59,21 +61,45 @@ fun SearchSheet(
             }
 
             if (state.error != null) {
-                Text(state.error.asString())
+                Text(
+                    text = state.error.asString(),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
             HorizontalDivider()
-            LazyColumn {
-                items(state.results) { item ->
-                    TextButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { onClickResult(item.locatorEncoded) }
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            if (!item.title.isNullOrBlank()) {
-                                Text(item.title)
+            when {
+                state.isSearching -> {
+                    CircularProgressIndicator(modifier = Modifier.padding(vertical = 8.dp))
+                }
+
+                query.isBlank() -> {
+                    Text(
+                        text = "输入关键词开始搜索",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                state.results.isEmpty() && state.error == null -> {
+                    Text(
+                        text = "未找到匹配结果",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                else -> LazyColumn {
+                    items(state.results) { item ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { onClickResult(item.locatorEncoded) }
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (!item.title.isNullOrBlank()) {
+                                    Text(item.title)
+                                }
+                                Text(item.excerpt)
                             }
-                            Text(item.excerpt)
                         }
                     }
                 }

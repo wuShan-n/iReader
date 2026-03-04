@@ -10,6 +10,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.PageInsetMode
+import com.ireader.reader.api.render.PageTurnMode
+import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.TextAlignMode
 import javax.inject.Inject
@@ -39,6 +41,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val cjkLineBreakStrict = booleanPreferencesKey("reader.reflow.cjkLineBreakStrict")
             val hangingPunctuation = booleanPreferencesKey("reader.reflow.hangingPunctuation")
             val pageInsetMode = stringPreferencesKey("reader.reflow.pageInsetMode")
+            val pageTurnMode = stringPreferencesKey("reader.reflow.pageTurnMode")
 
             // Backward-compat key. Removed after all users migrate to hyphenationMode.
             val legacyHyphenation = booleanPreferencesKey("reader.reflow.hyphenation")
@@ -49,10 +52,21 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val zoom = floatPreferencesKey("reader.fixed.zoom")
             val rotationDegrees = intPreferencesKey("reader.fixed.rotationDegrees")
         }
+
+        object Display {
+            val brightness = floatPreferencesKey("reader.display.brightness")
+            val useSystemBrightness = booleanPreferencesKey("reader.display.useSystemBrightness")
+            val eyeProtection = booleanPreferencesKey("reader.display.eyeProtection")
+            val nightMode = booleanPreferencesKey("reader.display.nightMode")
+            val backgroundPreset = stringPreferencesKey("reader.display.backgroundPreset")
+            val showReadingProgress = booleanPreferencesKey("reader.display.showReadingProgress")
+            val fullScreenMode = booleanPreferencesKey("reader.display.fullScreenMode")
+        }
     }
 
     private val defaultReflow = RenderConfig.ReflowText()
     private val defaultFixed = RenderConfig.FixedPage()
+    private val defaultDisplay = ReaderDisplayPrefs()
 
     override val reflowConfig: Flow<RenderConfig.ReflowText> =
         dataStore.data.map { prefs ->
@@ -72,6 +86,9 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val pageInsetMode = prefs[Keys.Reflow.pageInsetMode]
                 ?.let(::parsePageInsetMode)
                 ?: defaultReflow.pageInsetMode
+            val pageTurnMode = PageTurnMode.fromStorageValue(
+                prefs[Keys.Reflow.pageTurnMode]
+            )
 
             defaultReflow.copy(
                 fontSizeSp = prefs[Keys.Reflow.fontSizeSp] ?: defaultReflow.fontSizeSp,
@@ -86,7 +103,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
                 includeFontPadding = includeFontPadding,
                 cjkLineBreakStrict = prefs[Keys.Reflow.cjkLineBreakStrict] ?: defaultReflow.cjkLineBreakStrict,
                 hangingPunctuation = prefs[Keys.Reflow.hangingPunctuation] ?: defaultReflow.hangingPunctuation,
-                pageInsetMode = pageInsetMode
+                pageInsetMode = pageInsetMode,
+                extra = defaultReflow.extra + (PAGE_TURN_EXTRA_KEY to pageTurnMode.storageValue)
             )
         }.distinctUntilChanged()
 
@@ -103,9 +121,30 @@ class DatastoreReaderSettingsStore @Inject constructor(
             )
         }.distinctUntilChanged()
 
+    override val displayPrefs: Flow<ReaderDisplayPrefs> =
+        dataStore.data.map { prefs ->
+            ReaderDisplayPrefs(
+                brightness = (prefs[Keys.Display.brightness] ?: defaultDisplay.brightness)
+                    .coerceIn(0f, 1f),
+                useSystemBrightness = prefs[Keys.Display.useSystemBrightness]
+                    ?: defaultDisplay.useSystemBrightness,
+                eyeProtection = prefs[Keys.Display.eyeProtection]
+                    ?: defaultDisplay.eyeProtection,
+                nightMode = prefs[Keys.Display.nightMode] ?: defaultDisplay.nightMode,
+                backgroundPreset = ReaderBackgroundPreset.fromStorageValue(
+                    prefs[Keys.Display.backgroundPreset]
+                ),
+                showReadingProgress = prefs[Keys.Display.showReadingProgress]
+                    ?: defaultDisplay.showReadingProgress,
+                fullScreenMode = prefs[Keys.Display.fullScreenMode]
+                    ?: defaultDisplay.fullScreenMode
+            )
+        }.distinctUntilChanged()
+
     override suspend fun getReflowConfig(): RenderConfig.ReflowText = reflowConfig.first()
 
     override suspend fun getFixedConfig(): RenderConfig.FixedPage = fixedConfig.first()
+    override suspend fun getDisplayPrefs(): ReaderDisplayPrefs = displayPrefs.first()
 
     override suspend fun setReflowConfig(config: RenderConfig.ReflowText) {
         dataStore.edit { prefs ->
@@ -127,6 +166,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Reflow.cjkLineBreakStrict] = config.cjkLineBreakStrict
             prefs[Keys.Reflow.hangingPunctuation] = config.hangingPunctuation
             prefs[Keys.Reflow.pageInsetMode] = config.pageInsetMode.name
+            val pageTurnMode = PageTurnMode.fromStorageValue(config.extra[PAGE_TURN_EXTRA_KEY])
+            prefs[Keys.Reflow.pageTurnMode] = pageTurnMode.storageValue
             prefs[Keys.Reflow.legacyHyphenation] = config.hyphenationMode != HyphenationMode.NONE
         }
     }
@@ -136,6 +177,18 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Fixed.fitMode] = config.fitMode.name
             prefs[Keys.Fixed.zoom] = config.zoom
             prefs[Keys.Fixed.rotationDegrees] = config.rotationDegrees
+        }
+    }
+
+    override suspend fun setDisplayPrefs(prefs: ReaderDisplayPrefs) {
+        dataStore.edit { mutablePrefs ->
+            mutablePrefs[Keys.Display.brightness] = prefs.brightness.coerceIn(0f, 1f)
+            mutablePrefs[Keys.Display.useSystemBrightness] = prefs.useSystemBrightness
+            mutablePrefs[Keys.Display.eyeProtection] = prefs.eyeProtection
+            mutablePrefs[Keys.Display.nightMode] = prefs.nightMode
+            mutablePrefs[Keys.Display.backgroundPreset] = prefs.backgroundPreset.storageValue
+            mutablePrefs[Keys.Display.showReadingProgress] = prefs.showReadingProgress
+            mutablePrefs[Keys.Display.fullScreenMode] = prefs.fullScreenMode
         }
     }
 

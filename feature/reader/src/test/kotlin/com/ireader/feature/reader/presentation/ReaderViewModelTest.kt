@@ -12,6 +12,7 @@ import com.ireader.core.database.collection.CollectionDao
 import com.ireader.core.database.collection.CollectionEntity
 import com.ireader.core.database.progress.ProgressDao
 import com.ireader.core.database.progress.ProgressEntity
+import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.core.datastore.reader.ReaderSettingsStore
 import com.ireader.core.files.source.BookSourceResolver
 import com.ireader.core.files.source.DocumentSource
@@ -192,13 +193,17 @@ class ReaderViewModelTest {
 private class FakeReaderSettingsStore : ReaderSettingsStore {
     var lastReflow: RenderConfig.ReflowText? = null
     var lastFixed: RenderConfig.FixedPage? = null
+    var lastDisplayPrefs: ReaderDisplayPrefs? = null
 
     override val reflowConfig: Flow<RenderConfig.ReflowText> = flowOf(RenderConfig.ReflowText())
     override val fixedConfig: Flow<RenderConfig.FixedPage> = flowOf(RenderConfig.FixedPage())
+    override val displayPrefs: Flow<ReaderDisplayPrefs> = flowOf(ReaderDisplayPrefs())
 
     override suspend fun getReflowConfig(): RenderConfig.ReflowText = RenderConfig.ReflowText()
 
     override suspend fun getFixedConfig(): RenderConfig.FixedPage = RenderConfig.FixedPage()
+
+    override suspend fun getDisplayPrefs(): ReaderDisplayPrefs = ReaderDisplayPrefs()
 
     override suspend fun setReflowConfig(config: RenderConfig.ReflowText) {
         lastReflow = config
@@ -206,5 +211,9 @@ private class FakeReaderSettingsStore : ReaderSettingsStore {
 
     override suspend fun setFixedConfig(config: RenderConfig.FixedPage) {
         lastFixed = config
+    }
+
+    override suspend fun setDisplayPrefs(prefs: ReaderDisplayPrefs) {
+        lastDisplayPrefs = prefs
     }
 }

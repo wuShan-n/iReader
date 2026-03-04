@@ -22,6 +22,19 @@ enum class PageInsetMode {
     COMPACT
 }
 
+enum class PageTurnMode(val storageValue: String) {
+    COVER_HORIZONTAL("cover_horizontal"),
+    SCROLL_VERTICAL("scroll_vertical");
+
+    companion object {
+        fun fromStorageValue(raw: String?): PageTurnMode {
+            return entries.firstOrNull { it.storageValue == raw } ?: COVER_HORIZONTAL
+        }
+    }
+}
+
+const val PAGE_TURN_EXTRA_KEY: String = "page_turn"
+
 sealed interface RenderConfig {
 
     data class ReflowText(

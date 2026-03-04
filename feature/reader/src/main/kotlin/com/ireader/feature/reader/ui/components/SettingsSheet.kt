@@ -2,6 +2,7 @@ package com.ireader.feature.reader.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,12 +43,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.reader.api.render.PageInsetMode
+import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.TextAlignMode
+import com.ireader.feature.reader.presentation.displayLabel
+import com.ireader.feature.reader.presentation.pageTurnMode
+import com.ireader.feature.reader.presentation.withPageTurnMode
 import com.ireader.reader.model.DocumentCapabilities
 import kotlin.math.roundToInt
 
@@ -66,11 +72,13 @@ fun SettingsSheet(
     capabilities: DocumentCapabilities?,
     config: RenderConfig?,
     isNightMode: Boolean,
+    backgroundPreset: ReaderBackgroundPreset,
     onClose: () -> Unit,
     onBackToMain: () -> Unit,
     onOpenSubPanel: (ReaderSettingsPanel) -> Unit,
     onOpenFullSettings: () -> Unit,
     onToggleNightMode: () -> Unit,
+    onSelectBackground: (ReaderBackgroundPreset) -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onClose) {
@@ -113,8 +121,10 @@ fun SettingsSheet(
 
             ReaderSettingsPanel.MoreBackground -> MoreBackgroundPanel(
                 isNightMode = isNightMode,
+                selectedPreset = backgroundPreset,
                 onBack = onBackToMain,
-                onToggleNightMode = onToggleNightMode
+                onToggleNightMode = onToggleNightMode,
+                onSelectBackground = onSelectBackground
             )
         }
     }
@@ -692,10 +702,10 @@ private fun PageTurnPanel(
     var persist by remember { mutableStateOf(true) }
     var livePreview by remember { mutableStateOf(true) }
     var selected by remember(current.extra) {
-        mutableStateOf(current.extra["page_turn"] ?: "左右覆盖")
+        mutableStateOf(current.pageTurnMode())
     }
     fun draftConfig(): RenderConfig.ReflowText {
-        return current.copy(extra = current.extra + ("page_turn" to selected))
+        return current.withPageTurnMode(selected)
     }
     fun previewIfEnabled() {
         if (livePreview) {
@@ -703,7 +713,7 @@ private fun PageTurnPanel(
         }
     }
 
-    val options = listOf("仿真翻页", "左右覆盖", "上下滑动", "无动效")
+    val options = PageTurnMode.entries
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -735,7 +745,10 @@ private fun PageTurnPanel(
                             previewIfEnabled()
                         }
                     ) {
-                        Text(option, color = if (isSelected) ReaderTokens.Palette.AccentBlue else Color.Gray)
+                        Text(
+                            option.displayLabel(),
+                            color = if (isSelected) ReaderTokens.Palette.AccentBlue else Color.Gray
+                        )
                     }
                 }
             }
@@ -778,16 +791,18 @@ private fun PageTurnPanel(
 @Composable
 private fun MoreBackgroundPanel(
     isNightMode: Boolean,
+    selectedPreset: ReaderBackgroundPreset,
     onBack: () -> Unit,
-    onToggleNightMode: () -> Unit
+    onToggleNightMode: () -> Unit,
+    onSelectBackground: (ReaderBackgroundPreset) -> Unit
 ) {
     val backgrounds = listOf(
-        Color(0xFFFDF9F3),
-        Color(0xFFF3E7CA),
-        Color(0xFFDFD4C5),
-        Color(0xFFCCE0D1),
-        Color(0xFF2B2B2B),
-        Color(0xFF1A1F2B)
+        ReaderBackgroundPreset.SYSTEM to if (isNightMode) Color(0xFF131313) else Color(0xFFFDF9F3),
+        ReaderBackgroundPreset.PAPER to Color(0xFFFDF9F3),
+        ReaderBackgroundPreset.WARM to Color(0xFFF3E7CA),
+        ReaderBackgroundPreset.GREEN to Color(0xFFCCE0D1),
+        ReaderBackgroundPreset.DARK to Color(0xFF2B2B2B),
+        ReaderBackgroundPreset.NAVY to Color(0xFF1A1F2B)
     )
     Column(
         modifier = Modifier
@@ -804,21 +819,31 @@ private fun MoreBackgroundPanel(
             modifier = Modifier.height(120.dp)
         ) {
             items(backgrounds.size) { index ->
-                val color = backgrounds[index]
+                val (preset, color) = backgrounds[index]
+                val selected = preset == selectedPreset
                 Box(
                     modifier = Modifier
                         .size(34.dp)
                         .background(color, CircleShape)
                         .border(
-                            width = if ((isNightMode && index >= 4) || (!isNightMode && index == 0)) 2.dp else 1.dp,
-                            color = if ((isNightMode && index >= 4) || (!isNightMode && index == 0)) {
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) {
                                 ReaderTokens.Palette.AccentBlue
                             } else {
                                 Color.LightGray
                             },
                             shape = CircleShape
                         )
-                )
+                        .padding(1.dp)
+                        .clickable { onSelectBackground(preset) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(color, CircleShape)
+                    )
+                }
             }
         }
         Row(

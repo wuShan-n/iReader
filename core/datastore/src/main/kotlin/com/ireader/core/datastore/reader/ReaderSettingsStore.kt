@@ -6,10 +6,13 @@ import kotlinx.coroutines.flow.Flow
 interface ReaderSettingsStore {
     val reflowConfig: Flow<RenderConfig.ReflowText>
     val fixedConfig: Flow<RenderConfig.FixedPage>
+    val displayPrefs: Flow<ReaderDisplayPrefs>
 
     suspend fun getReflowConfig(): RenderConfig.ReflowText
     suspend fun getFixedConfig(): RenderConfig.FixedPage
+    suspend fun getDisplayPrefs(): ReaderDisplayPrefs
 
     suspend fun setReflowConfig(config: RenderConfig.ReflowText)
     suspend fun setFixedConfig(config: RenderConfig.FixedPage)
+    suspend fun setDisplayPrefs(prefs: ReaderDisplayPrefs)
 }

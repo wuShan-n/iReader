@@ -6,6 +6,7 @@ import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LocatorCodec
 import com.ireader.core.data.book.ProgressRepo
+import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.core.datastore.reader.ReaderSettingsStore
 import com.ireader.core.files.source.BookSourceResolver
 import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
@@ -17,6 +18,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.render.LayoutConstraints
+import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
@@ -83,6 +85,23 @@ class ReaderViewModel @Inject constructor(
             for (intent in intents) {
                 handleIntent(intent)
             }
+        }
+        viewModelScope.launch {
+            settingsStore.displayPrefs
+                .distinctUntilChanged()
+                .collect { prefs ->
+                    ui.update { current ->
+                        current.copy(
+                            displayPrefs = prefs,
+                            isNightMode = prefs.nightMode,
+                            chromeVisible = if (prefs.fullScreenMode) {
+                                current.chromeVisible
+                            } else {
+                                true
+                            }
+                        )
+                    }
+                }
         }
     }
 
@@ -156,14 +175,40 @@ class ReaderViewModel @Inject constructor(
             is ReaderIntent.OpenSettingsSub -> openSubSheet(intent.sheet)
             ReaderIntent.OpenReaderMore -> ui.update { it.copy(sheet = ReaderSheet.ReaderMore) }
             ReaderIntent.OpenFullSettings -> ui.update { it.copy(sheet = ReaderSheet.FullSettings) }
-            ReaderIntent.ToggleNightMode -> ui.update { it.copy(isNightMode = !it.isNightMode) }
+            ReaderIntent.ShareBook -> ui.emit(ReaderEffect.ShareText(buildShareText(ui.state.value)))
+            ReaderIntent.ToggleNightMode -> updateDisplayPrefs { prefs ->
+                prefs.copy(nightMode = !prefs.nightMode)
+            }
+            is ReaderIntent.UpdateBrightness -> updateDisplayPrefs { prefs ->
+                prefs.copy(brightness = intent.value.coerceIn(0f, 1f))
+            }
+            is ReaderIntent.SetUseSystemBrightness -> updateDisplayPrefs { prefs ->
+                prefs.copy(useSystemBrightness = intent.enabled)
+            }
+            is ReaderIntent.SetEyeProtection -> updateDisplayPrefs { prefs ->
+                prefs.copy(eyeProtection = intent.enabled)
+            }
+            is ReaderIntent.SelectBackground -> updateDisplayPrefs { prefs ->
+                prefs.copy(backgroundPreset = intent.preset)
+            }
+            is ReaderIntent.SetReadingProgressVisible -> updateDisplayPrefs { prefs ->
+                prefs.copy(showReadingProgress = intent.visible)
+            }
+            is ReaderIntent.SetFullScreenMode -> updateDisplayPrefs { prefs ->
+                prefs.copy(fullScreenMode = intent.enabled)
+            }
+            is ReaderIntent.SetVerticalPaging -> updateVerticalPaging(intent.enabled)
             ReaderIntent.CloseSheet -> ui.update { it.copy(sheet = ReaderSheet.None) }
             ReaderIntent.BackInSheetHierarchy -> ui.update { current ->
                 current.copy(sheet = current.sheet.parentOrNone())
             }
 
-            ReaderIntent.Next -> navigate { controller, policy -> controller.next(policy) }
-            ReaderIntent.Prev -> navigate { controller, policy -> controller.prev(policy) }
+            ReaderIntent.Next -> navigate(direction = PageTurnDirection.NEXT) { controller, policy ->
+                controller.next(policy)
+            }
+            ReaderIntent.Prev -> navigate(direction = PageTurnDirection.PREV) { controller, policy ->
+                controller.prev(policy)
+            }
             is ReaderIntent.GoTo -> navigate { controller, policy -> controller.goTo(intent.locator, policy) }
             is ReaderIntent.GoToProgress -> navigate { controller, policy ->
                 controller.goToProgress(intent.percent, policy)
@@ -272,6 +317,7 @@ class ReaderViewModel @Inject constructor(
                         resources = result.value.resources,
                         capabilities = result.value.document.capabilities,
                         currentConfig = result.value.controller.state.value.config,
+                        pageTurnMode = resolvePageTurnMode(result.value.controller.state.value.config),
                         passwordPrompt = null,
                         error = null
                     )
@@ -316,6 +362,7 @@ class ReaderViewModel @Inject constructor(
                     it.copy(
                         renderState = renderState,
                         currentConfig = renderState.config,
+                        pageTurnMode = resolvePageTurnMode(renderState.config),
                         title = renderState.titleInView ?: it.title
                     )
                 }
@@ -346,7 +393,12 @@ class ReaderViewModel @Inject constructor(
                 .collect { config ->
                     when (sessionHandle.controller.setConfig(config)) {
                         is ReaderResult.Ok -> {
-                            ui.update { it.copy(currentConfig = config) }
+                            ui.update {
+                                it.copy(
+                                    currentConfig = config,
+                                    pageTurnMode = resolvePageTurnMode(config)
+                                )
+                            }
                             render.requestRender(RenderRequest.SETTINGS)
                         }
 
@@ -387,14 +439,24 @@ class ReaderViewModel @Inject constructor(
         }
 
         val sessionHandle = session.currentHandle() ?: run {
-            ui.update { it.copy(currentConfig = config) }
+            ui.update {
+                it.copy(
+                    currentConfig = config,
+                    pageTurnMode = resolvePageTurnMode(config)
+                )
+            }
             return
         }
 
         when (val result = sessionHandle.controller.setConfig(config)) {
             is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
             is ReaderResult.Ok -> {
-                ui.update { it.copy(currentConfig = config) }
+                ui.update {
+                    it.copy(
+                        currentConfig = config,
+                        pageTurnMode = resolvePageTurnMode(config)
+                    )
+                }
                 render.requestRender(RenderRequest.CONFIG)
             }
         }
@@ -418,6 +480,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun navigate(
+        direction: PageTurnDirection? = null,
         block: suspend (ReaderController, RenderPolicy) -> ReaderResult<RenderPage>
     ) {
         val sessionHandle = session.currentHandle() ?: return
@@ -434,10 +497,11 @@ class ReaderViewModel @Inject constructor(
                 is ReaderResult.Ok -> if (fixed) {
                     renderWithFinalPass(
                         controller = sessionHandle.controller,
-                        draft = result
+                        draft = result,
+                        direction = direction
                     )
                 } else {
-                    applyRenderResult(result)
+                    applyRenderResult(result, direction = direction)
                 }
             }
 
@@ -445,19 +509,47 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private fun applyRenderResult(result: ReaderResult<RenderPage>) {
+    private fun applyRenderResult(
+        result: ReaderResult<RenderPage>,
+        direction: PageTurnDirection? = null
+    ) {
         when (result) {
-            is ReaderResult.Ok -> ui.update { it.copy(page = result.value, error = null) }
+            is ReaderResult.Ok -> ui.update { current ->
+                val turnDirection = direction
+                val shouldAnimate = turnDirection != null && current.page?.id != result.value.id
+                current.copy(
+                    page = result.value,
+                    error = null,
+                    pageTransition = if (shouldAnimate) {
+                        current.pageTransition.next(turnDirection)
+                    } else {
+                        current.pageTransition
+                    }
+                )
+            }
             is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
         }
     }
 
     private suspend fun renderWithFinalPass(
         controller: ReaderController,
-        draft: ReaderResult<RenderPage>
+        draft: ReaderResult<RenderPage>,
+        direction: PageTurnDirection? = null
     ) {
         when (draft) {
-            is ReaderResult.Ok -> ui.update { it.copy(page = draft.value, error = null) }
+            is ReaderResult.Ok -> ui.update { current ->
+                val turnDirection = direction
+                val shouldAnimate = turnDirection != null && current.page?.id != draft.value.id
+                current.copy(
+                    page = draft.value,
+                    error = null,
+                    pageTransition = if (shouldAnimate) {
+                        current.pageTransition.next(turnDirection)
+                    } else {
+                        current.pageTransition
+                    }
+                )
+            }
             is ReaderResult.Err -> {
                 ui.update { it.copy(error = errorMapper.map(draft.error), isRenderingFinal = false) }
                 return
@@ -480,6 +572,56 @@ class ReaderViewModel @Inject constructor(
                     isRenderingFinal = false
                 )
             }
+        }
+    }
+
+    private fun resolvePageTurnMode(config: RenderConfig?): PageTurnMode {
+        val reflow = config as? RenderConfig.ReflowText ?: return PageTurnMode.COVER_HORIZONTAL
+        return reflow.pageTurnMode()
+    }
+
+    private suspend fun updateDisplayPrefs(
+        transform: (ReaderDisplayPrefs) -> ReaderDisplayPrefs
+    ) {
+        val current = ui.state.value.displayPrefs
+        val updated = transform(current)
+        if (updated == current) return
+
+        runCatching {
+            settingsStore.setDisplayPrefs(updated)
+        }.onFailure {
+            ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("Failed to save display settings")))
+            return
+        }
+
+        ui.update { state ->
+            state.copy(
+                displayPrefs = updated,
+                isNightMode = updated.nightMode,
+                chromeVisible = if (updated.fullScreenMode) state.chromeVisible else true
+            )
+        }
+    }
+
+    private suspend fun updateVerticalPaging(enabled: Boolean) {
+        val mode = if (enabled) PageTurnMode.SCROLL_VERTICAL else PageTurnMode.COVER_HORIZONTAL
+        val currentReflow = ui.state.value.currentConfig as? RenderConfig.ReflowText ?: return
+        if (currentReflow.pageTurnMode() == mode) return
+        applyConfig(
+            config = currentReflow.withPageTurnMode(mode),
+            persist = true
+        )
+    }
+
+    private fun buildShareText(state: ReaderUiState): String {
+        val title = state.title?.takeIf { it.isNotBlank() } ?: "正在阅读"
+        val progression = state.renderState?.progression?.percent
+            ?.coerceIn(0.0, 1.0)
+            ?.let { "${(it * 100).toInt()}%" }
+        return if (progression == null) {
+            title
+        } else {
+            "$title · $progression"
         }
     }
 
