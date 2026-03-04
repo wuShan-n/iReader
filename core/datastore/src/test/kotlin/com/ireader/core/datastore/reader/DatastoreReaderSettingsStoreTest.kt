@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
@@ -129,6 +130,36 @@ class DatastoreReaderSettingsStoreTest {
         val config = store.getReflowConfig()
         assertEquals("cover_horizontal", config.extra[PAGE_TURN_EXTRA_KEY])
         assertEquals("cover_overlay", config.extra[PAGE_TURN_STYLE_EXTRA_KEY])
+    }
+
+    @Test
+    fun `default reflow break strategy should be simple`() = runTest {
+        val dataStore = createDataStore(
+            scope = this,
+            testFile = File(temporaryFolder.root, "reader_settings_break_strategy_default.preferences_pb")
+        )
+        val store = DatastoreReaderSettingsStore(dataStore)
+
+        val config = store.getReflowConfig()
+
+        assertEquals(BreakStrategyMode.SIMPLE, config.breakStrategy)
+    }
+
+    @Test
+    fun `stored balanced break strategy should be preserved`() = runTest {
+        val dataStore = createDataStore(
+            scope = this,
+            testFile = File(temporaryFolder.root, "reader_settings_break_strategy_legacy.preferences_pb")
+        )
+        val store = DatastoreReaderSettingsStore(dataStore)
+
+        dataStore.edit { prefs ->
+            prefs[stringPreferencesKey("reader.reflow.breakStrategy")] = BreakStrategyMode.BALANCED.name
+        }
+
+        val config = store.getReflowConfig()
+
+        assertEquals(BreakStrategyMode.BALANCED, config.breakStrategy)
     }
 
     @Test

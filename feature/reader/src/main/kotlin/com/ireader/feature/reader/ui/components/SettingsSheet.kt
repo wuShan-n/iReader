@@ -252,7 +252,7 @@ private fun SpacingPanel(
             paragraphIndentEm = 2.0f,
             pagePaddingDp = 20f,
             textAlign = TextAlignMode.JUSTIFY,
-            breakStrategy = BreakStrategyMode.BALANCED,
+            breakStrategy = BreakStrategyMode.SIMPLE,
             hyphenationMode = HyphenationMode.NORMAL,
             includeFontPadding = false,
             pageInsetMode = PageInsetMode.RELAXED
