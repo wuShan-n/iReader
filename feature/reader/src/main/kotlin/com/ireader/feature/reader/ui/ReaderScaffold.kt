@@ -23,8 +23,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -147,32 +151,39 @@ fun ReaderScaffold(
                 .fillMaxSize()
                 .background(bgColor)
         ) {
-            PageRenderer(
-                state = state,
-                textColor = readerTextColor,
-                backgroundColor = bgColor,
-                onBackgroundTap = { tap, size ->
-                    onIntent(
-                        ReaderIntent.HandleTap(
-                            xPx = tap.x,
-                            yPx = tap.y,
-                            viewportWidthPx = size.width,
-                            viewportHeightPx = size.height
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical))
+                    .padding(top = 8.dp, bottom = 32.dp)
+            ) {
+                PageRenderer(
+                    state = state,
+                    textColor = readerTextColor,
+                    backgroundColor = bgColor,
+                    onBackgroundTap = { tap, size ->
+                        onIntent(
+                            ReaderIntent.HandleTap(
+                                xPx = tap.x,
+                                yPx = tap.y,
+                                viewportWidthPx = size.width,
+                                viewportHeightPx = size.height
+                            )
                         )
-                    )
-                },
-                onDragEnd = { axis, deltaPx, viewportMainAxisPx ->
-                    onIntent(
-                        ReaderIntent.HandleDragEnd(
-                            axis = axis,
-                            deltaPx = deltaPx,
-                            viewportMainAxisPx = viewportMainAxisPx
+                    },
+                    onDragEnd = { axis, deltaPx, viewportMainAxisPx ->
+                        onIntent(
+                            ReaderIntent.HandleDragEnd(
+                                axis = axis,
+                                deltaPx = deltaPx,
+                                viewportMainAxisPx = viewportMainAxisPx
+                            )
                         )
-                    )
-                },
-                onLinkActivated = { link -> onIntent(ReaderIntent.ActivateLink(link)) },
-                onWebSchemeUrl = onWebSchemeUrl
-            )
+                    },
+                    onLinkActivated = { link -> onIntent(ReaderIntent.ActivateLink(link)) },
+                    onWebSchemeUrl = onWebSchemeUrl
+                )
+            }
 
             if (prefs.eyeProtection) {
                 Box(
@@ -382,6 +393,7 @@ private fun ReaderTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
             .background(panelColor)
             .border(width = ReaderTokens.Border.Hairline, color = panelBorderColor)
             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -1242,6 +1254,7 @@ private fun FullSettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
