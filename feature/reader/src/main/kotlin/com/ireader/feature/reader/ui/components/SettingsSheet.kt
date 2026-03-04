@@ -67,7 +67,6 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 enum class ReaderSettingsPanel {
-    Main,
     Font,
     Spacing,
     PageTurn,
@@ -84,9 +83,6 @@ fun SettingsSheet(
     backgroundPreset: ReaderBackgroundPreset,
     onClose: () -> Unit,
     onBackToMain: () -> Unit,
-    onOpenSubPanel: (ReaderSettingsPanel) -> Unit,
-    onOpenFullSettings: () -> Unit,
-    onToggleNightMode: () -> Unit,
     onSelectBackground: (ReaderBackgroundPreset) -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
@@ -107,15 +103,6 @@ fun SettingsSheet(
 
         val current = config as? RenderConfig.ReflowText ?: RenderConfig.ReflowText()
         when (panel) {
-            ReaderSettingsPanel.Main -> ReflowMainPanel(
-                config = current,
-                isNightMode = isNightMode,
-                onOpenSubPanel = onOpenSubPanel,
-                onOpenFullSettings = onOpenFullSettings,
-                onToggleNightMode = onToggleNightMode,
-                onApply = onApply
-            )
-
             ReaderSettingsPanel.Font -> FontPanel(
                 current = current,
                 isNightMode = isNightMode,
@@ -141,189 +128,8 @@ fun SettingsSheet(
                 isNightMode = isNightMode,
                 selectedPreset = backgroundPreset,
                 onBack = onBackToMain,
-                onToggleNightMode = onToggleNightMode,
                 onSelectBackground = onSelectBackground
             )
-        }
-    }
-}
-
-@Composable
-private fun ReflowMainPanel(
-    config: RenderConfig.ReflowText,
-    isNightMode: Boolean,
-    onOpenSubPanel: (ReaderSettingsPanel) -> Unit,
-    onOpenFullSettings: () -> Unit,
-    onToggleNightMode: () -> Unit,
-    onApply: (RenderConfig, persist: Boolean) -> Unit
-) {
-    var persist by remember { mutableStateOf(true) }
-    var livePreview by remember { mutableStateOf(true) }
-    var fontSize by remember(config.fontSizeSp) { mutableFloatStateOf(config.fontSizeSp) }
-    var lineHeight by remember(config.lineHeightMult) { mutableFloatStateOf(config.lineHeightMult) }
-    var pagePadding by remember(config.pagePaddingDp) { mutableFloatStateOf(config.pagePaddingDp) }
-    fun draftConfig(): RenderConfig.ReflowText {
-        return config.copy(
-            fontSizeSp = fontSize,
-            lineHeightMult = lineHeight,
-            pagePaddingDp = pagePadding
-        )
-    }
-    fun previewIfEnabled() {
-        if (livePreview) {
-            onApply(draftConfig(), false)
-        }
-    }
-
-    val actionBg = if (isNightMode) Color(0xFF2C2C2C) else Color(0xFFE9ECEF)
-    val textColor = if (isNightMode) Color(0xFFE5E5E5) else Color(0xFF1B1B1B)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp)
-            .padding(bottom = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("阅读设置", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-            Box(modifier = Modifier.padding(start = 4.dp)) {
-                PrototypeIcons.SettingsHex(modifier = Modifier.size(18.dp), tint = textColor)
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1.2f)
-                    .height(40.dp)
-                    .background(actionBg, RoundedCornerShape(8.dp)),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(
-                    onClick = {
-                        fontSize = (fontSize - 1f).coerceAtLeast(12f)
-                        previewIfEnabled()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("A-", color = textColor)
-                }
-                Text(text = fontSize.roundToInt().toString(), color = Color.Gray)
-                TextButton(
-                    onClick = {
-                        fontSize = (fontSize + 1f).coerceAtMost(30f)
-                        previewIfEnabled()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("A+", color = textColor)
-                }
-            }
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(12.dp))
-            Button(
-                onClick = { onOpenSubPanel(ReaderSettingsPanel.Font) },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = actionBg, contentColor = textColor),
-                modifier = Modifier
-                    .weight(0.8f)
-                    .height(40.dp)
-            ) {
-                Text("字体")
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("行高 ${"%.2f".format(lineHeight)}", color = textColor)
-            Slider(
-                value = lineHeight,
-                valueRange = 1.1f..2.2f,
-                onValueChange = {
-                    lineHeight = it
-                    previewIfEnabled()
-                }
-            )
-            Text("边距 ${pagePadding.roundToInt()}dp", color = textColor)
-            Slider(
-                value = pagePadding,
-                valueRange = 8f..36f,
-                onValueChange = {
-                    pagePadding = it
-                    previewIfEnabled()
-                }
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            OutlinedButton(onClick = { onOpenSubPanel(ReaderSettingsPanel.Spacing) }) {
-                Text("更多间距")
-            }
-            OutlinedButton(onClick = { onOpenSubPanel(ReaderSettingsPanel.PageTurn) }) {
-                Text("翻页方式")
-            }
-            OutlinedButton(onClick = { onOpenSubPanel(ReaderSettingsPanel.MoreBackground) }) {
-                Text("更多背景")
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("实时预览", color = textColor)
-            Switch(
-                checked = livePreview,
-                onCheckedChange = {
-                    livePreview = it
-                    previewIfEnabled()
-                }
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("夜间模式", color = textColor)
-                androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(8.dp))
-                Switch(
-                    checked = isNightMode,
-                    onCheckedChange = { onToggleNightMode() }
-                )
-            }
-            TextButton(onClick = onOpenFullSettings) {
-                Text("更多设置 >", color = Color.Gray)
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(
-                    checked = persist,
-                    onCheckedChange = { persist = it }
-                )
-                Text("保存为默认", color = textColor)
-            }
-            Button(
-                onClick = {
-                    onApply(draftConfig(), persist)
-                }
-            ) {
-                Text("应用")
-            }
         }
     }
 }
@@ -1069,7 +875,6 @@ private fun MoreBackgroundPanel(
     isNightMode: Boolean,
     selectedPreset: ReaderBackgroundPreset,
     onBack: () -> Unit,
-    onToggleNightMode: () -> Unit,
     onSelectBackground: (ReaderBackgroundPreset) -> Unit
 ) {
     val backgrounds = listOf(
@@ -1129,8 +934,12 @@ private fun MoreBackgroundPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("跟随夜间模式", color = textColor)
-            Switch(checked = isNightMode, onCheckedChange = { onToggleNightMode() })
+            Text("夜间模式状态", color = textColor)
+            Text(
+                text = if (isNightMode) "已开启" else "已关闭",
+                color = textColor.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }

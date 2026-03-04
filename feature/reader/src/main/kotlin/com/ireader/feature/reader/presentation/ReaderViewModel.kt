@@ -19,6 +19,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.render.LayoutConstraints
+import com.ireader.reader.api.render.InvalidateReason
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
@@ -201,6 +202,7 @@ class ReaderViewModel @Inject constructor(
             ReaderIntent.OpenReaderMore -> openSheet(ReaderSheet.ReaderMore)
             ReaderIntent.OpenFullSettings -> openFullSettings()
             ReaderIntent.ShareBook -> ui.emit(ReaderEffect.ShareText(buildShareText(ui.state.value)))
+            ReaderIntent.CreateAnnotation -> createAnnotation()
             ReaderIntent.ToggleNightMode -> updateDisplayPrefs { prefs ->
                 prefs.copy(nightMode = !prefs.nightMode)
             }
@@ -633,6 +635,58 @@ class ReaderViewModel @Inject constructor(
             title
         } else {
             "$title · $progression"
+        }
+    }
+
+    private suspend fun createAnnotation() {
+        val sessionHandle = session.currentHandle() ?: return
+        val annotationProvider = sessionHandle.annotations
+        if (annotationProvider == null) {
+            ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("当前文档不支持批注")))
+            return
+        }
+
+        val selection = when (val selectionProvider = sessionHandle.selection) {
+            null -> null
+            else -> {
+                when (val result = selectionProvider.currentSelection()) {
+                    is ReaderResult.Ok -> result.value
+                    is ReaderResult.Err -> {
+                        ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("获取选区失败，已使用当前位置创建批注")))
+                        null
+                    }
+                }
+            }
+        }
+
+        val draft = when (
+            val result = ReaderAnnotationDraftFactory.create(
+                selection = selection,
+                fallbackLocator = ui.state.value.renderState?.locator
+            )
+        ) {
+            is ReaderResult.Ok -> result.value
+            is ReaderResult.Err -> {
+                ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("无法创建批注：缺少定位信息")))
+                return
+            }
+        }
+
+        when (annotationProvider.create(draft)) {
+            is ReaderResult.Err -> {
+                ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("创建批注失败")))
+            }
+
+            is ReaderResult.Ok -> {
+                sessionHandle.selection?.clearSelection()
+                when (sessionHandle.controller.invalidate(InvalidateReason.CONTENT_CHANGED)) {
+                    is ReaderResult.Ok -> Unit
+                    is ReaderResult.Err -> ui.emit(
+                        ReaderEffect.Snackbar(UiText.Dynamic("批注已保存，但页面刷新失败"))
+                    )
+                }
+                ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("已添加批注")))
+            }
         }
     }
 

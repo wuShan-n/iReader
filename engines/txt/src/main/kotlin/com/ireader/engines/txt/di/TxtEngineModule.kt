@@ -3,7 +3,9 @@ package com.ireader.engines.txt.di
 import android.content.Context
 import com.ireader.engines.txt.TxtEngine
 import com.ireader.engines.txt.TxtEngineConfig
+import com.ireader.engines.txt.internal.provider.StoredTxtAnnotationProvider
 import com.ireader.reader.api.engine.ReaderEngine
+import com.ireader.reader.api.provider.AnnotationStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,15 +22,21 @@ object TxtEngineModule {
     @IntoSet
     @Singleton
     fun provideTxtEngine(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        annotationStore: AnnotationStore
     ): ReaderEngine {
         return TxtEngine(
             config = TxtEngineConfig(
                 cacheDir = context.cacheDir,
                 persistPagination = true,
-                persistOutline = false
+                persistOutline = false,
+                annotationProviderFactory = { documentId ->
+                    StoredTxtAnnotationProvider(
+                        documentId = documentId,
+                        store = annotationStore
+                    )
+                }
             )
         )
     }
 }
-

@@ -221,6 +221,8 @@ fun ReaderScaffold(
                     panelColor = panelColor.copy(alpha = 0.98f),
                     panelBorderColor = panelBorder,
                     contentColor = panelTextColor,
+                    searchIcon = ReaderChromeDefaults.topSearchIcon,
+                    notesIcon = ReaderChromeDefaults.topNotesIcon,
                     onBack = onBack,
                     onOpenSearch = { onIntent(ReaderIntent.OpenSearch) },
                     onOpenAnnotations = { onIntent(ReaderIntent.OpenAnnotations) },
@@ -262,7 +264,6 @@ fun ReaderScaffold(
                                 onBrightnessChange = { onIntent(ReaderIntent.UpdateBrightness(it)) },
                                 onUseSystemBrightnessChange = { onIntent(ReaderIntent.SetUseSystemBrightness(it)) },
                                 onEyeProtectionChange = { onIntent(ReaderIntent.SetEyeProtection(it)) },
-                                onToggleNightMode = { onIntent(ReaderIntent.ToggleNightMode) },
                                 onOpenSubPanel = { panel ->
                                     onIntent(ReaderIntent.OpenSettingsSub(panel.toSheet()))
                                 },
@@ -336,11 +337,6 @@ fun ReaderScaffold(
                     isNightMode = state.isNightMode,
                     onClose = { onIntent(ReaderIntent.CloseSheet) },
                     onBackToMain = { onIntent(ReaderIntent.OpenSettings) },
-                    onOpenSubPanel = { panel ->
-                        onIntent(ReaderIntent.OpenSettingsSub(panel.toSheet()))
-                    },
-                    onOpenFullSettings = { onIntent(ReaderIntent.OpenFullSettings) },
-                    onToggleNightMode = { onIntent(ReaderIntent.ToggleNightMode) },
                     backgroundPreset = prefs.backgroundPreset,
                     onSelectBackground = { preset -> onIntent(ReaderIntent.SelectBackground(preset)) },
                     onApply = { cfg, persist -> onIntent(ReaderIntent.UpdateConfig(cfg, persist)) }
@@ -353,7 +349,7 @@ fun ReaderScaffold(
                 darkSurface = darkSurface,
                 onClose = { onIntent(ReaderIntent.CloseSheet) },
                 onOpenSearch = { onIntent(ReaderIntent.OpenSearch) },
-                onOpenAnnotations = { onIntent(ReaderIntent.OpenAnnotations) },
+                onCreateAnnotation = { onIntent(ReaderIntent.CreateAnnotation) },
                 onShare = { onIntent(ReaderIntent.ShareBook) }
             )
 
@@ -362,7 +358,6 @@ fun ReaderScaffold(
                 isVerticalPaging = state.pageTurnMode == PageTurnMode.SCROLL_VERTICAL,
                 isNightMode = state.isNightMode,
                 onBack = { onIntent(ReaderIntent.BackInSheetHierarchy) },
-                onToggleNightMode = { onIntent(ReaderIntent.ToggleNightMode) },
                 onShowReadingProgressChanged = { onIntent(ReaderIntent.SetReadingProgressVisible(it)) },
                 onFullScreenModeChanged = { onIntent(ReaderIntent.SetFullScreenMode(it)) },
                 onVerticalPagingChanged = { onIntent(ReaderIntent.SetVerticalPaging(it)) }
@@ -377,6 +372,8 @@ private fun ReaderTopBar(
     panelColor: Color,
     panelBorderColor: Color,
     contentColor: Color,
+    searchIcon: ReaderTopActionIcon,
+    notesIcon: ReaderTopActionIcon,
     onBack: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenAnnotations: () -> Unit,
@@ -417,7 +414,10 @@ private fun ReaderTopBar(
                     contentColor = contentColor
                 )
             ) {
-                PrototypeIcons.Cart(tint = contentColor)
+                when (searchIcon) {
+                    ReaderTopActionIcon.Search -> PrototypeIcons.Search(tint = contentColor)
+                    ReaderTopActionIcon.Note -> PrototypeIcons.Note(tint = contentColor)
+                }
             }
             IconButton(
                 onClick = onOpenAnnotations,
@@ -426,7 +426,10 @@ private fun ReaderTopBar(
                     contentColor = contentColor
                 )
             ) {
-                PrototypeIcons.Target(tint = contentColor)
+                when (notesIcon) {
+                    ReaderTopActionIcon.Search -> PrototypeIcons.Search(tint = contentColor)
+                    ReaderTopActionIcon.Note -> PrototypeIcons.Note(tint = contentColor)
+                }
             }
             IconButton(
                 onClick = onMore,
@@ -477,15 +480,17 @@ private fun ReaderBottomBar(
             },
             onClick = { onToggleDockTab(ReaderDockTab.Brightness) }
         )
-        BottomItem(
-            label = if (isNightMode) "日间" else "夜间",
-            selected = false,
-            isNightMode = isNightMode,
-            icon = {
-                PrototypeIcons.Moon()
-            },
-            onClick = onToggleNight
-        )
+        if (ReaderChromeDefaults.nightModeEntryPolicy.showBottomBarToggle) {
+            BottomItem(
+                label = if (isNightMode) "日间" else "夜间",
+                selected = false,
+                isNightMode = isNightMode,
+                icon = {
+                    PrototypeIcons.Moon()
+                },
+                onClick = onToggleNight
+            )
+        }
         BottomItem(
             label = "设置",
             selected = activeDockTab == ReaderDockTab.Settings,
@@ -541,7 +546,6 @@ private fun ReaderDockPanel(
     onBrightnessChange: (Float) -> Unit,
     onUseSystemBrightnessChange: (Boolean) -> Unit,
     onEyeProtectionChange: (Boolean) -> Unit,
-    onToggleNightMode: () -> Unit,
     onOpenSubPanel: (ReaderSettingsPanel) -> Unit,
     onOpenFullSettings: () -> Unit,
     onApplyConfig: (com.ireader.reader.api.render.RenderConfig, Boolean) -> Unit
@@ -601,7 +605,6 @@ private fun ReaderDockPanel(
                 ReaderDockTab.Settings -> ReaderSettingsDockPanel(
                     state = state,
                     contentColor = contentColor,
-                    onToggleNightMode = onToggleNightMode,
                     onOpenSubPanel = onOpenSubPanel,
                     onOpenFullSettings = onOpenFullSettings,
                     onApplyConfig = onApplyConfig
@@ -822,7 +825,6 @@ private fun ReaderBrightnessDockPanel(
 private fun ReaderSettingsDockPanel(
     state: ReaderUiState,
     contentColor: Color,
-    onToggleNightMode: () -> Unit,
     onOpenSubPanel: (ReaderSettingsPanel) -> Unit,
     onOpenFullSettings: () -> Unit,
     onApplyConfig: (com.ireader.reader.api.render.RenderConfig, Boolean) -> Unit
@@ -921,11 +923,10 @@ private fun ReaderSettingsDockPanel(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("夜间模式", color = contentColor)
-            Spacer(modifier = Modifier.width(8.dp))
-            Switch(checked = state.isNightMode, onCheckedChange = { onToggleNightMode() })
-        }
+        Text(
+            text = "夜间模式：${if (state.isNightMode) "已开启" else "已关闭"}",
+            color = contentColor
+        )
         TextButton(onClick = onOpenFullSettings) {
             Text("更多设置 >", color = contentColor.copy(alpha = 0.72f))
         }
@@ -1076,7 +1077,7 @@ private fun ReaderMoreSheet(
     darkSurface: Boolean,
     onClose: () -> Unit,
     onOpenSearch: () -> Unit,
-    onOpenAnnotations: () -> Unit,
+    onCreateAnnotation: () -> Unit,
     onShare: () -> Unit
 ) {
     ModalBottomSheet(
@@ -1101,7 +1102,7 @@ private fun ReaderMoreSheet(
                 })
                 MoreActionItem(label = "笔记", icon = { tint -> PrototypeIcons.Note(tint = tint) }, darkSurface = darkSurface, onClick = {
                     onClose()
-                    onOpenAnnotations()
+                    onCreateAnnotation()
                 })
                 MoreActionItem(label = "分享", icon = { tint -> PrototypeIcons.Share(tint = tint) }, darkSurface = darkSurface, onClick = {
                     onClose()
@@ -1232,7 +1233,6 @@ private fun FullSettingsScreen(
     isVerticalPaging: Boolean,
     isNightMode: Boolean,
     onBack: () -> Unit,
-    onToggleNightMode: () -> Unit,
     onShowReadingProgressChanged: (Boolean) -> Unit,
     onFullScreenModeChanged: (Boolean) -> Unit,
     onVerticalPagingChanged: (Boolean) -> Unit
@@ -1306,7 +1306,11 @@ private fun FullSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("夜间模式", color = textColor)
-                            Switch(checked = isNightMode, onCheckedChange = { onToggleNightMode() })
+                            Text(
+                                text = if (isNightMode) "已开启" else "已关闭",
+                                color = sub,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 }
@@ -1441,18 +1445,16 @@ private fun Context.findActivity(): Activity? {
 
 private fun ReaderSheet.toSettingsPanel(): ReaderSettingsPanel {
     return when (this) {
-        ReaderSheet.Settings -> ReaderSettingsPanel.Main
         ReaderSheet.SettingsFont -> ReaderSettingsPanel.Font
         ReaderSheet.SettingsSpacing -> ReaderSettingsPanel.Spacing
         ReaderSheet.SettingsPageTurn -> ReaderSettingsPanel.PageTurn
         ReaderSheet.SettingsMoreBackground -> ReaderSettingsPanel.MoreBackground
-        else -> ReaderSettingsPanel.Main
+        else -> ReaderSettingsPanel.Font
     }
 }
 
 private fun ReaderSettingsPanel.toSheet(): ReaderSheet {
     return when (this) {
-        ReaderSettingsPanel.Main -> ReaderSheet.Settings
         ReaderSettingsPanel.Font -> ReaderSheet.SettingsFont
         ReaderSettingsPanel.Spacing -> ReaderSheet.SettingsSpacing
         ReaderSettingsPanel.PageTurn -> ReaderSheet.SettingsPageTurn

@@ -4,11 +4,20 @@ import android.net.Uri
 import com.ireader.engines.txt.TxtEngine
 import com.ireader.engines.txt.TxtEngineConfig
 import com.ireader.engines.txt.testing.InMemoryDocumentSource
+import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
+import com.ireader.reader.api.provider.AnnotationProvider
+import com.ireader.reader.api.provider.AnnotationQuery
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.model.DocumentId
+import com.ireader.reader.model.annotation.Annotation
+import com.ireader.reader.model.annotation.AnnotationDraft
+import com.ireader.reader.model.annotation.AnnotationId
 import java.io.File
 import java.nio.file.Files
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -47,6 +56,33 @@ class TxtOpenPipelineTest {
 
                 val session = opened.createSession(initialLocator = null, initialConfig = RenderConfig.ReflowText()).requireOk()
                 session.close()
+            } finally {
+                opened.close()
+                cacheDir.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
+    fun `open should report annotation capability when factory is provided`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_annotation_capability").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/annotation.txt"),
+                payload = sampleText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(
+                TxtEngineConfig(
+                    cacheDir = cacheDir,
+                    annotationProviderFactory = { documentId ->
+                        NoopAnnotationProvider(documentId)
+                    }
+                )
+            )
+
+            val opened = engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk()
+            try {
+                assertTrue(opened.capabilities.annotations)
             } finally {
                 opened.close()
                 cacheDir.deleteRecursively()
@@ -193,4 +229,39 @@ class TxtOpenPipelineTest {
         return (this as? ReaderResult.Ok)?.value
             ?: error("Expected ReaderResult.Ok but was $this")
     }
+}
+
+private class NoopAnnotationProvider(
+    private val documentId: DocumentId
+) : AnnotationProvider {
+    private val state = MutableStateFlow<List<Annotation>>(emptyList())
+
+    override fun observeAll(): Flow<List<Annotation>> = state
+
+    override suspend fun listAll(): ReaderResult<List<Annotation>> = ReaderResult.Ok(state.value)
+
+    override suspend fun query(query: AnnotationQuery): ReaderResult<List<Annotation>> = ReaderResult.Ok(state.value)
+
+    override suspend fun create(draft: AnnotationDraft): ReaderResult<Annotation> {
+        val now = System.currentTimeMillis()
+        val created = Annotation(
+            id = AnnotationId("${documentId.value}:noop"),
+            type = draft.type,
+            anchor = draft.anchor,
+            content = draft.content,
+            style = draft.style,
+            createdAtEpochMs = now,
+            updatedAtEpochMs = now,
+            extra = draft.extra
+        )
+        state.value = state.value + created
+        return ReaderResult.Ok(created)
+    }
+
+    override suspend fun update(annotation: Annotation): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun delete(id: AnnotationId): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun decorationsFor(query: AnnotationQuery): ReaderResult<List<Decoration>> =
+        ReaderResult.Ok(emptyList())
 }

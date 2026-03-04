@@ -14,6 +14,7 @@ import com.ireader.core.navigation.AppRoutes
 import com.ireader.feature.annotations.navigation.AnnotationsRoute
 import com.ireader.feature.annotations.ui.AnnotationsScreen
 import com.ireader.feature.library.navigation.libraryNavGraph
+import com.ireader.feature.reader.navigation.ReaderRoute
 import com.ireader.feature.reader.navigation.readerNavGraph
 import com.ireader.feature.search.ui.SearchScreen
 import com.ireader.feature.settings.ui.SettingsScreen
@@ -58,7 +59,19 @@ private fun iReaderApp() {
         ) { entry ->
             val bookId = entry.arguments?.getLong(AppRoutes.ARG_BOOK_ID)
                 ?: error("Missing ${AppRoutes.ARG_BOOK_ID}")
-            AnnotationsScreen(bookId = bookId)
+            AnnotationsScreen(
+                bookId = bookId,
+                onBack = { navController.popBackStack() },
+                onOpenLocator = { locatorEncoded ->
+                    navController.popBackStack()
+                    navController.navigate(
+                        ReaderRoute.create(
+                            bookId = bookId,
+                            locator = locatorEncoded
+                        )
+                    )
+                }
+            )
         }
         composable(AppRoutes.SEARCH) {
             SearchScreen()

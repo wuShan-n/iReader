@@ -47,6 +47,7 @@ sealed interface ReaderIntent {
     data object OpenReaderMore : ReaderIntent
     data object OpenFullSettings : ReaderIntent
     data object ShareBook : ReaderIntent
+    data object CreateAnnotation : ReaderIntent
     data object ToggleNightMode : ReaderIntent
     data class UpdateBrightness(val value: Float) : ReaderIntent
     data class SetUseSystemBrightness(val enabled: Boolean) : ReaderIntent
