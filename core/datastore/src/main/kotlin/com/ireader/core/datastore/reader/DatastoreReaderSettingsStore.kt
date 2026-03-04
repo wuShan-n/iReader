@@ -42,6 +42,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val hangingPunctuation = booleanPreferencesKey("reader.reflow.hangingPunctuation")
             val pageInsetMode = stringPreferencesKey("reader.reflow.pageInsetMode")
             val pageTurnMode = stringPreferencesKey("reader.reflow.pageTurnMode")
+            val respectPublisherStyles = booleanPreferencesKey("reader.reflow.respectPublisherStyles")
 
             // Backward-compat key. Removed after all users migrate to hyphenationMode.
             val legacyHyphenation = booleanPreferencesKey("reader.reflow.hyphenation")
@@ -80,6 +81,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
         cjkLineBreakStrict = true,
         hangingPunctuation = false,
         pageInsetMode = PageInsetMode.RELAXED,
+        respectPublisherStyles = false,
         extra = mapOf(PAGE_TURN_EXTRA_KEY to PageTurnMode.COVER_HORIZONTAL.storageValue)
     )
     private val defaultFixed = RenderConfig.FixedPage()
@@ -121,6 +123,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
                 cjkLineBreakStrict = prefs[Keys.Reflow.cjkLineBreakStrict] ?: defaultReflow.cjkLineBreakStrict,
                 hangingPunctuation = prefs[Keys.Reflow.hangingPunctuation] ?: defaultReflow.hangingPunctuation,
                 pageInsetMode = pageInsetMode,
+                respectPublisherStyles = prefs[Keys.Reflow.respectPublisherStyles]
+                    ?: defaultReflow.respectPublisherStyles,
                 extra = defaultReflow.extra + (PAGE_TURN_EXTRA_KEY to pageTurnMode.storageValue)
             )
         }.distinctUntilChanged()
@@ -188,6 +192,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Reflow.cjkLineBreakStrict] = config.cjkLineBreakStrict
             prefs[Keys.Reflow.hangingPunctuation] = config.hangingPunctuation
             prefs[Keys.Reflow.pageInsetMode] = config.pageInsetMode.name
+            prefs[Keys.Reflow.respectPublisherStyles] = config.respectPublisherStyles
             val pageTurnMode = PageTurnMode.fromStorageValue(config.extra[PAGE_TURN_EXTRA_KEY])
             prefs[Keys.Reflow.pageTurnMode] = pageTurnMode.storageValue
             prefs[Keys.Reflow.legacyHyphenation] = config.hyphenationMode != HyphenationMode.NONE

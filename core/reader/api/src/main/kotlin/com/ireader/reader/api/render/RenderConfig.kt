@@ -51,6 +51,9 @@ sealed interface RenderConfig {
         val cjkLineBreakStrict: Boolean = true,
         val hangingPunctuation: Boolean = false,
         val pageInsetMode: PageInsetMode = PageInsetMode.RELAXED,
+        // Readium: whether to observe the original publisher styles. Many typography overrides
+        // only apply when this is disabled.
+        val respectPublisherStyles: Boolean = false,
         val extra: Map<String, String> = emptyMap()
     ) : RenderConfig
 

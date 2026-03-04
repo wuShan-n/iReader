@@ -40,6 +40,7 @@ class DatastoreReaderSettingsStoreTest {
             pagePaddingDp = 14f,
             cjkLineBreakStrict = false,
             hangingPunctuation = true,
+            respectPublisherStyles = true,
             hyphenationMode = HyphenationMode.FULL
         )
 
@@ -51,6 +52,7 @@ class DatastoreReaderSettingsStoreTest {
         assertEquals("FULL", prefs[stringPreferencesKey("reader.reflow.hyphenationMode")])
         assertEquals(false, prefs[booleanPreferencesKey("reader.reflow.cjkLineBreakStrict")])
         assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.hangingPunctuation")])
+        assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.respectPublisherStyles")])
         assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.hyphenation")])
         assertNull(prefs[floatPreferencesKey("reader.reflow.font_size_sp")])
     }

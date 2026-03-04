@@ -1,11 +1,14 @@
 package com.ireader.engines.epub.internal.render
 
 import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
+import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.toTypographySpec
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.FontFamily
+import org.readium.r2.navigator.preferences.TextAlign as ReadiumTextAlign
 
 @OptIn(ExperimentalReadiumApi::class)
 internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
@@ -16,13 +19,27 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
             val fontScale = (typography.fontSizeSp / baseSp)
                 .toDouble()
                 .coerceIn(0.5, 4.0)
+            val pageTurnMode = PageTurnMode.fromStorageValue(extra[PAGE_TURN_EXTRA_KEY])
+            val advanced = !respectPublisherStyles
+            val textAlign = if (advanced) {
+                when (typography.textAlign) {
+                    com.ireader.reader.api.render.TextAlignMode.START -> ReadiumTextAlign.START
+                    com.ireader.reader.api.render.TextAlignMode.JUSTIFY -> ReadiumTextAlign.JUSTIFY
+                }
+            } else {
+                null
+            }
 
             EpubPreferences(
                 fontSize = fontScale,
-                lineHeight = typography.lineHeightMult.toDouble().coerceIn(1.0, 3.0),
-                paragraphSpacing = (typography.paragraphSpacingDp / 16f).toDouble().coerceIn(0.0, 4.0),
-                pageMargins = (typography.pagePaddingDp / 16f).toDouble().coerceIn(0.0, 6.0),
-                hyphens = typography.hyphenationMode != HyphenationMode.NONE,
+                scroll = pageTurnMode == PageTurnMode.SCROLL_VERTICAL,
+                pageMargins = (typography.pagePaddingDp / 16f).toDouble().coerceIn(0.0, 4.0),
+                publisherStyles = respectPublisherStyles,
+                lineHeight = if (advanced) typography.lineHeightMult.toDouble().coerceIn(1.0, 2.0) else null,
+                paragraphSpacing = if (advanced) (typography.paragraphSpacingDp / 16f).toDouble().coerceIn(0.0, 2.0) else null,
+                paragraphIndent = if (advanced) typography.paragraphIndentEm.toDouble().coerceIn(0.0, 3.0) else null,
+                textAlign = textAlign,
+                hyphens = if (advanced) typography.hyphenationMode != HyphenationMode.NONE else null,
                 // Readium does not expose a direct equivalent for includeFontPadding/pageInsetMode.
                 // Keep those settings as explicit no-op on EPUB to avoid implicit behavior drift.
                 fontFamily = typography.fontFamilyName?.toReadiumFontFamilyOrNull()

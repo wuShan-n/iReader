@@ -481,7 +481,9 @@ private fun SpacingPanel(
     var cjkLineBreakStrict by remember(current.cjkLineBreakStrict) { mutableStateOf(current.cjkLineBreakStrict) }
     var hangingPunctuation by remember(current.hangingPunctuation) { mutableStateOf(current.hangingPunctuation) }
     var pageInsetMode by remember(current.pageInsetMode) { mutableStateOf(current.pageInsetMode) }
+    var respectPublisherStyles by remember(current.respectPublisherStyles) { mutableStateOf(current.respectPublisherStyles) }
     val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
+    val subColor = if (isNightMode) Color(0xFF9C978E) else Color(0xFF6F6A62)
 
     fun draftConfig(): RenderConfig.ReflowText {
         return current.copy(
@@ -495,7 +497,8 @@ private fun SpacingPanel(
             includeFontPadding = includeFontPadding,
             cjkLineBreakStrict = cjkLineBreakStrict,
             hangingPunctuation = hangingPunctuation,
-            pageInsetMode = pageInsetMode
+            pageInsetMode = pageInsetMode,
+            respectPublisherStyles = respectPublisherStyles
         )
     }
     fun previewIfEnabled() {
@@ -516,6 +519,7 @@ private fun SpacingPanel(
         cjkLineBreakStrict = defaults.cjkLineBreakStrict
         hangingPunctuation = defaults.hangingPunctuation
         pageInsetMode = defaults.pageInsetMode
+        respectPublisherStyles = defaults.respectPublisherStyles
         previewIfEnabled()
     }
 
@@ -557,6 +561,28 @@ private fun SpacingPanel(
                     onClick = { applyPreset(preset) }
                 )
             }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("尊重出版方样式（EPUB）", color = textColor)
+                Text(
+                    "开启后，行距/段距/对齐/缩进等可能不生效",
+                    color = subColor,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Switch(
+                checked = respectPublisherStyles,
+                onCheckedChange = {
+                    respectPublisherStyles = it
+                    previewIfEnabled()
+                }
+            )
         }
         SettingSliderRow(
             label = "行间距",
