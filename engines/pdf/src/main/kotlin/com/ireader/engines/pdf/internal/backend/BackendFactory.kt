@@ -3,6 +3,7 @@ package com.ireader.engines.pdf.internal.backend
 import android.os.ParcelFileDescriptor
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.pdf.PdfBackendStrategy
 import com.ireader.engines.pdf.PdfEngineConfig
 import com.ireader.engines.pdf.internal.backend.pdfium.PdfiumBackend
 import com.ireader.engines.pdf.internal.backend.platform.PlatformPdfBackend
@@ -26,18 +27,18 @@ internal class BackendFactory(
         val tempFile = opened.tempFile
 
         return try {
-            val selected = when {
-                config.forcePdfiumBackend -> SelectedBackend(
+            val selected = when (config.backendStrategy) {
+                PdfBackendStrategy.PDFIUM_ONLY -> SelectedBackend(
                     backend = openPdfium(primaryPfd, password),
                     degraded = false
                 )
 
-                config.forcePlatformBackend -> SelectedBackend(
+                PdfBackendStrategy.PLATFORM_ONLY -> SelectedBackend(
                     backend = openPlatform(primaryPfd),
                     degraded = true
                 )
 
-                else -> openWithPdfiumFallback(primaryPfd, password)
+                PdfBackendStrategy.AUTO -> openWithPdfiumFallback(primaryPfd, password)
             }
 
             val cleanup = Closeable {

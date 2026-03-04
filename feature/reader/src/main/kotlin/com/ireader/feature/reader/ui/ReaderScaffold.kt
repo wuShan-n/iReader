@@ -102,8 +102,7 @@ fun ReaderScaffold(
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onIntent: (ReaderIntent) -> Unit,
-    onOpenLocator: (String) -> Unit,
-    onWebSchemeUrl: (String) -> Boolean
+    onOpenLocator: (String) -> Unit
 ) {
     val prefs = state.displayPrefs
     val bgColor = resolveReaderBackgroundColor(
@@ -181,7 +180,6 @@ fun ReaderScaffold(
                         )
                     },
                     onLinkActivated = { link -> onIntent(ReaderIntent.ActivateLink(link)) },
-                    onWebSchemeUrl = onWebSchemeUrl
                 )
             }
 

@@ -39,15 +39,10 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val breakStrategy = stringPreferencesKey("reader.reflow.breakStrategy")
             val hyphenationMode = stringPreferencesKey("reader.reflow.hyphenationMode")
             val includeFontPadding = booleanPreferencesKey("reader.reflow.includeFontPadding")
-            val cjkLineBreakStrict = booleanPreferencesKey("reader.reflow.cjkLineBreakStrict")
-            val hangingPunctuation = booleanPreferencesKey("reader.reflow.hangingPunctuation")
             val pageInsetMode = stringPreferencesKey("reader.reflow.pageInsetMode")
             val pageTurnMode = stringPreferencesKey("reader.reflow.pageTurnMode")
             val pageTurnStyle = stringPreferencesKey("reader.reflow.pageTurnStyle")
             val respectPublisherStyles = booleanPreferencesKey("reader.reflow.respectPublisherStyles")
-
-            // Backward-compat key. Removed after all users migrate to hyphenationMode.
-            val legacyHyphenation = booleanPreferencesKey("reader.reflow.hyphenation")
         }
 
         object Fixed {
@@ -81,8 +76,6 @@ class DatastoreReaderSettingsStore @Inject constructor(
         breakStrategy = BreakStrategyMode.BALANCED,
         hyphenationMode = HyphenationMode.NORMAL,
         includeFontPadding = false,
-        cjkLineBreakStrict = true,
-        hangingPunctuation = false,
         pageInsetMode = PageInsetMode.RELAXED,
         respectPublisherStyles = false,
         extra = mapOf(
@@ -103,8 +96,6 @@ class DatastoreReaderSettingsStore @Inject constructor(
                 ?: defaultReflow.breakStrategy
             val hyphenationMode = prefs[Keys.Reflow.hyphenationMode]
                 ?.let(::parseHyphenationMode)
-                ?: prefs[Keys.Reflow.legacyHyphenation]
-                    ?.let { if (it) HyphenationMode.NORMAL else HyphenationMode.NONE }
                 ?: defaultReflow.hyphenationMode
             val includeFontPadding = prefs[Keys.Reflow.includeFontPadding]
                 ?: defaultReflow.includeFontPadding
@@ -129,8 +120,6 @@ class DatastoreReaderSettingsStore @Inject constructor(
                 breakStrategy = breakStrategy,
                 hyphenationMode = hyphenationMode,
                 includeFontPadding = includeFontPadding,
-                cjkLineBreakStrict = prefs[Keys.Reflow.cjkLineBreakStrict] ?: defaultReflow.cjkLineBreakStrict,
-                hangingPunctuation = prefs[Keys.Reflow.hangingPunctuation] ?: defaultReflow.hangingPunctuation,
                 pageInsetMode = pageInsetMode,
                 respectPublisherStyles = prefs[Keys.Reflow.respectPublisherStyles]
                     ?: defaultReflow.respectPublisherStyles,
@@ -202,8 +191,6 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Reflow.breakStrategy] = config.breakStrategy.name
             prefs[Keys.Reflow.hyphenationMode] = config.hyphenationMode.name
             prefs[Keys.Reflow.includeFontPadding] = config.includeFontPadding
-            prefs[Keys.Reflow.cjkLineBreakStrict] = config.cjkLineBreakStrict
-            prefs[Keys.Reflow.hangingPunctuation] = config.hangingPunctuation
             prefs[Keys.Reflow.pageInsetMode] = config.pageInsetMode.name
             prefs[Keys.Reflow.respectPublisherStyles] = config.respectPublisherStyles
             val pageTurnMode = PageTurnMode.fromStorageValue(config.extra[PAGE_TURN_EXTRA_KEY])
@@ -212,7 +199,6 @@ class DatastoreReaderSettingsStore @Inject constructor(
             )
             prefs[Keys.Reflow.pageTurnMode] = pageTurnMode.storageValue
             prefs[Keys.Reflow.pageTurnStyle] = pageTurnStyle
-            prefs[Keys.Reflow.legacyHyphenation] = config.hyphenationMode != HyphenationMode.NONE
         }
     }
 

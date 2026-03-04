@@ -13,7 +13,6 @@ import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
 import com.ireader.feature.reader.domain.usecase.OpenReaderSession
 import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
 import com.ireader.feature.reader.web.ExternalLinkPolicy
-import com.ireader.feature.reader.web.ReaderWebViewLinkRouter
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
@@ -40,7 +39,6 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -109,22 +107,6 @@ class ReaderViewModel @Inject constructor(
 
     fun dispatch(intent: ReaderIntent) {
         intents.trySend(intent)
-    }
-
-    fun onWebSchemeUrl(url: String): Boolean {
-        val controller = session.currentHandle()?.controller ?: return false
-        val handled = ReaderWebViewLinkRouter.tryHandle(
-            url = url,
-            controller = controller,
-            scope = viewModelScope
-        )
-        if (handled) {
-            viewModelScope.launch {
-                delay(40L)
-                dispatch(ReaderIntent.RefreshPage)
-            }
-        }
-        return handled
     }
 
     fun openLocator(encoded: String) {

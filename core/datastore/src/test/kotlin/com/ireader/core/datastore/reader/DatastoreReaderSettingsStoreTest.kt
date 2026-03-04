@@ -39,8 +39,6 @@ class DatastoreReaderSettingsStoreTest {
             paragraphSpacingDp = 8f,
             paragraphIndentEm = 2f,
             pagePaddingDp = 14f,
-            cjkLineBreakStrict = false,
-            hangingPunctuation = true,
             respectPublisherStyles = true,
             hyphenationMode = HyphenationMode.FULL
         )
@@ -51,27 +49,8 @@ class DatastoreReaderSettingsStoreTest {
         assertEquals(21f, prefs[floatPreferencesKey("reader.reflow.fontSizeSp")])
         assertEquals(2f, prefs[floatPreferencesKey("reader.reflow.paragraphIndentEm")])
         assertEquals("FULL", prefs[stringPreferencesKey("reader.reflow.hyphenationMode")])
-        assertEquals(false, prefs[booleanPreferencesKey("reader.reflow.cjkLineBreakStrict")])
-        assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.hangingPunctuation")])
         assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.respectPublisherStyles")])
-        assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.hyphenation")])
         assertNull(prefs[floatPreferencesKey("reader.reflow.font_size_sp")])
-    }
-
-    @Test
-    fun `legacy hyphenation key should map to hyphenation mode`() = runTest {
-        val dataStore = createDataStore(
-            scope = this,
-            testFile = File(temporaryFolder.root, "reader_settings_legacy_hyphenation.preferences_pb")
-        )
-        val store = DatastoreReaderSettingsStore(dataStore)
-
-        dataStore.edit { prefs ->
-            prefs[booleanPreferencesKey("reader.reflow.hyphenation")] = false
-        }
-
-        val config = store.getReflowConfig()
-        assertEquals(HyphenationMode.NONE, config.hyphenationMode)
     }
 
     @Test

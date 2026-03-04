@@ -120,6 +120,7 @@ class DefaultBookIndexer @Inject constructor(
             .put("search", capabilities.search)
             .put("textExtraction", capabilities.textExtraction)
             .put("annotations", capabilities.annotations)
+            .put("selection", capabilities.selection)
             .put("links", capabilities.links)
             .toString()
     }

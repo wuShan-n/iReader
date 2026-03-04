@@ -387,6 +387,7 @@ private class FakeReaderDocument : ReaderDocument {
         search = false,
         textExtraction = false,
         annotations = false,
+        selection = false,
         links = false
     )
     override val openOptions: OpenOptions = OpenOptions()

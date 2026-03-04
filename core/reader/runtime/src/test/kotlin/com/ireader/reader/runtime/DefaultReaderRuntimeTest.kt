@@ -59,6 +59,7 @@ class DefaultReaderRuntimeTest {
                 search = false,
                 textExtraction = false,
                 annotations = false,
+                selection = false,
                 links = false
             ),
             createSessionResult = ReaderResult.Ok(FakeSession())
@@ -87,6 +88,7 @@ class DefaultReaderRuntimeTest {
                 search = false,
                 textExtraction = false,
                 annotations = false,
+                selection = false,
                 links = false
             ),
             createSessionResult = ReaderResult.Err(ReaderError.Internal())

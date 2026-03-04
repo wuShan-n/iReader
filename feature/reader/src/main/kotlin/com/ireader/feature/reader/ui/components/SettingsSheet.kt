@@ -255,8 +255,6 @@ private fun SpacingPanel(
             breakStrategy = BreakStrategyMode.BALANCED,
             hyphenationMode = HyphenationMode.NORMAL,
             includeFontPadding = false,
-            cjkLineBreakStrict = true,
-            hangingPunctuation = false,
             pageInsetMode = PageInsetMode.RELAXED
         )
     }
@@ -284,8 +282,6 @@ private fun SpacingPanel(
     var breakStrategy by remember(current.breakStrategy) { mutableStateOf(current.breakStrategy) }
     var hyphenationMode by remember(current.hyphenationMode) { mutableStateOf(current.hyphenationMode) }
     var includeFontPadding by remember(current.includeFontPadding) { mutableStateOf(current.includeFontPadding) }
-    var cjkLineBreakStrict by remember(current.cjkLineBreakStrict) { mutableStateOf(current.cjkLineBreakStrict) }
-    var hangingPunctuation by remember(current.hangingPunctuation) { mutableStateOf(current.hangingPunctuation) }
     var pageInsetMode by remember(current.pageInsetMode) { mutableStateOf(current.pageInsetMode) }
     var respectPublisherStyles by remember(current.respectPublisherStyles) { mutableStateOf(current.respectPublisherStyles) }
     val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
@@ -301,8 +297,6 @@ private fun SpacingPanel(
             breakStrategy = breakStrategy,
             hyphenationMode = hyphenationMode,
             includeFontPadding = includeFontPadding,
-            cjkLineBreakStrict = cjkLineBreakStrict,
-            hangingPunctuation = hangingPunctuation,
             pageInsetMode = pageInsetMode,
             respectPublisherStyles = respectPublisherStyles
         )
@@ -322,8 +316,6 @@ private fun SpacingPanel(
         breakStrategy = defaults.breakStrategy
         hyphenationMode = defaults.hyphenationMode
         includeFontPadding = defaults.includeFontPadding
-        cjkLineBreakStrict = defaults.cjkLineBreakStrict
-        hangingPunctuation = defaults.hangingPunctuation
         pageInsetMode = defaults.pageInsetMode
         respectPublisherStyles = defaults.respectPublisherStyles
         previewIfEnabled()
@@ -555,35 +547,6 @@ private fun SpacingPanel(
                 }
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("CJK 严格换行", color = textColor)
-            Switch(
-                checked = cjkLineBreakStrict,
-                onCheckedChange = {
-                    cjkLineBreakStrict = it
-                    previewIfEnabled()
-                }
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("标点悬挂", color = textColor)
-            Switch(
-                checked = hangingPunctuation,
-                onCheckedChange = {
-                    hangingPunctuation = it
-                    previewIfEnabled()
-                }
-            )
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

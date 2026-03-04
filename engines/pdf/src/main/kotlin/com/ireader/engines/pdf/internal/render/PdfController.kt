@@ -28,6 +28,7 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.api.render.RenderState
+import com.ireader.reader.api.render.TileRequest
 import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
@@ -39,6 +40,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 internal class PdfController(
@@ -139,11 +141,12 @@ internal class PdfController(
     override suspend fun prefetchNeighbors(count: Int): ReaderResult<Unit> {
         if (count <= 0) return ReaderResult.Ok(Unit)
         return mutex.withLock {
+            val layout = constraints ?: return@withLock ReaderResult.Ok(Unit)
             val start = (currentPage - count).coerceAtLeast(0)
             val end = (currentPage + count).coerceAtMost(pageCount - 1)
             for (page in start..end) {
                 if (page == currentPage) continue
-                runCatching { backend.pageSize(page) }
+                runCatching { prewarmNeighborPageLocked(page, layout) }
             }
             ReaderResult.Ok(Unit)
         }
@@ -306,6 +309,43 @@ internal class PdfController(
         prefetchJob?.cancel()
         prefetchJob = scope.launch {
             prefetchNeighbors(count)
+        }
+    }
+
+    private suspend fun prewarmNeighborPageLocked(pageIndex: Int, layout: LayoutConstraints) {
+        val pageSize = backend.pageSize(pageIndex)
+        if (!backend.capabilities.preciseRegionRendering) {
+            return
+        }
+        val transform = computePageTransform(
+            pageWidthPt = pageSize.widthPt,
+            pageHeightPt = pageSize.heightPt,
+            config = currentConfig,
+            constraints = layout
+        )
+        val tileProvider = PdfTileProvider(
+            pageIndex = pageIndex,
+            renderConfig = currentConfig,
+            backend = backend,
+            cache = tileCache,
+            inflight = tileInflight,
+            config = engineConfig,
+            scope = CoroutineScope(SupervisorJob() + engineConfig.renderDispatcher)
+        )
+        try {
+            val tileSize = engineConfig.tileBaseSizePx.coerceAtLeast(128)
+            tileProvider.renderTile(
+                TileRequest(
+                    leftPx = 0,
+                    topPx = 0,
+                    widthPx = min(tileSize, transform.pageWidthPx).coerceAtLeast(1),
+                    heightPx = min(tileSize, transform.pageHeightPx).coerceAtLeast(1),
+                    scale = 1f,
+                    quality = RenderPolicy.Quality.DRAFT
+                )
+            )
+        } finally {
+            tileProvider.close()
         }
     }
 

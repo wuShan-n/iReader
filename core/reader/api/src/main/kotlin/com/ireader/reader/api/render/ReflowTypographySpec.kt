@@ -10,9 +10,7 @@ data class ReflowTypographySpec(
     val textAlign: TextAlignMode,
     val breakStrategy: BreakStrategyMode,
     val hyphenationMode: HyphenationMode,
-    val includeFontPadding: Boolean,
-    val cjkLineBreakStrict: Boolean,
-    val hangingPunctuation: Boolean
+    val includeFontPadding: Boolean
 )
 
 fun RenderConfig.ReflowText.toTypographySpec(): ReflowTypographySpec {
@@ -26,8 +24,6 @@ fun RenderConfig.ReflowText.toTypographySpec(): ReflowTypographySpec {
         textAlign = textAlign,
         breakStrategy = breakStrategy,
         hyphenationMode = hyphenationMode,
-        includeFontPadding = includeFontPadding,
-        cjkLineBreakStrict = cjkLineBreakStrict,
-        hangingPunctuation = hangingPunctuation
+        includeFontPadding = includeFontPadding
     )
 }

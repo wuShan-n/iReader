@@ -7,13 +7,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlin.math.max
 import kotlin.math.min
 
+enum class PdfBackendStrategy {
+    AUTO,
+    PDFIUM_ONLY,
+    PLATFORM_ONLY
+}
+
 data class PdfEngineConfig(
     val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     val renderDispatcher: CoroutineDispatcher = Dispatchers.Default,
     val tileBaseSizePx: Int = 512,
     val tileCacheMaxBytes: Int = defaultTileCacheBytes(),
-    val forcePlatformBackend: Boolean = false,
-    val forcePdfiumBackend: Boolean = false,
+    val backendStrategy: PdfBackendStrategy = PdfBackendStrategy.AUTO,
     val annotationProviderFactory: ((DocumentId) -> AnnotationProvider?)? = null
 ) {
     companion object {

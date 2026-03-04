@@ -148,6 +148,7 @@ class OpenReaderSessionTest {
         search = false,
         textExtraction = false,
         annotations = false,
+        selection = false,
         links = false
     )
 
@@ -235,6 +236,7 @@ private class FakeDocument : ReaderDocument {
         search = false,
         textExtraction = false,
         annotations = false,
+        selection = false,
         links = false
     )
     override val openOptions: OpenOptions = OpenOptions()

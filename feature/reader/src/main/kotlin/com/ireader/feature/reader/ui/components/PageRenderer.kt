@@ -1,5 +1,6 @@
 package com.ireader.feature.reader.ui.components
 
+import android.widget.TextView
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -18,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,7 +50,6 @@ fun PageRenderer(
     onBackgroundTap: (Offset, IntSize) -> Unit,
     onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
-    onWebSchemeUrl: (String) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     val page = state.page
@@ -79,26 +80,17 @@ fun PageRenderer(
                 backgroundColor = backgroundColor,
                 onBackgroundTap = onBackgroundTap,
                 onDragEnd = onDragEnd,
+                onLinkActivated = onLinkActivated,
                 modifier = Modifier.fillMaxSize()
             )
 
             is RenderContent.BitmapPage -> BitmapPage(content = content, modifier = Modifier.fillMaxSize())
 
-            is RenderContent.Html -> HtmlPage(
-                pageId = page.id.value,
-                content = content,
-                resourceProvider = state.resources,
-                reflowConfig = state.currentConfig as? RenderConfig.ReflowText,
-                textColor = textColor,
-                backgroundColor = backgroundColor,
-                onWebSchemeUrl = onWebSchemeUrl,
-                modifier = Modifier.fillMaxSize()
-            )
-
             is RenderContent.Tiles -> TilesPage(
                 pageId = page.id.value,
                 content = content,
                 links = page.links,
+                decorations = page.decorations,
                 onBackgroundTap = onBackgroundTap,
                 onLinkActivated = onLinkActivated,
                 modifier = Modifier.fillMaxSize()
@@ -129,6 +121,7 @@ private fun AnimatedTextPage(
     backgroundColor: Color,
     onBackgroundTap: (Offset, IntSize) -> Unit,
     onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
+    onLinkActivated: (DocumentLink) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val mode = state.pageTurnMode
@@ -163,18 +156,43 @@ private fun AnimatedTextPage(
             return@AnimatedContent
         }
 
+        var textViewRef by remember(targetPage.id.value) { mutableStateOf<TextView?>(null) }
+        val linkHits = remember(targetPage.id.value, targetPage.links, targetContent.mapping) {
+            val mapping = targetContent.mapping
+            targetPage.links.mapNotNull { link ->
+                val range = link.range ?: return@mapNotNull null
+                val charRange = mapping?.charRangeFor(range) ?: return@mapNotNull null
+                if (charRange.isEmpty()) return@mapNotNull null
+                TextLinkHit(link = link, range = charRange)
+            }
+        }
+
         Box(modifier = Modifier.fillMaxSize()) {
             TextPage(
                 content = targetContent,
+                links = targetPage.links,
+                decorations = targetPage.decorations,
                 reflowConfig = reflowConfig,
                 textColor = textColor,
                 backgroundColor = backgroundColor,
+                onTextViewBound = { textView -> textViewRef = textView },
                 modifier = Modifier.fillMaxSize()
             )
             TextGestureOverlay(
                 pageId = targetPage.id.value,
                 mode = mode,
-                onBackgroundTap = onBackgroundTap,
+                onTap = { tap, size ->
+                    val link = hitTestTextLink(
+                        tap = tap,
+                        textView = textViewRef,
+                        links = linkHits
+                    )
+                    if (link != null) {
+                        onLinkActivated(link)
+                    } else {
+                        onBackgroundTap(tap, size)
+                    }
+                },
                 onDragEnd = onDragEnd,
                 modifier = Modifier.fillMaxSize()
             )
@@ -191,7 +209,7 @@ private data class AnimatedTextTarget(
 private fun TextGestureOverlay(
     pageId: String,
     mode: PageTurnMode,
-    onBackgroundTap: (Offset, IntSize) -> Unit,
+    onTap: (Offset, IntSize) -> Unit,
     onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -223,12 +241,45 @@ private fun TextGestureOverlay(
             .pointerInput(pageId) {
                 detectTapGestures(
                     onTap = { tap ->
-                        onBackgroundTap(tap, size)
+                        onTap(tap, size)
                     }
                 )
             }
             .then(dragModifier)
     )
+}
+
+private data class TextLinkHit(
+    val link: DocumentLink,
+    val range: IntRange
+)
+
+private fun hitTestTextLink(
+    tap: Offset,
+    textView: TextView?,
+    links: List<TextLinkHit>
+): DocumentLink? {
+    val view = textView ?: return null
+    val layout = view.layout ?: return null
+    if (links.isEmpty()) return null
+
+    val localX = tap.x - view.totalPaddingLeft + view.scrollX
+    val localY = tap.y - view.totalPaddingTop + view.scrollY
+    if (localX < 0f || localY < 0f) {
+        return null
+    }
+    if (layout.height <= 0) {
+        return null
+    }
+    val line = layout.getLineForVertical(localY.toInt().coerceAtMost(layout.height - 1))
+    val lineLeft = layout.getLineLeft(line)
+    val lineRight = layout.getLineRight(line)
+    if (localX < lineLeft || localX > lineRight) {
+        return null
+    }
+    val charOffset = layout.getOffsetForHorizontal(line, localX)
+    val match = links.firstOrNull { hit -> charOffset in hit.range } ?: return null
+    return match.link
 }
 
 private fun buildPageTransform(

@@ -51,23 +51,17 @@ class ReflowPaginationProfileTest {
             constraints,
             base.copy(paragraphIndentEm = 2.4f)
         )
-        val cjkKey = ReflowPaginationProfile.keyFor(
-            "doc-a",
-            constraints,
-            base.copy(cjkLineBreakStrict = !base.cjkLineBreakStrict)
-        )
 
         assertNotEquals(baseKey, alignKey)
         assertNotEquals(baseKey, breakStrategyKey)
         assertNotEquals(baseKey, hyphenationKey)
         assertNotEquals(baseKey, indentKey)
-        assertNotEquals(baseKey, cjkKey)
     }
 
     @Test
     fun `schema version marker should invalidate legacy profile key`() {
         val base = RenderConfig.ReflowText()
-        val v2Key = ReflowPaginationProfile.keyFor("doc-a", constraints, base)
+        val currentKey = ReflowPaginationProfile.keyFor("doc-a", constraints, base)
         val legacyRaw = buildString {
             append("doc-a")
             append('|')
@@ -100,6 +94,6 @@ class ReflowPaginationProfileTest {
             append(base.pageInsetMode)
         }
         val legacyKey = com.ireader.engines.common.hash.Hashing.sha256Hex(legacyRaw).take(16)
-        assertNotEquals(legacyKey, v2Key)
+        assertNotEquals(legacyKey, currentKey)
     }
 }

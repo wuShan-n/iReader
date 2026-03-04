@@ -1,7 +1,6 @@
 package com.ireader.reader.api.render
 
 import android.graphics.Bitmap
-import android.net.Uri
 import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
@@ -27,19 +26,6 @@ sealed interface RenderContent {
         val mapping: TextMapping? = null
     ) : RenderContent
 
-    /**
-     * EPUB 常用：inline html 或者直接给一个可加载的 Uri
-     * - Inline：适合引擎自己拼装 html
-     * - Uri：适合引擎把章节写入/映射到本地资源系统
-     */
-    data class Html(
-        val inlineHtml: String? = null,
-        val contentUri: Uri? = null,
-        val baseUri: Uri? = null,
-        val resourceBasePath: String? = null,
-        val themeInjection: HtmlThemeInjection? = null
-    ) : RenderContent
-
     data class BitmapPage(
         val bitmap: Bitmap
     ) : RenderContent
@@ -59,11 +45,6 @@ sealed interface RenderContent {
      */
     data object Embedded : RenderContent
 }
-
-data class HtmlThemeInjection(
-    val css: String? = null,
-    val javascript: String? = null
-)
 
 data class RenderMetrics(
     val renderTimeMs: Long,

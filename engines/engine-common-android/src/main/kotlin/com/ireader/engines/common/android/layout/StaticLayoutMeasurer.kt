@@ -2,7 +2,6 @@
 
 package com.ireader.engines.common.android.layout
 
-import android.os.Build
 import android.text.StaticLayout
 import android.text.TextPaint
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
@@ -44,11 +43,9 @@ object StaticLayoutMeasurer {
             .setIncludePad(includeFontPadding)
             .setLineSpacing(0f, lineHeightMult)
             .setHyphenationFrequency(hyphenationMode.toAndroidHyphenationFrequency())
+            .setBreakStrategy(breakStrategy.toAndroidBreakStrategy())
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            builder.setBreakStrategy(breakStrategy.toAndroidBreakStrategy())
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        runCatching {
             builder.setJustificationMode(
                 textAlign.toAndroidJustificationMode(
                     preferInterCharacter = preferInterCharacterJustify

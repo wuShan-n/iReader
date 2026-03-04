@@ -77,6 +77,7 @@ class RenderConfigSanitizerTest {
             search = true,
             textExtraction = true,
             annotations = true,
+            selection = true,
             links = true
         )
 
@@ -88,6 +89,7 @@ class RenderConfigSanitizerTest {
             search = true,
             textExtraction = true,
             annotations = true,
+            selection = true,
             links = true
         )
 }

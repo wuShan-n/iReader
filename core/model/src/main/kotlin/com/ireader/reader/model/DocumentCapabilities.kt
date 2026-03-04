@@ -11,6 +11,8 @@ data class DocumentCapabilities(
     val textExtraction: Boolean,
     // 能否把标注映射到页面（reflow/fixed）
     val annotations: Boolean,
+    // 是否支持选区能力
+    val selection: Boolean,
     // 是否能提供可点击链接信息（内部/外部）
     val links: Boolean,
 )

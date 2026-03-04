@@ -46,6 +46,7 @@ internal class PdfDocument(
         search = openedPdf.backend.capabilities.search,
         textExtraction = openedPdf.backend.capabilities.textExtraction,
         annotations = true,
+        selection = false,
         links = openedPdf.backend.capabilities.links
     )
 

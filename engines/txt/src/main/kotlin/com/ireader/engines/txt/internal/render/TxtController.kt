@@ -135,7 +135,6 @@ internal class TxtController(
 
     private var constraints: LayoutConstraints? = null
     private var currentConfig: RenderConfig.ReflowText = initialConfig
-    private var currentEffectiveConfig: RenderConfig.ReflowText = initialConfig.toTxtEffectiveConfig()
 
 
     init {
@@ -180,7 +179,6 @@ internal class TxtController(
         val sanitized = reflow.sanitized()
         return mutex.withLock {
             currentConfig = sanitized
-            currentEffectiveConfig = sanitized.toTxtEffectiveConfig()
             stateMutable.value = stateMutable.value.copy(config = sanitized)
             sliceCache.clear()
             pageExtrasCache.clear()
@@ -206,7 +204,7 @@ internal class TxtController(
             val current = sliceCache.getOrBuild(
                 start = navigation.currentStart,
                 constraints = constraintsLocal,
-                config = currentEffectiveConfig,
+                config = currentConfig,
                 allowCache = true
             )
             if (current.endOffset >= store.lengthChars) {
@@ -236,7 +234,7 @@ internal class TxtController(
                 sliceCache.getOrBuild(
                     start = start,
                     constraints = constraintsArg,
-                    config = currentEffectiveConfig,
+                    config = currentConfig,
                     allowCache = true
                 )
             }
@@ -273,7 +271,7 @@ internal class TxtController(
             val currentSlice = sliceCache.getOrBuild(
                 start = navigation.currentStart,
                 constraints = constraintsLocal,
-                config = currentEffectiveConfig,
+                config = currentConfig,
                 allowCache = true
             )
 
@@ -283,7 +281,7 @@ internal class TxtController(
                 val next = sliceCache.getOrBuild(
                     start = forwardStart,
                     constraints = constraintsLocal,
-                    config = currentEffectiveConfig,
+                    config = currentConfig,
                     allowCache = true
                 )
                 if (next.endOffset <= forwardStart) {
@@ -303,7 +301,7 @@ internal class TxtController(
                     sliceCache.getOrBuild(
                         start = start,
                         constraints = constraintsArg,
-                        config = currentEffectiveConfig,
+                        config = currentConfig,
                         allowCache = true
                     )
                 }
@@ -313,7 +311,7 @@ internal class TxtController(
                 sliceCache.getOrBuild(
                     start = prevStart,
                     constraints = constraintsLocal,
-                    config = currentEffectiveConfig,
+                    config = currentConfig,
                     allowCache = true
                 )
                 backwardStart = prevStart
@@ -360,7 +358,7 @@ internal class TxtController(
                 builtSlice = sliceCache.getOrBuild(
                     start = navigation.currentStart,
                     constraints = constraintsLocal,
-                    config = currentEffectiveConfig,
+                    config = currentConfig,
                     allowCache = false
                 )
             }
@@ -433,7 +431,11 @@ internal class TxtController(
             return cached
         }
         val computed = PageExtras(
-            links = LinkDetector.detect(text),
+            links = LinkDetector.detect(
+                text = text,
+                pageStartOffset = startOffset,
+                maxOffset = store.lengthChars
+            ),
             decorations = annotationProvider
                 ?.decorationsFor(AnnotationQuery(range = range))
                 ?.getOrNull()
@@ -458,7 +460,7 @@ internal class TxtController(
     private fun reloadPaginationIndexIfNeededLocked() {
         paginationIndex.reloadIfNeeded(
             constraints = constraints,
-            profileConfig = currentEffectiveConfig
+            profileConfig = currentConfig
         )
         pageCompletionJob?.cancel()
     }
@@ -525,7 +527,7 @@ internal class TxtController(
             val slice = sliceCache.getOrBuild(
                 start = cursor,
                 constraints = constraints,
-                config = currentEffectiveConfig,
+                config = currentConfig,
                 allowCache = true
             )
             paginationIndex.record(slice.startOffset)

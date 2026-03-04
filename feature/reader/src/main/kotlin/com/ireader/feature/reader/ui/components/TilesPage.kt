@@ -18,11 +18,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.TileRequest
@@ -42,6 +46,7 @@ fun TilesPage(
     pageId: String,
     content: RenderContent.Tiles,
     links: List<DocumentLink>,
+    decorations: List<Decoration>,
     onBackgroundTap: (Offset, IntSize) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
     modifier: Modifier = Modifier
@@ -242,6 +247,14 @@ fun TilesPage(
                     dstSize = IntSize(dstWidth, dstHeight)
                 )
             }
+
+            drawFixedDecorations(
+                decorations = decorations,
+                pageLeft = pageLeft,
+                pageTop = pageTop,
+                drawWidth = drawWidth,
+                drawHeight = drawHeight
+            )
         }
     }
 }
@@ -276,3 +289,54 @@ private data class TileKey(
     val scale: Float,
     val quality: RenderPolicy.Quality
 )
+
+private fun DrawScope.drawFixedDecorations(
+    decorations: List<Decoration>,
+    pageLeft: Float,
+    pageTop: Float,
+    drawWidth: Float,
+    drawHeight: Float
+) {
+    decorations.filterIsInstance<Decoration.Fixed>().forEach { fixed ->
+        val fillColor = fixedOverlayColor(fixed)
+        fixed.rects.forEach { rect ->
+            val normalizedLeft = rect.left.coerceIn(0f, 1f)
+            val normalizedTop = rect.top.coerceIn(0f, 1f)
+            val normalizedRight = rect.right.coerceIn(0f, 1f)
+            val normalizedBottom = rect.bottom.coerceIn(0f, 1f)
+            if (normalizedRight <= normalizedLeft || normalizedBottom <= normalizedTop) {
+                return@forEach
+            }
+            val left = pageLeft + normalizedLeft * drawWidth
+            val top = pageTop + normalizedTop * drawHeight
+            val width = (normalizedRight - normalizedLeft) * drawWidth
+            val height = (normalizedBottom - normalizedTop) * drawHeight
+            if (width <= 0f || height <= 0f) {
+                return@forEach
+            }
+            drawRect(
+                color = Color(fillColor),
+                topLeft = Offset(left, top),
+                size = Size(width, height)
+            )
+        }
+    }
+}
+
+private fun fixedOverlayColor(decoration: Decoration.Fixed): Int {
+    val base = decoration.style.colorArgb ?: DEFAULT_FIXED_OVERLAY_COLOR_ARGB
+    val baseAlpha = (base ushr 24) and 0xFF
+    val opacity = decoration.style.opacity
+    val alpha = when {
+        opacity != null -> {
+            (opacity.coerceIn(0f, 1f) * 255f).roundToInt()
+        }
+
+        decoration.style.colorArgb != null -> baseAlpha
+        else -> (DEFAULT_FIXED_OVERLAY_OPACITY * 255f).roundToInt()
+    }.coerceIn(0, 255)
+    return (base and 0x00FF_FFFF) or (alpha shl 24)
+}
+
+private const val DEFAULT_FIXED_OVERLAY_COLOR_ARGB: Int = 0xFFFFD54F.toInt()
+private const val DEFAULT_FIXED_OVERLAY_OPACITY: Float = 0.35f

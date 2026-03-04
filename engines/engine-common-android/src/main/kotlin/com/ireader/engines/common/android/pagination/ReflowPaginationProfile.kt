@@ -6,7 +6,7 @@ import com.ireader.reader.api.render.RenderConfig
 
 object ReflowPaginationProfile {
 
-    private const val PROFILE_SCHEMA_VERSION = 3
+    private const val PROFILE_SCHEMA_VERSION = 4
 
     fun keyFor(
         documentKey: String,
@@ -47,10 +47,6 @@ object ReflowPaginationProfile {
             append(config.hyphenationMode)
             append('|')
             append(config.includeFontPadding)
-            append('|')
-            append(config.cjkLineBreakStrict)
-            append('|')
-            append(config.hangingPunctuation)
             append('|')
             append(config.pageInsetMode)
         }

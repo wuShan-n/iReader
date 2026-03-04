@@ -48,8 +48,6 @@ sealed interface RenderConfig {
         val breakStrategy: BreakStrategyMode = BreakStrategyMode.BALANCED,
         val hyphenationMode: HyphenationMode = HyphenationMode.NORMAL,
         val includeFontPadding: Boolean = true,
-        val cjkLineBreakStrict: Boolean = true,
-        val hangingPunctuation: Boolean = false,
         val pageInsetMode: PageInsetMode = PageInsetMode.RELAXED,
         // Readium: whether to observe the original publisher styles. Many typography overrides
         // only apply when this is disabled.

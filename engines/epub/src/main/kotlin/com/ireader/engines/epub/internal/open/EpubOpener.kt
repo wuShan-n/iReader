@@ -86,6 +86,7 @@ internal class EpubOpener(
                 search = publication.isSearchable,
                 textExtraction = true,
                 annotations = true,
+                selection = true,
                 links = true
             )
 

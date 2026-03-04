@@ -147,8 +147,7 @@ fun ReaderScreen(
             snackbarHostState = snackbarHost,
             onBack = onBack,
             onIntent = vm::dispatch,
-            onOpenLocator = vm::openLocator,
-            onWebSchemeUrl = vm::onWebSchemeUrl
+            onOpenLocator = vm::openLocator
         )
     }
 }

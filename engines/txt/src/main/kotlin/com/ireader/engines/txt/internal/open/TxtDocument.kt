@@ -49,6 +49,7 @@ internal class TxtDocument(
             search = true,
             textExtraction = true,
             annotations = annotationProviderFactory != null,
+            selection = false,
             links = true
         )
 
