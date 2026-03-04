@@ -255,9 +255,7 @@ private fun buildPageTransform(
             val enter = slideInHorizontally(
                 animationSpec = tween(durationMs)
             ) { full -> if (forward) full else -full } + fadeIn(animationSpec = tween(durationMs / 2))
-            val exit = slideOutHorizontally(
-                animationSpec = tween(durationMs)
-            ) { full -> if (forward) -full / 5 else full / 5 } + fadeOut(animationSpec = tween(durationMs))
+            val exit = fadeOut(animationSpec = tween(durationMs / 2))
             enter togetherWith exit
         }
 

@@ -1,6 +1,7 @@
 package com.ireader.engines.txt.internal.render
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class SoftBreakProcessorTest {
@@ -68,5 +69,29 @@ class SoftBreakProcessorTest {
         )
 
         assertEquals("第一行\n 第二行", output.toString())
+    }
+
+    @Test
+    fun `should normalize soft breaks even when hardWrapLikely is false`() {
+        val raw = buildString {
+            repeat(30) { index ->
+                append("这是第")
+                append(index + 1)
+                append("行没有句号没有终止符并且继续叙述内容用于验证自动软换行识别")
+                if (index < 29) {
+                    append('\n')
+                }
+            }
+        }
+
+        val output = SoftBreakProcessor.process(
+            rawText = raw,
+            hardWrapLikely = false,
+            paragraphSpacingPx = 0,
+            paragraphIndentPx = 0,
+            startsAtParagraphBoundary = true
+        )
+
+        assertFalse(output.contains('\n'))
     }
 }

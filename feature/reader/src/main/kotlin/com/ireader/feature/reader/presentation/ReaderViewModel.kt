@@ -91,14 +91,20 @@ class ReaderViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { prefs ->
                     ui.update { current ->
+                        val chromeVisible = if (prefs.fullScreenMode) {
+                            current.chromeVisible
+                        } else {
+                            true
+                        }
                         current.copy(
                             displayPrefs = prefs,
                             isNightMode = prefs.nightMode,
-                            chromeVisible = if (prefs.fullScreenMode) {
-                                current.chromeVisible
-                            } else {
-                                true
-                            }
+                            chromeVisible = chromeVisible,
+                            overlayState = current.overlayState.copy(
+                                showTopBar = chromeVisible,
+                                showBottomBar = chromeVisible,
+                                showGestureHint = !chromeVisible
+                            )
                         )
                     }
                 }
@@ -155,7 +161,17 @@ class ReaderViewModel @Inject constructor(
 
             is ReaderIntent.LayoutChanged -> applyLayout(intent.constraints)
             ReaderIntent.RefreshPage -> render.requestRender(RenderRequest.REFRESH)
-            ReaderIntent.ToggleChrome -> ui.update { it.copy(chromeVisible = !it.chromeVisible) }
+            ReaderIntent.ToggleChrome -> ui.update { current ->
+                val chromeVisible = !current.chromeVisible
+                current.copy(
+                    chromeVisible = chromeVisible,
+                    overlayState = current.overlayState.copy(
+                        showTopBar = chromeVisible,
+                        showBottomBar = chromeVisible,
+                        showGestureHint = !chromeVisible
+                    )
+                )
+            }
 
             ReaderIntent.OpenAnnotations -> {
                 val bookId = ui.state.value.bookId
@@ -164,17 +180,57 @@ class ReaderViewModel @Inject constructor(
                 }
             }
 
-            ReaderIntent.OpenToc -> {
-                ui.update { it.copy(sheet = ReaderSheet.Toc) }
+            ReaderIntent.OpenToc,
+            ReaderIntent.OpenMenu -> {
+                ui.update { current ->
+                    val next = if (current.activeDockTab == ReaderDockTab.Menu) {
+                        null
+                    } else {
+                        ReaderDockTab.Menu
+                    }
+                    current.copy(
+                        sheet = ReaderSheet.None,
+                        activeDockTab = next
+                    )
+                }
                 loadTocIfNeeded()
             }
+            is ReaderIntent.ToggleDockTab -> {
+                ui.update { current ->
+                    val next = if (current.activeDockTab == intent.tab) null else intent.tab
+                    current.copy(
+                        sheet = ReaderSheet.None,
+                        activeDockTab = next
+                    )
+                }
+                if (intent.tab == ReaderDockTab.Menu) {
+                    loadTocIfNeeded()
+                }
+            }
+            ReaderIntent.CloseDockPanel -> ui.update { it.copy(activeDockTab = null) }
+            is ReaderIntent.SetMenuTab -> {
+                ui.update { it.copy(activeMenuTab = intent.tab) }
+                if (intent.tab == ReaderMenuTab.Toc) {
+                    loadTocIfNeeded()
+                }
+            }
 
-            ReaderIntent.OpenSearch -> ui.update { it.copy(sheet = ReaderSheet.Search) }
-            ReaderIntent.OpenBrightness -> ui.update { it.copy(sheet = ReaderSheet.Brightness) }
-            ReaderIntent.OpenSettings -> ui.update { it.copy(sheet = ReaderSheet.Settings) }
+            ReaderIntent.OpenSearch -> ui.update {
+                it.copy(sheet = ReaderSheet.Search, activeDockTab = null)
+            }
+            ReaderIntent.OpenBrightness -> ui.update {
+                it.copy(sheet = ReaderSheet.None, activeDockTab = ReaderDockTab.Brightness)
+            }
+            ReaderIntent.OpenSettings -> ui.update {
+                it.copy(sheet = ReaderSheet.None, activeDockTab = ReaderDockTab.Settings)
+            }
             is ReaderIntent.OpenSettingsSub -> openSubSheet(intent.sheet)
-            ReaderIntent.OpenReaderMore -> ui.update { it.copy(sheet = ReaderSheet.ReaderMore) }
-            ReaderIntent.OpenFullSettings -> ui.update { it.copy(sheet = ReaderSheet.FullSettings) }
+            ReaderIntent.OpenReaderMore -> ui.update {
+                it.copy(sheet = ReaderSheet.ReaderMore, activeDockTab = null)
+            }
+            ReaderIntent.OpenFullSettings -> ui.update {
+                it.copy(sheet = ReaderSheet.FullSettings, activeDockTab = null)
+            }
             ReaderIntent.ShareBook -> ui.emit(ReaderEffect.ShareText(buildShareText(ui.state.value)))
             ReaderIntent.ToggleNightMode -> updateDisplayPrefs { prefs ->
                 prefs.copy(nightMode = !prefs.nightMode)
@@ -200,7 +256,19 @@ class ReaderViewModel @Inject constructor(
             is ReaderIntent.SetVerticalPaging -> updateVerticalPaging(intent.enabled)
             ReaderIntent.CloseSheet -> ui.update { it.copy(sheet = ReaderSheet.None) }
             ReaderIntent.BackInSheetHierarchy -> ui.update { current ->
-                current.copy(sheet = current.sheet.parentOrNone())
+                when (current.sheet) {
+                    ReaderSheet.SettingsFont,
+                    ReaderSheet.SettingsSpacing,
+                    ReaderSheet.SettingsPageTurn,
+                    ReaderSheet.SettingsMoreBackground,
+                    ReaderSheet.FullSettings -> current.copy(
+                        sheet = ReaderSheet.None,
+                        activeDockTab = ReaderDockTab.Settings
+                    )
+
+                    ReaderSheet.None -> current.copy(activeDockTab = null)
+                    else -> current.copy(sheet = ReaderSheet.None)
+                }
             }
 
             ReaderIntent.Next -> navigate(direction = PageTurnDirection.NEXT) { controller, policy ->
@@ -249,6 +317,9 @@ class ReaderViewModel @Inject constructor(
                 currentConfig = null,
                 passwordPrompt = null,
                 error = null,
+                activeMenuTab = ReaderMenuTab.Toc,
+                activeDockTab = null,
+                overlayState = ReaderOverlayState(),
                 toc = TocState(),
                 search = SearchState()
             )
@@ -595,10 +666,16 @@ class ReaderViewModel @Inject constructor(
         }
 
         ui.update { state ->
+            val chromeVisible = if (updated.fullScreenMode) state.chromeVisible else true
             state.copy(
                 displayPrefs = updated,
                 isNightMode = updated.nightMode,
-                chromeVisible = if (updated.fullScreenMode) state.chromeVisible else true
+                chromeVisible = chromeVisible,
+                overlayState = state.overlayState.copy(
+                    showTopBar = chromeVisible,
+                    showBottomBar = chromeVisible,
+                    showGestureHint = !chromeVisible
+                )
             )
         }
     }
@@ -807,23 +884,11 @@ class ReaderViewModel @Inject constructor(
             sheet == ReaderSheet.SettingsPageTurn ||
             sheet == ReaderSheet.SettingsMoreBackground
         if (!supported) return
-        ui.update { it.copy(sheet = sheet) }
-    }
-
-    private fun ReaderSheet.parentOrNone(): ReaderSheet {
-        return when (this) {
-            ReaderSheet.SettingsFont,
-            ReaderSheet.SettingsSpacing,
-            ReaderSheet.SettingsPageTurn,
-            ReaderSheet.SettingsMoreBackground,
-            ReaderSheet.FullSettings -> ReaderSheet.Settings
-
-            ReaderSheet.None -> ReaderSheet.None
-            ReaderSheet.Toc,
-            ReaderSheet.Search,
-            ReaderSheet.Brightness,
-            ReaderSheet.Settings,
-            ReaderSheet.ReaderMore -> ReaderSheet.None
+        ui.update {
+            it.copy(
+                sheet = sheet,
+                activeDockTab = ReaderDockTab.Settings
+            )
         }
     }
 

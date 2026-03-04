@@ -52,10 +52,10 @@ import com.ireader.reader.api.render.PageInsetMode
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.TextAlignMode
-import com.ireader.feature.reader.presentation.displayLabel
 import com.ireader.feature.reader.presentation.pageTurnMode
 import com.ireader.feature.reader.presentation.withPageTurnMode
 import com.ireader.reader.model.DocumentCapabilities
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 enum class ReaderSettingsPanel {
@@ -434,7 +434,35 @@ private fun SpacingPanel(
     onBack: () -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
-    val defaults = remember { RenderConfig.ReflowText() }
+    val defaults = remember {
+        RenderConfig.ReflowText(
+            lineHeightMult = 1.85f,
+            paragraphSpacingDp = 10f,
+            paragraphIndentEm = 2.0f,
+            pagePaddingDp = 20f,
+            textAlign = TextAlignMode.JUSTIFY,
+            breakStrategy = BreakStrategyMode.BALANCED,
+            hyphenationMode = HyphenationMode.NORMAL,
+            includeFontPadding = false,
+            cjkLineBreakStrict = true,
+            hangingPunctuation = false,
+            pageInsetMode = PageInsetMode.RELAXED
+        )
+    }
+    data class SpacingPreset(
+        val label: String,
+        val lineHeight: Float,
+        val paragraph: Float,
+        val indent: Float,
+        val padding: Float
+    )
+    val spacingPresets = remember {
+        listOf(
+            SpacingPreset(label = "紧凑", lineHeight = 1.45f, paragraph = 4f, indent = 1.6f, padding = 14f),
+            SpacingPreset(label = "默认", lineHeight = 1.85f, paragraph = 10f, indent = 2.0f, padding = 20f),
+            SpacingPreset(label = "宽松", lineHeight = 2.1f, paragraph = 14f, indent = 2.2f, padding = 24f)
+        )
+    }
     var persist by remember { mutableStateOf(true) }
     var livePreview by remember { mutableStateOf(true) }
     var lineHeight by remember(current.lineHeightMult) { mutableFloatStateOf(current.lineHeightMult) }
@@ -486,6 +514,21 @@ private fun SpacingPanel(
         previewIfEnabled()
     }
 
+    fun applyPreset(preset: SpacingPreset) {
+        lineHeight = preset.lineHeight
+        paragraph = preset.paragraph
+        paragraphIndent = preset.indent
+        padding = preset.padding
+        previewIfEnabled()
+    }
+
+    fun isPresetSelected(preset: SpacingPreset): Boolean {
+        return abs(lineHeight - preset.lineHeight) < 0.02f &&
+            abs(paragraph - preset.paragraph) < 0.5f &&
+            abs(paragraphIndent - preset.indent) < 0.05f &&
+            abs(padding - preset.padding) < 0.5f
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -499,6 +542,17 @@ private fun SpacingPanel(
             actionText = "恢复默认",
             onActionClick = ::resetToDefaults
         )
+        Text("预设", color = textColor)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            spacingPresets.forEach { preset ->
+                ChoiceButton(
+                    label = preset.label,
+                    selected = isPresetSelected(preset),
+                    isNightMode = isNightMode,
+                    onClick = { applyPreset(preset) }
+                )
+            }
+        }
         SettingSliderRow(
             label = "行间距",
             valueLabel = "%.2f".format(lineHeight),
@@ -734,13 +788,33 @@ private fun PageTurnPanel(
     onBack: () -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
 ) {
+    data class PageTurnOption(
+        val label: String,
+        val mode: PageTurnMode
+    )
+    val options = remember {
+        listOf(
+            PageTurnOption("仿真翻页", PageTurnMode.COVER_HORIZONTAL),
+            PageTurnOption("左右覆盖", PageTurnMode.COVER_HORIZONTAL),
+            PageTurnOption("上下滑动", PageTurnMode.SCROLL_VERTICAL),
+            PageTurnOption("无动效", PageTurnMode.COVER_HORIZONTAL)
+        )
+    }
+    val defaultCoverStyle = "左右覆盖"
     var persist by remember { mutableStateOf(true) }
     var livePreview by remember { mutableStateOf(true) }
     var selected by remember(current.extra) {
         mutableStateOf(current.pageTurnMode())
     }
+    var selectedStyle by remember(current.extra) {
+        val raw = current.extra[PAGE_TURN_STYLE_EXTRA_KEY]
+        mutableStateOf(raw ?: if (selected == PageTurnMode.COVER_HORIZONTAL) defaultCoverStyle else "上下滑动")
+    }
     fun draftConfig(): RenderConfig.ReflowText {
-        return current.withPageTurnMode(selected)
+        val withMode = current.withPageTurnMode(selected)
+        return withMode.copy(
+            extra = withMode.extra + (PAGE_TURN_STYLE_EXTRA_KEY to selectedStyle)
+        )
     }
     fun previewIfEnabled() {
         if (livePreview) {
@@ -748,7 +822,6 @@ private fun PageTurnPanel(
         }
     }
 
-    val options = PageTurnMode.entries
     val optionBg = if (isNightMode) Color(0xFF2B2B2B) else Color(0xFFF4F5F6)
     val optionBorder = if (isNightMode) Color(0x2EFFFFFF) else Color.LightGray
     val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
@@ -765,7 +838,11 @@ private fun PageTurnPanel(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             options.forEach { option ->
-                val isSelected = selected == option
+                val isSelected = when {
+                    option.mode != selected -> false
+                    option.mode == PageTurnMode.COVER_HORIZONTAL -> option.label == selectedStyle
+                    else -> true
+                }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
                         modifier = Modifier
@@ -779,12 +856,13 @@ private fun PageTurnPanel(
                     )
                     TextButton(
                         onClick = {
-                            selected = option
+                            selected = option.mode
+                            selectedStyle = option.label
                             previewIfEnabled()
                         }
                     ) {
                         Text(
-                            option.displayLabel(),
+                            option.label,
                             color = if (isSelected) ReaderTokens.Palette.AccentBlue else textColor.copy(alpha = 0.7f)
                         )
                     }
@@ -825,6 +903,8 @@ private fun PageTurnPanel(
         }
     }
 }
+
+private const val PAGE_TURN_STYLE_EXTRA_KEY = "page_turn_style"
 
 @Composable
 private fun MoreBackgroundPanel(

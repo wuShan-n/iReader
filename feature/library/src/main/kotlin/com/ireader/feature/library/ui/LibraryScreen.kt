@@ -9,12 +9,14 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -27,11 +29,23 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SentimentSatisfiedAlt
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.VerticalAlignTop
+import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -60,7 +74,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.ireader.core.data.book.IndexState
@@ -161,30 +177,31 @@ fun LibraryScreen(
             }
         },
         bottomBar = {
-            AnimatedVisibility(
-                visible = isEditMode && selectedBookIds.isNotEmpty(),
-                enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut()
-            ) {
-                BatchActionBar(
-                    isDark = isDark,
-                    onFavorite = {
-                        state.books
-                            .filter { it.book.bookId in selectedBookIds }
-                            .forEach { item ->
-                                vm.toggleFavorite(item.book.bookId, item.book.favorite)
+            Crossfade(targetState = isEditMode, label = "library_bottom_bar") { editing ->
+                if (editing) {
+                    BatchActionBar(
+                        isDark = isDark,
+                        enabled = selectedBookIds.isNotEmpty(),
+                        onFavorite = {
+                            state.books
+                                .filter { it.book.bookId in selectedBookIds }
+                                .forEach { item ->
+                                    vm.toggleFavorite(item.book.bookId, item.book.favorite)
+                                }
+                        },
+                        onMarkRead = {
+                            selectedBookIds.forEach { id ->
+                                vm.setReadingStatus(id, ReadingStatus.FINISHED)
                             }
-                    },
-                    onMarkRead = {
-                        selectedBookIds.forEach { id ->
-                            vm.setReadingStatus(id, ReadingStatus.FINISHED)
+                        },
+                        onDelete = {
+                            selectedBookIds.forEach(vm::deleteBook)
+                            selectedBookIds = emptySet()
                         }
-                    },
-                    onDelete = {
-                        selectedBookIds.forEach(vm::deleteBook)
-                        selectedBookIds = emptySet()
-                    }
-                )
+                    )
+                } else {
+                    LibraryBottomBar(isDark = isDark)
+                }
             }
         }
     ) { padding ->
@@ -208,7 +225,7 @@ fun LibraryScreen(
                         onSort = { sortMenuExpanded = true },
                         onFilter = { filterMenuExpanded = true },
                         onImport = { importLauncher.launch(arrayOf("*/*")) },
-                        onSettings = onOpenSettings
+                        onEnterEdit = { isEditMode = true }
                     )
                 }
 
@@ -238,11 +255,11 @@ fun LibraryScreen(
                     )
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 124.dp),
+                        columns = GridCells.Fixed(3),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(22.dp)
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
                         items(
                             items = state.books,
@@ -354,9 +371,12 @@ private fun NormalTopBar(
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onEnterEdit) {
-                Text("编辑")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Badge(
+                containerColor = ReaderTokens.Palette.AccentBlue,
+                contentColor = Color.White
+            ) {
+                Text("福利")
             }
             CircleActionButton(onClick = onOpenSearch) {
                 Icon(
@@ -372,6 +392,7 @@ private fun NormalTopBar(
                     modifier = Modifier.size(20.dp)
                 )
             }
+            TextButton(onClick = onEnterEdit) { Text("编辑") }
         }
     }
 }
@@ -427,11 +448,12 @@ private fun StatusRow(
     onSort: () -> Unit,
     onFilter: () -> Unit,
     onImport: () -> Unit,
-    onSettings: () -> Unit
+    onEnterEdit: () -> Unit
 ) {
     val progressPercent = (state.books.map { it.progression }.average().takeIf { !it.isNaN() } ?: 0.0) * 100.0
-    val readTip = "本周阅读 ${progressPercent.toInt()}%"
+    val readTip = "本周读${(progressPercent * 0.6).toInt()}分钟"
     val pillColor = if (isDark) ReaderTokens.Palette.LibraryPillNight else ReaderTokens.Palette.LibraryPillDay
+    val itemColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.SecondaryTextDay
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -450,15 +472,14 @@ private fun StatusRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val chipColors = AssistChipDefaults.assistChipColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                labelColor = MaterialTheme.colorScheme.onSurface
-            )
-            AssistChip(onClick = onSort, label = { Text("排序") }, colors = chipColors)
-            AssistChip(onClick = onFilter, label = { Text(filterLabel(state)) }, colors = chipColors)
-            AssistChip(onClick = onImport, label = { Text("导入") }, colors = chipColors)
-            AssistChip(onClick = onSettings, label = { Text("设置") }, colors = chipColors)
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onSort) { Text("排序", color = itemColor) }
+            TextButton(onClick = onFilter) {
+                Text(filterLabel(state), color = itemColor)
+            }
+            Text("｜", color = itemColor.copy(alpha = 0.5f))
+            TextButton(onClick = onEnterEdit) { Text("编辑", color = MaterialTheme.colorScheme.onSurface) }
+            TextButton(onClick = onImport) { Text("导入", color = itemColor) }
         }
     }
 }
@@ -474,12 +495,12 @@ private fun LibrarySearchBar(
     TextField(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         value = keyword,
         onValueChange = onKeywordChange,
         singleLine = true,
-        shape = RoundedCornerShape(ReaderTokens.Shape.InputRadius),
-        placeholder = { Text("搜索标题 / 作者 / 文件名") },
+        shape = RoundedCornerShape(ReaderTokens.Shape.CapsuleRadius),
+        placeholder = { Text("搜索标题 / 作者 / 文件名", color = MaterialTheme.colorScheme.onSurfaceVariant) },
         leadingIcon = {
             Icon(imageVector = Icons.Outlined.Search, contentDescription = null)
         },
@@ -535,11 +556,13 @@ private fun ImportStatusCard(
 @Composable
 private fun BatchActionBar(
     isDark: Boolean,
+    enabled: Boolean,
     onFavorite: () -> Unit,
     onMarkRead: () -> Unit,
     onDelete: () -> Unit
 ) {
     val bg = if (isDark) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.ReaderPanelElevatedDay
+    val contentColor = if (isDark) ReaderTokens.Palette.SecondaryTextNight else ReaderTokens.Palette.SecondaryTextDay
     Surface(
         tonalElevation = 2.dp,
         shadowElevation = 10.dp,
@@ -549,15 +572,145 @@ private fun BatchActionBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            TextButton(onClick = onFavorite) { Text("收藏/取消") }
-            TextButton(onClick = onMarkRead) { Text("标记已读") }
-            TextButton(onClick = onDelete, colors = ButtonDefaults.textButtonColors(contentColor = ReaderTokens.Palette.AccentRed)) {
-                Text("删除")
-            }
+            BatchIconAction(
+                label = "置顶",
+                icon = Icons.Outlined.VerticalAlignTop,
+                enabled = enabled,
+                tint = contentColor,
+                onClick = onFavorite
+            )
+            BatchIconAction(
+                label = "书单",
+                icon = Icons.AutoMirrored.Outlined.PlaylistAdd,
+                enabled = enabled,
+                tint = contentColor,
+                onClick = onMarkRead
+            )
+            BatchIconAction(
+                label = "移动",
+                icon = Icons.Outlined.Folder,
+                enabled = enabled,
+                tint = contentColor,
+                onClick = onFavorite
+            )
+            BatchIconAction(
+                label = "分享",
+                icon = Icons.Outlined.Share,
+                enabled = enabled,
+                tint = contentColor,
+                onClick = onFavorite
+            )
+            BatchIconAction(
+                label = "删除",
+                icon = Icons.Outlined.Delete,
+                enabled = enabled,
+                tint = ReaderTokens.Palette.AccentRed,
+                onClick = onDelete
+            )
+            BatchIconAction(
+                label = "更多",
+                icon = Icons.Outlined.MoreHoriz,
+                enabled = enabled,
+                tint = contentColor,
+                onClick = onFavorite
+            )
         }
+    }
+}
+
+@Composable
+private fun BatchIconAction(
+    label: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    TextButton(onClick = onClick, enabled = enabled) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (enabled) tint else tint.copy(alpha = 0.45f),
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                color = if (enabled) tint else tint.copy(alpha = 0.45f),
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryBottomBar(
+    isDark: Boolean
+) {
+    val bg = if (isDark) ReaderTokens.Palette.LibraryBackgroundBottomNight else ReaderTokens.Palette.LibraryBackgroundBottomDay
+    val divider = if (isDark) ReaderTokens.Palette.LibraryDividerNight else ReaderTokens.Palette.LibraryDividerDay
+    Surface(
+        color = bg,
+        tonalElevation = 4.dp,
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(width = 1.dp, color = divider, shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                .navigationBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            LibraryTabItem(
+                label = "书架",
+                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                selected = true
+            )
+            LibraryTabItem(
+                label = "书城",
+                icon = Icons.Outlined.Storefront,
+                selected = false
+            )
+            LibraryTabItem(
+                label = "会员",
+                icon = Icons.Outlined.WorkspacePremium,
+                selected = false
+            )
+            LibraryTabItem(
+                label = "我的",
+                icon = Icons.Outlined.SentimentSatisfiedAlt,
+                selected = false
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryTabItem(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    size: Dp = 22.dp
+) {
+    val tint = if (selected) ReaderTokens.Palette.AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(size)
+        )
+        Spacer(modifier = Modifier.size(2.dp))
+        Text(
+            text = label,
+            color = tint,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+        )
     }
 }
 

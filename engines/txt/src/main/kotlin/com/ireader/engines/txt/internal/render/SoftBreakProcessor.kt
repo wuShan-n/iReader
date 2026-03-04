@@ -15,10 +15,10 @@ internal object SoftBreakProcessor {
         paragraphIndentPx: Int,
         startsAtParagraphBoundary: Boolean
     ): CharSequence {
-        val normalized = if (hardWrapLikely) {
-            normalizeSoftBreaks(rawText)
-        } else {
-            NormalizedText(rawText, collectHardBreakPositions(rawText))
+        val normalized = when {
+            hardWrapLikely -> normalizeSoftBreaks(rawText)
+            shouldForceNormalizeSoftBreaks(rawText) -> normalizeSoftBreaks(rawText)
+            else -> NormalizedText(rawText, collectHardBreakPositions(rawText))
         }
         if (paragraphSpacingPx <= 0 && paragraphIndentPx <= 0) {
             return normalized.text
@@ -86,6 +86,34 @@ internal object SoftBreakProcessor {
             i++
         }
         return NormalizedText(String(chars), hardBreaks.toIntArray())
+    }
+
+    private fun shouldForceNormalizeSoftBreaks(text: String): Boolean {
+        if (text.length < 600) {
+            return false
+        }
+        val chars = text.toCharArray()
+        var singleBreaks = 0
+        var softBreaks = 0
+        var i = 0
+        while (i < chars.size) {
+            if (chars[i] == '\n') {
+                val prev = if (i > 0) chars[i - 1] else null
+                val next = if (i + 1 < chars.size) chars[i + 1] else null
+                if (prev != '\n' && next != '\n') {
+                    singleBreaks++
+                    if (shouldTreatAsSoftBreak(chars, i)) {
+                        softBreaks++
+                    }
+                }
+            }
+            i++
+        }
+        if (singleBreaks < MIN_SOFT_BREAK_CANDIDATES) {
+            return false
+        }
+        val ratio = softBreaks.toDouble() / singleBreaks.toDouble()
+        return ratio >= FORCE_SOFT_BREAK_RATIO
     }
 
     private fun collectHardBreakPositions(text: String): IntArray {
@@ -200,6 +228,8 @@ internal object SoftBreakProcessor {
 
     private val STRONG_PARAGRAPH_PUNCTUATION = setOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：')
     private const val MIN_INDENT_PARAGRAPH_CHARS = 12
+    private const val MIN_SOFT_BREAK_CANDIDATES = 8
+    private const val FORCE_SOFT_BREAK_RATIO = 0.55
     private val CHINESE_CHAPTER_REGEX = Regex("^\\s*第[0-9一二三四五六七八九十百千零〇两\\d]+[章节卷回部篇集].*")
     private val ENGLISH_CHAPTER_REGEX = Regex("^\\s*(chapter|part|prologue|epilogue)\\b", RegexOption.IGNORE_CASE)
 

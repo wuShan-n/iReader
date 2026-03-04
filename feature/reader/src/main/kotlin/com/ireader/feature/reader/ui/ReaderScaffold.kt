@@ -8,6 +8,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,10 +73,13 @@ import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.feature.reader.presentation.ReaderErrorAction
+import com.ireader.feature.reader.presentation.ReaderDockTab
 import com.ireader.feature.reader.presentation.ReaderIntent
+import com.ireader.feature.reader.presentation.ReaderMenuTab
 import com.ireader.feature.reader.presentation.ReaderSheet
 import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.presentation.PageTurnDirection
+import com.ireader.feature.reader.presentation.asString
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.feature.reader.ui.components.ErrorPane
 import com.ireader.feature.reader.ui.components.PageRenderer
@@ -82,7 +87,6 @@ import com.ireader.feature.reader.ui.components.PasswordDialog
 import com.ireader.feature.reader.ui.components.ReaderSettingsPanel
 import com.ireader.feature.reader.ui.components.SearchSheet
 import com.ireader.feature.reader.ui.components.SettingsSheet
-import com.ireader.feature.reader.ui.components.TocSheet
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -161,6 +165,7 @@ fun ReaderScaffold(
                         tap = tap,
                         size = size,
                         currentSheet = state.sheet,
+                        activeDockTab = state.activeDockTab,
                         allowChromeToggle = prefs.fullScreenMode,
                         onIntent = onIntent
                     )
@@ -203,13 +208,19 @@ fun ReaderScaffold(
                 batteryPercent = batteryPercent,
                 textColor = footerTextColor
             )
+            if (state.overlayState.showGestureHint) {
+                GestureHintBar(
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    isNightMode = state.isNightMode
+                )
+            }
 
             AnimatedVisibility(
-                visible = state.chromeVisible && state.sheet != ReaderSheet.FullSettings,
-                enter = fadeIn(animationSpec = tween(ReaderTokens.Motion.Medium)) +
-                    slideInVertically(initialOffsetY = { -it / 2 }, animationSpec = tween(ReaderTokens.Motion.Medium)),
-                exit = fadeOut(animationSpec = tween(ReaderTokens.Motion.Fast)) +
-                    slideOutVertically(targetOffsetY = { -it / 2 }, animationSpec = tween(ReaderTokens.Motion.Fast)),
+                visible = state.overlayState.showTopBar && state.sheet != ReaderSheet.FullSettings,
+                enter = fadeIn(animationSpec = tween(ReaderTokens.Motion.ChromeIn)) +
+                    slideInVertically(initialOffsetY = { -it / 2 }, animationSpec = tween(ReaderTokens.Motion.ChromeIn)),
+                exit = fadeOut(animationSpec = tween(ReaderTokens.Motion.ChromeOut)) +
+                    slideOutVertically(targetOffsetY = { -it / 2 }, animationSpec = tween(ReaderTokens.Motion.ChromeOut)),
                 modifier = Modifier.align(Alignment.TopCenter)
             ) {
                 ReaderTopBar(
@@ -218,29 +229,67 @@ fun ReaderScaffold(
                     panelBorderColor = panelBorder,
                     contentColor = panelTextColor,
                     onBack = onBack,
+                    onOpenSearch = { onIntent(ReaderIntent.OpenSearch) },
+                    onOpenAnnotations = { onIntent(ReaderIntent.OpenAnnotations) },
                     onMore = { onIntent(ReaderIntent.OpenReaderMore) }
                 )
             }
 
             AnimatedVisibility(
-                visible = state.chromeVisible && state.sheet != ReaderSheet.FullSettings,
-                enter = fadeIn(animationSpec = tween(ReaderTokens.Motion.Medium)) +
-                    slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tween(ReaderTokens.Motion.Medium)),
-                exit = fadeOut(animationSpec = tween(ReaderTokens.Motion.Fast)) +
-                    slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = tween(ReaderTokens.Motion.Fast)),
+                visible = state.overlayState.showBottomBar && state.sheet != ReaderSheet.FullSettings,
+                enter = fadeIn(animationSpec = tween(ReaderTokens.Motion.ChromeIn)) +
+                    slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tween(ReaderTokens.Motion.ChromeIn)),
+                exit = fadeOut(animationSpec = tween(ReaderTokens.Motion.ChromeOut)) +
+                    slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = tween(ReaderTokens.Motion.ChromeOut)),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
-                ReaderBottomBar(
-                    sheet = state.sheet,
-                    isNightMode = state.isNightMode,
-                    panelColor = panelColor.copy(alpha = 0.98f),
-                    panelBorderColor = panelBorder,
-                    contentColor = panelTextColor,
-                    onOpenToc = { onIntent(ReaderIntent.OpenToc) },
-                    onOpenBrightness = { onIntent(ReaderIntent.OpenBrightness) },
-                    onToggleNight = { onIntent(ReaderIntent.ToggleNightMode) },
-                    onOpenSettings = { onIntent(ReaderIntent.OpenSettings) }
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    AnimatedVisibility(
+                        visible = state.activeDockTab != null,
+                        enter = fadeIn(animationSpec = tween(ReaderTokens.Motion.SheetEnter)) +
+                            slideInVertically(initialOffsetY = { it / 2 }, animationSpec = tween(ReaderTokens.Motion.SheetEnter)),
+                        exit = fadeOut(animationSpec = tween(ReaderTokens.Motion.SheetExit)) +
+                            slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = tween(ReaderTokens.Motion.SheetExit))
+                    ) {
+                        val dockTab = state.activeDockTab
+                        if (dockTab != null) {
+                            ReaderDockPanel(
+                                tab = dockTab,
+                                state = state,
+                                panelColor = panelColor.copy(alpha = 0.995f),
+                                panelBorderColor = panelBorder,
+                                contentColor = panelTextColor,
+                                onClose = { onIntent(ReaderIntent.CloseDockPanel) },
+                                onOpenLocator = { encoded ->
+                                    onOpenLocator(encoded)
+                                    onIntent(ReaderIntent.CloseDockPanel)
+                                },
+                                onSetMenuTab = { tab -> onIntent(ReaderIntent.SetMenuTab(tab)) },
+                                onOpenAnnotations = { onIntent(ReaderIntent.OpenAnnotations) },
+                                onBrightnessChange = { onIntent(ReaderIntent.UpdateBrightness(it)) },
+                                onUseSystemBrightnessChange = { onIntent(ReaderIntent.SetUseSystemBrightness(it)) },
+                                onEyeProtectionChange = { onIntent(ReaderIntent.SetEyeProtection(it)) },
+                                onToggleNightMode = { onIntent(ReaderIntent.ToggleNightMode) },
+                                onOpenSubPanel = { panel ->
+                                    onIntent(ReaderIntent.OpenSettingsSub(panel.toSheet()))
+                                },
+                                onOpenFullSettings = { onIntent(ReaderIntent.OpenFullSettings) },
+                                onApplyConfig = { cfg, persist ->
+                                    onIntent(ReaderIntent.UpdateConfig(cfg, persist))
+                                }
+                            )
+                        }
+                    }
+                    ReaderBottomBar(
+                        activeDockTab = state.activeDockTab,
+                        isNightMode = state.isNightMode,
+                        panelColor = panelColor.copy(alpha = 0.98f),
+                        panelBorderColor = panelBorder,
+                        contentColor = panelTextColor,
+                        onToggleDockTab = { tab -> onIntent(ReaderIntent.ToggleDockTab(tab)) },
+                        onToggleNight = { onIntent(ReaderIntent.ToggleNightMode) }
+                    )
+                }
             }
 
             val error = state.error
@@ -267,18 +316,14 @@ fun ReaderScaffold(
         }
 
         when (state.sheet) {
-            ReaderSheet.None -> Unit
-            ReaderSheet.Toc -> TocSheet(
-                state = state.toc,
-                onClose = { onIntent(ReaderIntent.CloseSheet) },
-                onClick = { encoded ->
-                    onOpenLocator(encoded)
-                    onIntent(ReaderIntent.CloseSheet)
-                }
-            )
+            ReaderSheet.None,
+            ReaderSheet.Toc,
+            ReaderSheet.Brightness,
+            ReaderSheet.Settings -> Unit
 
             ReaderSheet.Search -> SearchSheet(
                 state = state.search,
+                isNightMode = state.isNightMode,
                 onClose = { onIntent(ReaderIntent.CloseSheet) },
                 onQueryChange = { q -> onIntent(ReaderIntent.SearchQueryChanged(q)) },
                 onSearch = { onIntent(ReaderIntent.ExecuteSearch) },
@@ -288,18 +333,6 @@ fun ReaderScaffold(
                 }
             )
 
-            ReaderSheet.Brightness -> BrightnessSheet(
-                brightness = prefs.brightness,
-                useSystemBrightness = prefs.useSystemBrightness,
-                eyeProtection = prefs.eyeProtection,
-                isNightMode = state.isNightMode,
-                onClose = { onIntent(ReaderIntent.CloseSheet) },
-                onBrightnessChange = { onIntent(ReaderIntent.UpdateBrightness(it)) },
-                onUseSystemBrightnessChange = { onIntent(ReaderIntent.SetUseSystemBrightness(it)) },
-                onEyeProtectionChange = { onIntent(ReaderIntent.SetEyeProtection(it)) }
-            )
-
-            ReaderSheet.Settings,
             ReaderSheet.SettingsFont,
             ReaderSheet.SettingsSpacing,
             ReaderSheet.SettingsPageTurn,
@@ -350,11 +383,16 @@ private fun handleReaderTap(
     tap: Offset,
     size: IntSize,
     currentSheet: ReaderSheet,
+    activeDockTab: ReaderDockTab?,
     allowChromeToggle: Boolean,
     onIntent: (ReaderIntent) -> Unit
 ) {
     if (currentSheet != ReaderSheet.None) {
         onIntent(ReaderIntent.CloseSheet)
+        return
+    }
+    if (activeDockTab != null) {
+        onIntent(ReaderIntent.CloseDockPanel)
         return
     }
 
@@ -374,6 +412,8 @@ private fun ReaderTopBar(
     panelBorderColor: Color,
     contentColor: Color,
     onBack: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenAnnotations: () -> Unit,
     onMore: () -> Unit
 ) {
     Row(
@@ -403,29 +443,47 @@ private fun ReaderTopBar(
             style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
             modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
         )
-        IconButton(
-            onClick = onMore,
-            colors = IconButtonDefaults.iconButtonColors(
-                containerColor = contentColor.copy(alpha = 0.12f),
-                contentColor = contentColor
-            )
-        ) {
-            Icon(imageVector = Icons.Outlined.MoreVert, contentDescription = "更多", tint = contentColor)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            IconButton(
+                onClick = onOpenSearch,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = contentColor.copy(alpha = 0.12f),
+                    contentColor = contentColor
+                )
+            ) {
+                Icon(imageVector = Icons.Outlined.Search, contentDescription = "搜索", tint = contentColor)
+            }
+            IconButton(
+                onClick = onOpenAnnotations,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = contentColor.copy(alpha = 0.12f),
+                    contentColor = contentColor
+                )
+            ) {
+                Icon(imageVector = Icons.Outlined.Bookmarks, contentDescription = "笔记", tint = contentColor)
+            }
+            IconButton(
+                onClick = onMore,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = contentColor.copy(alpha = 0.12f),
+                    contentColor = contentColor
+                )
+            ) {
+                Icon(imageVector = Icons.Outlined.MoreVert, contentDescription = "更多", tint = contentColor)
+            }
         }
     }
 }
 
 @Composable
 private fun ReaderBottomBar(
-    sheet: ReaderSheet,
+    activeDockTab: ReaderDockTab?,
     isNightMode: Boolean,
     panelColor: Color,
     panelBorderColor: Color,
     contentColor: Color,
-    onOpenToc: () -> Unit,
-    onOpenBrightness: () -> Unit,
+    onToggleDockTab: (ReaderDockTab) -> Unit,
     onToggleNight: () -> Unit,
-    onOpenSettings: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -438,23 +496,23 @@ private fun ReaderBottomBar(
     ) {
         BottomItem(
             label = "目录",
-            selected = sheet == ReaderSheet.Toc,
+            selected = activeDockTab == ReaderDockTab.Menu,
             isNightMode = isNightMode,
             contentColor = contentColor,
             icon = {
                 Icon(imageVector = Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
             },
-            onClick = onOpenToc
+            onClick = { onToggleDockTab(ReaderDockTab.Menu) }
         )
         BottomItem(
             label = "亮度",
-            selected = sheet == ReaderSheet.Brightness,
+            selected = activeDockTab == ReaderDockTab.Brightness,
             isNightMode = isNightMode,
             contentColor = contentColor,
             icon = {
                 Icon(imageVector = Icons.Outlined.Brightness6, contentDescription = null)
             },
-            onClick = onOpenBrightness
+            onClick = { onToggleDockTab(ReaderDockTab.Brightness) }
         )
         BottomItem(
             label = if (isNightMode) "日间" else "夜间",
@@ -471,17 +529,13 @@ private fun ReaderBottomBar(
         )
         BottomItem(
             label = "设置",
-            selected = sheet == ReaderSheet.Settings ||
-                sheet == ReaderSheet.SettingsFont ||
-                sheet == ReaderSheet.SettingsSpacing ||
-                sheet == ReaderSheet.SettingsPageTurn ||
-                sheet == ReaderSheet.SettingsMoreBackground,
+            selected = activeDockTab == ReaderDockTab.Settings,
             isNightMode = isNightMode,
             contentColor = contentColor,
             icon = {
                 Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
             },
-            onClick = onOpenSettings
+            onClick = { onToggleDockTab(ReaderDockTab.Settings) }
         )
     }
 }
@@ -523,6 +577,442 @@ private fun BottomItem(
     }
 }
 
+@Composable
+private fun ReaderDockPanel(
+    tab: ReaderDockTab,
+    state: ReaderUiState,
+    panelColor: Color,
+    panelBorderColor: Color,
+    contentColor: Color,
+    onClose: () -> Unit,
+    onOpenLocator: (String) -> Unit,
+    onSetMenuTab: (ReaderMenuTab) -> Unit,
+    onOpenAnnotations: () -> Unit,
+    onBrightnessChange: (Float) -> Unit,
+    onUseSystemBrightnessChange: (Boolean) -> Unit,
+    onEyeProtectionChange: (Boolean) -> Unit,
+    onToggleNightMode: () -> Unit,
+    onOpenSubPanel: (ReaderSettingsPanel) -> Unit,
+    onOpenFullSettings: () -> Unit,
+    onApplyConfig: (com.ireader.reader.api.render.RenderConfig, Boolean) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        color = panelColor,
+        tonalElevation = 8.dp,
+        shadowElevation = 12.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(width = 1.dp, color = panelBorderColor)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val title = when (tab) {
+                    ReaderDockTab.Menu -> "目录"
+                    ReaderDockTab.Brightness -> "亮度"
+                    ReaderDockTab.Settings -> "阅读设置"
+                }
+                Text(
+                    text = title,
+                    color = contentColor,
+                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                )
+                TextButton(onClick = onClose) {
+                    Text("收起", color = contentColor.copy(alpha = 0.76f))
+                }
+            }
+            when (tab) {
+                ReaderDockTab.Menu -> ReaderMenuDockPanel(
+                    state = state,
+                    contentColor = contentColor,
+                    onSetMenuTab = onSetMenuTab,
+                    onOpenLocator = onOpenLocator,
+                    onOpenAnnotations = onOpenAnnotations
+                )
+                ReaderDockTab.Brightness -> ReaderBrightnessDockPanel(
+                    prefs = state.displayPrefs,
+                    contentColor = contentColor,
+                    onBrightnessChange = onBrightnessChange,
+                    onUseSystemBrightnessChange = onUseSystemBrightnessChange,
+                    onEyeProtectionChange = onEyeProtectionChange
+                )
+                ReaderDockTab.Settings -> ReaderSettingsDockPanel(
+                    state = state,
+                    contentColor = contentColor,
+                    onToggleNightMode = onToggleNightMode,
+                    onOpenSubPanel = onOpenSubPanel,
+                    onOpenFullSettings = onOpenFullSettings,
+                    onApplyConfig = onApplyConfig
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderMenuDockPanel(
+    state: ReaderUiState,
+    contentColor: Color,
+    onSetMenuTab: (ReaderMenuTab) -> Unit,
+    onOpenLocator: (String) -> Unit,
+    onOpenAnnotations: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        MenuTabButton(
+            label = "目录",
+            selected = state.activeMenuTab == ReaderMenuTab.Toc,
+            contentColor = contentColor,
+            onClick = { onSetMenuTab(ReaderMenuTab.Toc) },
+            modifier = Modifier.weight(1f)
+        )
+        MenuTabButton(
+            label = "笔记",
+            selected = state.activeMenuTab == ReaderMenuTab.Notes,
+            contentColor = contentColor,
+            onClick = { onSetMenuTab(ReaderMenuTab.Notes) },
+            modifier = Modifier.weight(1f)
+        )
+        MenuTabButton(
+            label = "书签",
+            selected = state.activeMenuTab == ReaderMenuTab.Bookmarks,
+            contentColor = contentColor,
+            onClick = { onSetMenuTab(ReaderMenuTab.Bookmarks) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+
+    when (state.activeMenuTab) {
+        ReaderMenuTab.Toc -> {
+            when {
+                state.toc.isLoading -> {
+                    Text("目录加载中...", color = contentColor.copy(alpha = 0.72f))
+                }
+                state.toc.error != null -> {
+                    Text(state.toc.error.asString(), color = Color(0xFFE0614F))
+                }
+                state.toc.items.isEmpty() -> {
+                    Text("暂无目录数据", color = contentColor.copy(alpha = 0.72f))
+                }
+                else -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "已完结 共${state.toc.items.size}章",
+                            color = contentColor.copy(alpha = 0.62f),
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Text(
+                                text = "下载",
+                                color = contentColor.copy(alpha = 0.62f),
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                            )
+                            Text(
+                                text = "正序",
+                                color = contentColor.copy(alpha = 0.62f),
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.height(280.dp),
+                        verticalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        itemsIndexed(state.toc.items) { index, item ->
+                            TextButton(
+                                onClick = { onOpenLocator(item.locatorEncoded) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = item.title,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = (item.depth * 10).dp),
+                                    color = if (index == 0) ReaderTokens.Palette.AccentBlue else contentColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (index < state.toc.items.lastIndex) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(contentColor.copy(alpha = 0.1f))
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ReaderMenuTab.Notes -> {
+            ReaderDockPlaceholder(
+                title = "暂无笔记",
+                desc = "可在阅读时选中文本后添加笔记",
+                action = "打开笔记页",
+                contentColor = contentColor,
+                onAction = onOpenAnnotations
+            )
+        }
+
+        ReaderMenuTab.Bookmarks -> {
+            ReaderDockPlaceholder(
+                title = "暂无书签",
+                desc = "在更多功能中添加后会显示在这里",
+                action = "继续阅读",
+                contentColor = contentColor,
+                onAction = {}
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReaderBrightnessDockPanel(
+    prefs: ReaderDisplayPrefs,
+    contentColor: Color,
+    onBrightnessChange: (Float) -> Unit,
+    onUseSystemBrightnessChange: (Boolean) -> Unit,
+    onEyeProtectionChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Outlined.WbSunny, contentDescription = null, tint = contentColor.copy(alpha = 0.64f))
+        Spacer(modifier = Modifier.width(8.dp))
+        Slider(
+            value = prefs.brightness,
+            onValueChange = onBrightnessChange,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Icon(Icons.Outlined.WbSunny, contentDescription = null, tint = contentColor)
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Surface(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(12.dp),
+            color = contentColor.copy(alpha = 0.08f)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("系统亮度", color = contentColor)
+                Switch(checked = prefs.useSystemBrightness, onCheckedChange = onUseSystemBrightnessChange)
+            }
+        }
+        Surface(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(12.dp),
+            color = contentColor.copy(alpha = 0.08f)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("护眼模式", color = contentColor)
+                Switch(checked = prefs.eyeProtection, onCheckedChange = onEyeProtectionChange)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReaderSettingsDockPanel(
+    state: ReaderUiState,
+    contentColor: Color,
+    onToggleNightMode: () -> Unit,
+    onOpenSubPanel: (ReaderSettingsPanel) -> Unit,
+    onOpenFullSettings: () -> Unit,
+    onApplyConfig: (com.ireader.reader.api.render.RenderConfig, Boolean) -> Unit
+) {
+    val current = state.currentConfig as? com.ireader.reader.api.render.RenderConfig.ReflowText
+    if (current == null) {
+        ReaderDockPlaceholder(
+            title = "当前文档为固定排版",
+            desc = "可在完整设置页中调整阅读偏好",
+            action = "打开完整设置",
+            contentColor = contentColor,
+            onAction = onOpenFullSettings
+        )
+        return
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Surface(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(10.dp),
+            color = contentColor.copy(alpha = 0.08f)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = {
+                        onApplyConfig(current.copy(fontSizeSp = (current.fontSizeSp - 1f).coerceAtLeast(12f)), false)
+                    }
+                ) {
+                    Text("A-", color = contentColor)
+                }
+                Text(text = current.fontSizeSp.roundToInt().toString(), color = contentColor.copy(alpha = 0.75f))
+                TextButton(
+                    onClick = {
+                        onApplyConfig(current.copy(fontSizeSp = (current.fontSizeSp + 1f).coerceAtMost(30f)), false)
+                    }
+                ) {
+                    Text("A+", color = contentColor)
+                }
+            }
+        }
+        TextButton(
+            onClick = { onOpenSubPanel(ReaderSettingsPanel.Font) },
+            modifier = Modifier
+                .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+        ) {
+            Text("字体", color = contentColor)
+        }
+        TextButton(
+            onClick = { onOpenSubPanel(ReaderSettingsPanel.Spacing) },
+            modifier = Modifier
+                .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+        ) {
+            Text("间距", color = contentColor)
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TextButton(
+            onClick = { onOpenSubPanel(ReaderSettingsPanel.PageTurn) },
+            modifier = Modifier
+                .weight(1f)
+                .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+        ) {
+            Text("翻页方式", color = contentColor)
+        }
+        TextButton(
+            onClick = { onOpenSubPanel(ReaderSettingsPanel.MoreBackground) },
+            modifier = Modifier
+                .weight(1f)
+                .background(contentColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+        ) {
+            Text("更多背景", color = contentColor)
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("夜间模式", color = contentColor)
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(checked = state.isNightMode, onCheckedChange = { onToggleNightMode() })
+        }
+        TextButton(onClick = onOpenFullSettings) {
+            Text("更多设置 >", color = contentColor.copy(alpha = 0.72f))
+        }
+    }
+}
+
+@Composable
+private fun ReaderDockPlaceholder(
+    title: String,
+    desc: String,
+    action: String,
+    contentColor: Color,
+    onAction: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        color = contentColor.copy(alpha = 0.06f),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(title, color = contentColor, style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(desc, color = contentColor.copy(alpha = 0.72f), style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+            Spacer(modifier = Modifier.height(10.dp))
+            TextButton(onClick = onAction) {
+                Text(action, color = ReaderTokens.Palette.AccentBlue)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuTabButton(
+    label: String,
+    selected: Boolean,
+    contentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = modifier
+            .background(
+                color = if (selected) Color.White.copy(alpha = 0.24f) else Color.Transparent,
+                shape = RoundedCornerShape(999.dp)
+            )
+    ) {
+        Text(
+            text = label,
+            color = if (selected) contentColor else contentColor.copy(alpha = 0.64f)
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BrightnessSheet(
@@ -545,7 +1035,7 @@ private fun BrightnessSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(horizontal = 22.dp, vertical = 18.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text("亮度", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
@@ -562,10 +1052,14 @@ private fun BrightnessSheet(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(shape = RoundedCornerShape(12.dp), color = rowBg) {
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    color = rowBg
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -577,13 +1071,11 @@ private fun BrightnessSheet(
                         Switch(checked = useSystemBrightness, onCheckedChange = onUseSystemBrightnessChange)
                     }
                 }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(shape = RoundedCornerShape(12.dp), color = rowBg) {
+                Surface(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    color = rowBg
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -736,6 +1228,22 @@ private fun ReaderFooter(
             }
         }
     }
+}
+
+@Composable
+private fun GestureHintBar(
+    modifier: Modifier = Modifier,
+    isNightMode: Boolean
+) {
+    val color = if (isNightMode) Color(0xFF555555) else Color(0xFFD4D0C8)
+    Box(
+        modifier = modifier
+            .navigationBarsPadding()
+            .padding(bottom = 3.dp)
+            .width(128.dp)
+            .height(4.dp)
+            .background(color = color, shape = RoundedCornerShape(999.dp))
+    )
 }
 
 @Composable

@@ -14,6 +14,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ireader.core.designsystem.ReaderTokens.Shape.ActionRadius
+import com.ireader.core.designsystem.ReaderTokens.Shape.BottomBarRadius
+import com.ireader.core.designsystem.ReaderTokens.Shape.SurfaceRadius
 
 private val IReaderLightColorScheme = lightColorScheme(
     primary = Color(0xFF0F6EEC),
@@ -69,8 +72,8 @@ private val IReaderTypography = Typography(
     headlineMedium = TextStyle(
         fontFamily = IReaderSerifFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 26.sp,
-        lineHeight = 34.sp
+        fontSize = 24.sp,
+        lineHeight = 32.sp
     ),
     titleLarge = TextStyle(
         fontFamily = IReaderSerifFamily,
@@ -81,7 +84,7 @@ private val IReaderTypography = Typography(
     titleMedium = TextStyle(
         fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 17.sp,
+        fontSize = 16.sp,
         lineHeight = 22.sp
     ),
     bodyLarge = TextStyle(
@@ -94,7 +97,7 @@ private val IReaderTypography = Typography(
         fontFamily = IReaderSansFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
-        lineHeight = 22.sp
+        lineHeight = 23.sp
     ),
     bodySmall = TextStyle(
         fontFamily = IReaderSansFamily,
@@ -116,7 +119,7 @@ private val IReaderTypography = Typography(
     ),
     labelSmall = TextStyle(
         fontFamily = IReaderSansFamily,
-        fontWeight = FontWeight.Normal,
+        fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         lineHeight = 14.sp
     )
@@ -135,9 +138,9 @@ fun IReaderTheme(content: @Composable () -> Unit) {
         typography = IReaderTypography,
         shapes = androidx.compose.material3.Shapes(
             extraSmall = RoundedCornerShape(4.dp),
-            small = RoundedCornerShape(12.dp),
-            medium = RoundedCornerShape(16.dp),
-            large = RoundedCornerShape(22.dp),
+            small = RoundedCornerShape(ActionRadius),
+            medium = RoundedCornerShape(SurfaceRadius),
+            large = RoundedCornerShape(BottomBarRadius),
             extraLarge = RoundedCornerShape(28.dp)
         ),
         content = content

@@ -80,7 +80,10 @@ fun ReaderScreen(
     BackHandler(enabled = state.sheet != ReaderSheet.None) {
         vm.dispatch(ReaderIntent.BackInSheetHierarchy)
     }
-    BackHandler(enabled = state.sheet == ReaderSheet.None && !state.chromeVisible) {
+    BackHandler(enabled = state.sheet == ReaderSheet.None && state.activeDockTab != null) {
+        vm.dispatch(ReaderIntent.CloseDockPanel)
+    }
+    BackHandler(enabled = state.sheet == ReaderSheet.None && state.activeDockTab == null && !state.chromeVisible) {
         onBack()
     }
 

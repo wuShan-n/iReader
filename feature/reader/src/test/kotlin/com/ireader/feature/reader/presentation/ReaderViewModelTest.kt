@@ -73,6 +73,35 @@ class ReaderViewModelTest {
         assertEquals(config, vm.state.value.currentConfig)
     }
 
+    @Test
+    fun `open menu should activate dock tab and keep sheet closed`() = runTest {
+        val vm = newViewModel(bookById = emptyMap())
+
+        vm.dispatch(ReaderIntent.OpenMenu)
+
+        assertEquals(ReaderSheet.None, vm.state.value.sheet)
+        assertEquals(ReaderDockTab.Menu, vm.state.value.activeDockTab)
+    }
+
+    @Test
+    fun `toggle dock tab should collapse when tapping same tab again`() = runTest {
+        val vm = newViewModel(bookById = emptyMap())
+
+        vm.dispatch(ReaderIntent.ToggleDockTab(ReaderDockTab.Menu))
+        vm.dispatch(ReaderIntent.ToggleDockTab(ReaderDockTab.Menu))
+
+        assertEquals(null, vm.state.value.activeDockTab)
+    }
+
+    @Test
+    fun `set menu tab should update active tab`() = runTest {
+        val vm = newViewModel(bookById = emptyMap())
+
+        vm.dispatch(ReaderIntent.SetMenuTab(ReaderMenuTab.Notes))
+
+        assertEquals(ReaderMenuTab.Notes, vm.state.value.activeMenuTab)
+    }
+
     private fun newViewModel(
         bookById: Map<Long, BookEntity>,
         settingsStore: FakeReaderSettingsStore = FakeReaderSettingsStore()

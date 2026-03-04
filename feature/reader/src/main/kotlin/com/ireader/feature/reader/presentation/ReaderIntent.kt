@@ -18,6 +18,10 @@ sealed interface ReaderIntent {
     data object ToggleChrome : ReaderIntent
     data object OpenAnnotations : ReaderIntent
     data object OpenToc : ReaderIntent
+    data object OpenMenu : ReaderIntent
+    data class ToggleDockTab(val tab: ReaderDockTab) : ReaderIntent
+    data object CloseDockPanel : ReaderIntent
+    data class SetMenuTab(val tab: ReaderMenuTab) : ReaderIntent
     data object OpenSearch : ReaderIntent
     data object OpenBrightness : ReaderIntent
     data object OpenSettings : ReaderIntent

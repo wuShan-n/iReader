@@ -23,6 +23,24 @@ enum class ReaderSheet {
     FullSettings
 }
 
+enum class ReaderMenuTab {
+    Toc,
+    Notes,
+    Bookmarks
+}
+
+enum class ReaderDockTab {
+    Menu,
+    Brightness,
+    Settings
+}
+
+data class ReaderOverlayState(
+    val showTopBar: Boolean = true,
+    val showBottomBar: Boolean = true,
+    val showGestureHint: Boolean = true
+)
+
 data class PasswordPrompt(
     val reason: UiText = UiText.Dynamic("This file requires a password"),
     val lastTried: String? = null
@@ -60,6 +78,9 @@ data class ReaderUiState(
     val isRenderingFinal: Boolean = false,
     val chromeVisible: Boolean = true,
     val sheet: ReaderSheet = ReaderSheet.None,
+    val activeDockTab: ReaderDockTab? = null,
+    val activeMenuTab: ReaderMenuTab = ReaderMenuTab.Toc,
+    val overlayState: ReaderOverlayState = ReaderOverlayState(),
     val capabilities: DocumentCapabilities? = null,
     val renderState: RenderState? = null,
     val page: RenderPage? = null,

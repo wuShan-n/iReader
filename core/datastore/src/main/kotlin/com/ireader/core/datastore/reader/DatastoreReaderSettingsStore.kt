@@ -64,7 +64,22 @@ class DatastoreReaderSettingsStore @Inject constructor(
         }
     }
 
-    private val defaultReflow = RenderConfig.ReflowText()
+    private val defaultReflow = RenderConfig.ReflowText(
+        fontSizeSp = 20f,
+        lineHeightMult = 1.85f,
+        paragraphSpacingDp = 10f,
+        paragraphIndentEm = 2.0f,
+        pagePaddingDp = 20f,
+        fontFamilyName = "serif",
+        textAlign = TextAlignMode.JUSTIFY,
+        breakStrategy = BreakStrategyMode.BALANCED,
+        hyphenationMode = HyphenationMode.NORMAL,
+        includeFontPadding = false,
+        cjkLineBreakStrict = true,
+        hangingPunctuation = false,
+        pageInsetMode = PageInsetMode.RELAXED,
+        extra = mapOf(PAGE_TURN_EXTRA_KEY to PageTurnMode.COVER_HORIZONTAL.storageValue)
+    )
     private val defaultFixed = RenderConfig.FixedPage()
     private val defaultDisplay = ReaderDisplayPrefs()
 

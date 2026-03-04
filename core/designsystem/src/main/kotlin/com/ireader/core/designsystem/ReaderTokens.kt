@@ -24,6 +24,10 @@ object ReaderTokens {
         val LibraryPillNight = Color(0xFF32312F)
         val LibrarySearchDay = Color(0xFFFFFBF6)
         val LibrarySearchNight = Color(0xFF252421)
+        val LibraryCardDay = Color(0xFFFFFCF8)
+        val LibraryCardNight = Color(0xFF1F1F1F)
+        val LibraryDividerDay = Color(0x12000000)
+        val LibraryDividerNight = Color(0x29FFFFFF)
 
         val AccentBlue = Color(0xFF0F6EEC)
         val AccentBlueSoft = Color(0xFFDCE9FF)
@@ -32,6 +36,9 @@ object ReaderTokens {
         val AccentRed = Color(0xFFCF4A3A)
         val Success = Color(0xFF23855A)
         val Warning = Color(0xFFBE6A11)
+        val SecondaryTextDay = Color(0xFF6F685E)
+        val SecondaryTextNight = Color(0xFFA8A39B)
+        val Scrim = Color(0x4D000000)
     }
 
     object Shape {
@@ -40,6 +47,10 @@ object ReaderTokens {
         val SheetRadius = 24.dp
         val InputRadius = 18.dp
         val CapsuleRadius = 999.dp
+        val TopBarRadius = 18.dp
+        val BottomBarRadius = 20.dp
+        val ActionRadius = 12.dp
+        val CardRadius = 14.dp
     }
 
     object Space {
@@ -55,5 +66,10 @@ object ReaderTokens {
         const val Fast = 160
         const val Medium = 240
         const val Slow = 320
+        const val SheetEnter = 280
+        const val SheetExit = 180
+        const val ChromeIn = 220
+        const val ChromeOut = 170
+        const val StaggerFast = 70
     }
 }

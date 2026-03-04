@@ -27,7 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.feature.reader.presentation.SearchState
 import com.ireader.feature.reader.presentation.asString
 
@@ -35,16 +37,19 @@ import com.ireader.feature.reader.presentation.asString
 @Composable
 fun SearchSheet(
     state: SearchState,
+    isNightMode: Boolean,
     onClose: () -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onClickResult: (locatorEncoded: String) -> Unit
 ) {
     var query by remember(state.query) { mutableStateOf(state.query) }
+    val container = if (isNightMode) ReaderTokens.Palette.ReaderPanelElevatedNight else ReaderTokens.Palette.ReaderPanelElevatedDay
+    val card = if (isNightMode) Color(0xFF2B2B2B) else Color(0xFFF2EEE6)
 
     ModalBottomSheet(
         onDismissRequest = onClose,
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = container
     ) {
         Column(
             modifier = Modifier
@@ -65,6 +70,10 @@ fun SearchSheet(
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = card,
+                    unfocusedContainerColor = card
+                ),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -115,7 +124,7 @@ fun SearchSheet(
                     items(state.results) { item ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
+                            color = card
                         ) {
                             TextButton(
                                 modifier = Modifier.fillMaxWidth(),
