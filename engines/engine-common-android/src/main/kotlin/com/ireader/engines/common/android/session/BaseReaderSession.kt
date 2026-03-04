@@ -4,6 +4,7 @@ import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.api.provider.ResourceProvider
+import com.ireader.reader.api.provider.SelectionController
 import com.ireader.reader.api.provider.SearchProvider
 import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.api.provider.TextProvider
@@ -19,7 +20,8 @@ open class BaseReaderSession(
     final override val text: TextProvider? = null,
     final override val annotations: AnnotationProvider? = null,
     final override val resources: ResourceProvider? = null,
-    final override val selection: SelectionProvider? = null
+    final override val selection: SelectionProvider? = null,
+    final override val selectionController: SelectionController? = null
 ) : ReaderSession {
 
     private val closed = AtomicBoolean(false)

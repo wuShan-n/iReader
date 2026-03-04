@@ -133,7 +133,7 @@ class DatastoreReaderSettingsStoreTest {
     }
 
     @Test
-    fun `default reflow break strategy should be simple`() = runTest {
+    fun `default reflow break strategy should be balanced`() = runTest {
         val dataStore = createDataStore(
             scope = this,
             testFile = File(temporaryFolder.root, "reader_settings_break_strategy_default.preferences_pb")
@@ -142,7 +142,7 @@ class DatastoreReaderSettingsStoreTest {
 
         val config = store.getReflowConfig()
 
-        assertEquals(BreakStrategyMode.SIMPLE, config.breakStrategy)
+        assertEquals(BreakStrategyMode.BALANCED, config.breakStrategy)
     }
 
     @Test

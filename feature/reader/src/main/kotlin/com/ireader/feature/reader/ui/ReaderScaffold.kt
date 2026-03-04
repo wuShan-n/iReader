@@ -204,6 +204,18 @@ fun ReaderScaffold(
                         )
                     },
                     onLinkActivated = { link -> onIntent(ReaderIntent.ActivateLink(link)) },
+                    onSelectionStart = { locator ->
+                        onIntent(ReaderIntent.SelectionStart(locator))
+                    },
+                    onSelectionUpdate = { locator ->
+                        onIntent(ReaderIntent.SelectionUpdate(locator))
+                    },
+                    onSelectionFinish = {
+                        onIntent(ReaderIntent.SelectionFinish)
+                    },
+                    onSelectionClear = {
+                        onIntent(ReaderIntent.ClearSelection)
+                    },
                 )
             }
 

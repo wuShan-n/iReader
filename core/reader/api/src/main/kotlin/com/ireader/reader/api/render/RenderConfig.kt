@@ -45,7 +45,7 @@ sealed interface RenderConfig {
         val pagePaddingDp: Float = 16f,
         val fontFamilyName: String? = null,
         val textAlign: TextAlignMode = TextAlignMode.JUSTIFY,
-        val breakStrategy: BreakStrategyMode = BreakStrategyMode.SIMPLE,
+        val breakStrategy: BreakStrategyMode = BreakStrategyMode.BALANCED,
         val hyphenationMode: HyphenationMode = HyphenationMode.NORMAL,
         val includeFontPadding: Boolean = true,
         val pageInsetMode: PageInsetMode = PageInsetMode.RELAXED,

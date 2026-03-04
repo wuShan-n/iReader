@@ -30,7 +30,7 @@ import com.ireader.core.database.progress.ProgressEntity
         ImportItemEntity::class,
         AnnotationEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(DbConverters::class)

@@ -49,7 +49,7 @@ internal class TxtDocument(
             search = true,
             textExtraction = true,
             annotations = annotationProviderFactory != null,
-            selection = false,
+            selection = true,
             links = true
         )
 
@@ -90,6 +90,7 @@ internal class TxtDocument(
                     documentKey = id.value,
                     store = store,
                     meta = meta,
+                    initialLocator = initialLocator,
                     initialOffset = initialOffset,
                     initialConfig = effectiveConfig,
                     maxPageCache = maxPageCache,

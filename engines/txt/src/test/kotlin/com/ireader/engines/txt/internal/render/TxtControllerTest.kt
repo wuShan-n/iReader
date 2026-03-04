@@ -164,6 +164,7 @@ class TxtControllerTest {
             documentKey = "doc-test",
             store = store,
             meta = meta,
+            initialLocator = null,
             initialOffset = 0L,
             initialConfig = RenderConfig.ReflowText(),
             maxPageCache = 8,

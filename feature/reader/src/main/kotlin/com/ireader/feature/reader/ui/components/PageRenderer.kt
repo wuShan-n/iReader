@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,7 +41,9 @@ import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
+import com.ireader.reader.api.render.TextMapping
 import com.ireader.reader.model.DocumentLink
+import com.ireader.reader.model.Locator
 
 @Composable
 fun PageRenderer(
@@ -50,6 +53,10 @@ fun PageRenderer(
     onBackgroundTap: (Offset, IntSize) -> Unit,
     onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
+    onSelectionStart: (Locator) -> Unit,
+    onSelectionUpdate: (Locator) -> Unit,
+    onSelectionFinish: () -> Unit,
+    onSelectionClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val page = state.page
@@ -67,7 +74,10 @@ fun PageRenderer(
         modifier
             .fillMaxSize()
             .pointerInput(page.id.value) {
-                detectTapGestures(onTap = { tap -> onBackgroundTap(tap, size) })
+                detectTapGestures(onTap = { tap ->
+                    onSelectionClear()
+                    onBackgroundTap(tap, size)
+                })
             }
     }
 
@@ -81,6 +91,10 @@ fun PageRenderer(
                 onBackgroundTap = onBackgroundTap,
                 onDragEnd = onDragEnd,
                 onLinkActivated = onLinkActivated,
+                onSelectionStart = onSelectionStart,
+                onSelectionUpdate = onSelectionUpdate,
+                onSelectionFinish = onSelectionFinish,
+                onSelectionClear = onSelectionClear,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -91,8 +105,12 @@ fun PageRenderer(
                 content = content,
                 links = page.links,
                 decorations = page.decorations,
+                pageLocator = page.locator,
                 onBackgroundTap = onBackgroundTap,
                 onLinkActivated = onLinkActivated,
+                onSelectionStart = onSelectionStart,
+                onSelectionFinish = onSelectionFinish,
+                onSelectionClear = onSelectionClear,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -122,6 +140,10 @@ private fun AnimatedTextPage(
     onBackgroundTap: (Offset, IntSize) -> Unit,
     onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
+    onSelectionStart: (Locator) -> Unit,
+    onSelectionUpdate: (Locator) -> Unit,
+    onSelectionFinish: () -> Unit,
+    onSelectionClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val mode = state.pageTurnMode
@@ -194,6 +216,17 @@ private fun AnimatedTextPage(
                     }
                 },
                 onDragEnd = onDragEnd,
+                resolveLocatorAt = { tap ->
+                    hitTestTextLocator(
+                        tap = tap,
+                        textView = textViewRef,
+                        mapping = targetContent.mapping
+                    )
+                },
+                onSelectionStart = onSelectionStart,
+                onSelectionUpdate = onSelectionUpdate,
+                onSelectionFinish = onSelectionFinish,
+                onSelectionClear = onSelectionClear,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -211,6 +244,11 @@ private fun TextGestureOverlay(
     mode: PageTurnMode,
     onTap: (Offset, IntSize) -> Unit,
     onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
+    resolveLocatorAt: (Offset) -> Locator?,
+    onSelectionStart: (Locator) -> Unit,
+    onSelectionUpdate: (Locator) -> Unit,
+    onSelectionFinish: () -> Unit,
+    onSelectionClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var dragDeltaPx by remember(pageId, mode) { mutableFloatStateOf(0f) }
@@ -241,8 +279,30 @@ private fun TextGestureOverlay(
             .pointerInput(pageId) {
                 detectTapGestures(
                     onTap = { tap ->
+                        onSelectionClear()
                         onTap(tap, size)
+                    },
+                    onLongPress = { tap ->
+                        val locator = resolveLocatorAt(tap) ?: return@detectTapGestures
+                        onSelectionStart(locator)
+                        onSelectionFinish()
                     }
+                )
+            }
+            .pointerInput(pageId) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { position ->
+                        val locator = resolveLocatorAt(position) ?: return@detectDragGesturesAfterLongPress
+                        onSelectionStart(locator)
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        val locator = resolveLocatorAt(change.position)
+                            ?: return@detectDragGesturesAfterLongPress
+                        onSelectionUpdate(locator)
+                    },
+                    onDragEnd = onSelectionFinish,
+                    onDragCancel = onSelectionFinish
                 )
             }
             .then(dragModifier)
@@ -259,9 +319,27 @@ private fun hitTestTextLink(
     textView: TextView?,
     links: List<TextLinkHit>
 ): DocumentLink? {
+    val charOffset = hitTestTextCharOffset(tap = tap, textView = textView) ?: return null
+    if (links.isEmpty()) return null
+    val match = links.firstOrNull { hit -> charOffset in hit.range } ?: return null
+    return match.link
+}
+
+private fun hitTestTextLocator(
+    tap: Offset,
+    textView: TextView?,
+    mapping: TextMapping?
+): Locator? {
+    val charOffset = hitTestTextCharOffset(tap = tap, textView = textView) ?: return null
+    return mapping?.locatorAt(charOffset)
+}
+
+private fun hitTestTextCharOffset(
+    tap: Offset,
+    textView: TextView?
+): Int? {
     val view = textView ?: return null
     val layout = view.layout ?: return null
-    if (links.isEmpty()) return null
 
     val localX = tap.x - view.totalPaddingLeft + view.scrollX
     val localY = tap.y - view.totalPaddingTop + view.scrollY
@@ -277,9 +355,7 @@ private fun hitTestTextLink(
     if (localX < lineLeft || localX > lineRight) {
         return null
     }
-    val charOffset = layout.getOffsetForHorizontal(line, localX)
-    val match = links.firstOrNull { hit -> charOffset in hit.range } ?: return null
-    return match.link
+    return layout.getOffsetForHorizontal(line, localX)
 }
 
 private fun buildPageTransform(

@@ -22,6 +22,8 @@ import com.ireader.core.database.book.BookEntity
 data class ProgressEntity(
     @PrimaryKey val bookId: Long,
     val locatorJson: String,
+    val pageAnchorProfile: String? = null,
+    val pageAnchorsJson: String? = null,
     val progression: Double,
     val updatedAtEpochMs: Long
 )

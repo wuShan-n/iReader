@@ -14,6 +14,7 @@ import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.api.provider.ResourceProvider
 import com.ireader.reader.api.provider.SearchProvider
+import com.ireader.reader.api.provider.SelectionController
 import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.api.render.InvalidateReason
@@ -158,6 +159,7 @@ private class FakeSession : ReaderSession {
     override val annotations: AnnotationProvider? = null
     override val resources: ResourceProvider? = null
     override val selection: SelectionProvider? = null
+    override val selectionController: SelectionController? = null
     override fun close() = Unit
 }
 

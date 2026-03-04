@@ -58,7 +58,7 @@ class AnnotationsViewModelTest {
             bookEntity = sampleBook(bookId = 7L, documentId = "doc-7"),
             progressEntity = ProgressEntity(
                 bookId = 7L,
-                locatorJson = locatorCodec.encode(Locator(LocatorSchemes.TXT_BLOCK, "128:0")),
+                locatorJson = locatorCodec.encode(Locator(LocatorSchemes.TXT_OFFSET, "128")),
                 progression = 0.1,
                 updatedAtEpochMs = 1L
             )
@@ -78,7 +78,7 @@ class AnnotationsViewModelTest {
     fun `save and delete should update list state`() = runTest {
         val locatorCodec = FakeLocatorCodec()
         val store = FakeAnnotationStore()
-        val locator = Locator(LocatorSchemes.TXT_BLOCK, "16:0")
+        val locator = Locator(LocatorSchemes.TXT_OFFSET, "16")
         store.seed(
             documentId = DocumentId("doc-edit"),
             annotations = listOf(

@@ -5,7 +5,6 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.AnnotationQuery
 import com.ireader.reader.api.provider.AnnotationStore
-import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorSchemes
@@ -168,15 +167,5 @@ internal class StoredPdfAnnotationProvider(
                 }
             }
         )
-    }
-}
-
-internal class EmptyPdfSelectionProvider : SelectionProvider {
-    override suspend fun currentSelection(): ReaderResult<SelectionProvider.Selection?> {
-        return ReaderResult.Ok(null)
-    }
-
-    override suspend fun clearSelection(): ReaderResult<Unit> {
-        return ReaderResult.Ok(Unit)
     }
 }

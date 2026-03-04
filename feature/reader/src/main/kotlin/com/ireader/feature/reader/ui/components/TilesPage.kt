@@ -31,6 +31,7 @@ import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.TileRequest
 import com.ireader.reader.model.DocumentLink
+import com.ireader.reader.model.Locator
 import com.ireader.reader.model.NormalizedPoint
 import kotlin.math.ceil
 import kotlin.math.min
@@ -47,8 +48,12 @@ fun TilesPage(
     content: RenderContent.Tiles,
     links: List<DocumentLink>,
     decorations: List<Decoration>,
+    pageLocator: Locator,
     onBackgroundTap: (Offset, IntSize) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
+    onSelectionStart: (Locator) -> Unit,
+    onSelectionFinish: () -> Unit,
+    onSelectionClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -186,22 +191,44 @@ fun TilesPage(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(pageId, links, pageWidth, pageHeight, drawScale, pageLeft, pageTop) {
-                    detectTapGestures { tap ->
-                        val link = hitTestLink(
-                            tap = tap,
-                            links = links,
-                            pageWidth = pageWidth,
-                            pageHeight = pageHeight,
-                            drawScale = drawScale,
-                            pageLeft = pageLeft,
-                            pageTop = pageTop
-                        )
-                        if (link != null) {
-                            onLinkActivated(link)
-                        } else {
-                            onBackgroundTap(tap, size)
+                    detectTapGestures(
+                        onTap = { tap ->
+                            onSelectionClear()
+                            val link = hitTestLink(
+                                tap = tap,
+                                links = links,
+                                pageWidth = pageWidth,
+                                pageHeight = pageHeight,
+                                drawScale = drawScale,
+                                pageLeft = pageLeft,
+                                pageTop = pageTop
+                            )
+                            if (link != null) {
+                                onLinkActivated(link)
+                            } else {
+                                onBackgroundTap(tap, size)
+                            }
+                        },
+                        onLongPress = { tap ->
+                            val normalized = normalizedPagePointOrNull(
+                                tap = tap,
+                                pageWidth = pageWidth,
+                                pageHeight = pageHeight,
+                                drawScale = drawScale,
+                                pageLeft = pageLeft,
+                                pageTop = pageTop
+                            ) ?: return@detectTapGestures
+                            onSelectionStart(
+                                pageLocator.copy(
+                                    extras = pageLocator.extras + mapOf(
+                                        "hitX" to normalized.x.toString(),
+                                        "hitY" to normalized.y.toString()
+                                    )
+                                )
+                            )
+                            onSelectionFinish()
                         }
-                    }
+                    )
                 }
                 .pointerInput(pageId) {
                     detectTransformGestures { centroid, pan, gestureZoom, _ ->
@@ -268,17 +295,34 @@ private fun hitTestLink(
     pageLeft: Float,
     pageTop: Float
 ): DocumentLink? {
-    val pageX = (tap.x - pageLeft) / drawScale
-    val pageY = (tap.y - pageTop) / drawScale
-    if (pageX !in 0f..pageWidth || pageY !in 0f..pageHeight) return null
-
-    val point = NormalizedPoint(
-        x = (pageX / pageWidth).coerceIn(0f, 1f),
-        y = (pageY / pageHeight).coerceIn(0f, 1f)
-    )
+    val point = normalizedPagePointOrNull(
+        tap = tap,
+        pageWidth = pageWidth,
+        pageHeight = pageHeight,
+        drawScale = drawScale,
+        pageLeft = pageLeft,
+        pageTop = pageTop
+    ) ?: return null
     return links.firstOrNull { link ->
         link.bounds.orEmpty().any { rect -> rect.contains(point) }
     }
+}
+
+private fun normalizedPagePointOrNull(
+    tap: Offset,
+    pageWidth: Float,
+    pageHeight: Float,
+    drawScale: Float,
+    pageLeft: Float,
+    pageTop: Float
+): NormalizedPoint? {
+    val pageX = (tap.x - pageLeft) / drawScale
+    val pageY = (tap.y - pageTop) / drawScale
+    if (pageX !in 0f..pageWidth || pageY !in 0f..pageHeight) return null
+    return NormalizedPoint(
+        x = (pageX / pageWidth).coerceIn(0f, 1f),
+        y = (pageY / pageHeight).coerceIn(0f, 1f)
+    )
 }
 
 private data class TileKey(

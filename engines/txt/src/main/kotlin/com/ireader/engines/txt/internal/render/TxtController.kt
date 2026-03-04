@@ -44,6 +44,7 @@ import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
+import com.ireader.reader.model.LocatorExtraKeys
 import com.ireader.reader.model.LocatorRange
 import com.ireader.reader.model.Progression
 import java.util.Locale
@@ -74,7 +75,7 @@ private fun initialRenderState(
         locator = TxtBlockLocatorCodec.locatorForOffset(
             offset = start,
             maxOffset = safeMax,
-            extras = mapOf("progression" to String.format(Locale.US, "%.6f", percent))
+            extras = mapOf(LocatorExtraKeys.PROGRESSION to String.format(Locale.US, "%.6f", percent))
         ),
         progression = Progression(
             percent = percent,
@@ -92,6 +93,7 @@ internal class TxtController(
     private val documentKey: String,
     private val store: Utf16TextStore,
     private val meta: TxtMeta,
+    private val initialLocator: Locator?,
     initialOffset: Long,
     initialConfig: RenderConfig.ReflowText,
     maxPageCache: Int,
@@ -131,6 +133,7 @@ internal class TxtController(
     private var pageCompletionJob: Job? = null
     private var annotationObserverJob: Job? = null
     private var annotationRevision: Long = 0L
+    private var restoredLocatorAnchors = false
 
     private val initialStart = initialOffset.coerceIn(0L, store.lengthChars)
     private val navigation = TxtNavigationState(initialStart)
@@ -448,8 +451,9 @@ internal class TxtController(
     }
 
     private fun updateStateLocked() {
+        val locatorExtras = paginationIndex.locatorExtras()
         stateMutable.value = stateMutable.value.copy(
-            locator = navigation.locatorFor(store.lengthChars),
+            locator = navigation.locatorFor(store.lengthChars, extras = locatorExtras),
             progression = navigation.progressionFor(store.lengthChars),
             nav = NavigationAvailability(
                 canGoPrev = navigation.canGoPrev(),
@@ -464,6 +468,10 @@ internal class TxtController(
             constraints = constraints,
             profileConfig = currentConfig
         )
+        if (!restoredLocatorAnchors) {
+            paginationIndex.mergeLocatorAnchors(initialLocator?.extras.orEmpty())
+            restoredLocatorAnchors = true
+        }
         pageCompletionJob?.cancel()
     }
 

@@ -11,6 +11,7 @@ import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.model.DocumentId
+import com.ireader.reader.model.Locator
 import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 
@@ -29,6 +30,7 @@ internal interface TxtControllerFactory {
         documentKey: String,
         store: Utf16TextStore,
         meta: TxtMeta,
+        initialLocator: Locator?,
         initialOffset: Long,
         initialConfig: RenderConfig.ReflowText,
         maxPageCache: Int,
@@ -45,6 +47,7 @@ internal object DefaultTxtControllerFactory : TxtControllerFactory {
         documentKey: String,
         store: Utf16TextStore,
         meta: TxtMeta,
+        initialLocator: Locator?,
         initialOffset: Long,
         initialConfig: RenderConfig.ReflowText,
         maxPageCache: Int,
@@ -58,6 +61,7 @@ internal object DefaultTxtControllerFactory : TxtControllerFactory {
             documentKey = documentKey,
             store = store,
             meta = meta,
+            initialLocator = initialLocator,
             initialOffset = initialOffset,
             initialConfig = initialConfig,
             maxPageCache = maxPageCache,

@@ -17,6 +17,7 @@ class ReaderSessionHandle(
     val annotations = session.annotations
     val resources = session.resources
     val selection = session.selection
+    val selectionController = session.selectionController
 
     override fun close() {
         // 逆序关闭更安全

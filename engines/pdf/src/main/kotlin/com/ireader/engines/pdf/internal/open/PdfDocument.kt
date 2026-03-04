@@ -3,9 +3,9 @@ package com.ireader.engines.pdf.internal.open
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.pdf.PdfEngineConfig
-import com.ireader.engines.pdf.internal.provider.EmptyPdfSelectionProvider
 import com.ireader.engines.pdf.internal.provider.InMemoryPdfAnnotationProvider
 import com.ireader.engines.pdf.internal.provider.PdfOutlineProvider
+import com.ireader.engines.pdf.internal.provider.PdfSelectionManager
 import com.ireader.engines.pdf.internal.provider.PdfSearchProvider
 import com.ireader.engines.pdf.internal.provider.PdfTextProvider
 import com.ireader.engines.pdf.internal.render.PdfController
@@ -46,7 +46,7 @@ internal class PdfDocument(
         search = openedPdf.backend.capabilities.search,
         textExtraction = openedPdf.backend.capabilities.textExtraction,
         annotations = true,
-        selection = false,
+        selection = openedPdf.backend.capabilities.textExtraction,
         links = openedPdf.backend.capabilities.links
     )
 
@@ -91,6 +91,14 @@ internal class PdfDocument(
         } else {
             null
         }
+        val selectionManager = if (capabilities.selection && textProvider != null) {
+            PdfSelectionManager(
+                pageCount = pageCount,
+                textProvider = textProvider
+            )
+        } else {
+            null
+        }
 
         val controller = PdfController(
             backend = openedPdf.backend,
@@ -113,7 +121,8 @@ internal class PdfDocument(
                 },
                 text = textProvider,
                 annotations = annotationProvider,
-                selection = EmptyPdfSelectionProvider()
+                selection = selectionManager,
+                selectionController = selectionManager
             )
         )
     }

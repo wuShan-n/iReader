@@ -15,16 +15,13 @@ object SoftBreakProcessor {
         paragraphIndentPx: Int,
         startsAtParagraphBoundary: Boolean
     ): CharSequence {
-        val normalized = when {
-            hardWrapLikely -> normalizeSoftBreaks(
+        val normalized = if (hardWrapLikely) {
+            normalizeSoftBreaks(
                 text = rawText,
                 preservePunctuationBoundaries = false
             )
-            shouldForceNormalizeSoftBreaks(rawText) -> normalizeSoftBreaks(
-                text = rawText,
-                preservePunctuationBoundaries = true
-            )
-            else -> NormalizedText(rawText, collectHardBreakPositions(rawText))
+        } else {
+            NormalizedText(rawText, collectHardBreakPositions(rawText))
         }
         if (paragraphSpacingPx <= 0 && paragraphIndentPx <= 0) {
             return normalized.text
@@ -101,99 +98,6 @@ object SoftBreakProcessor {
             i++
         }
         return NormalizedText(String(chars), hardBreaks.toIntArray())
-    }
-
-    private fun shouldForceNormalizeSoftBreaks(text: String): Boolean {
-        if (text.length < MIN_FORCE_NORMALIZE_TEXT_LENGTH) {
-            return false
-        }
-        val chars = text.toCharArray()
-        var totalBreaks = 0
-        var singleBreaks = 0
-        var softBreaks = 0
-        var listMarkerBreaks = 0
-        val lineLengths = ArrayList<Int>()
-        var lineStart = 0
-        var i = 0
-        while (i < chars.size) {
-            if (chars[i] == '\n') {
-                totalBreaks++
-                val prev = if (i > 0) chars[i - 1] else null
-                val next = if (i + 1 < chars.size) chars[i + 1] else null
-                if (prev != '\n' && next != '\n') {
-                    singleBreaks++
-                    val lineLength = (i - lineStart).coerceAtLeast(0)
-                    if (lineLength > 0) {
-                        lineLengths += lineLength
-                    }
-                    if (
-                        shouldTreatAsSoftBreak(
-                            chars = chars,
-                            index = i,
-                            preservePunctuationBoundaries = true
-                        )
-                    ) {
-                        softBreaks++
-                    }
-                    if (startsWithListMarker(chars, i + 1)) {
-                        listMarkerBreaks++
-                    }
-                }
-                lineStart = i + 1
-            }
-            i++
-        }
-        if (singleBreaks < MIN_SOFT_BREAK_CANDIDATES) {
-            return false
-        }
-        val ratio = softBreaks.toDouble() / singleBreaks.toDouble()
-        if (ratio >= FORCE_SOFT_BREAK_RATIO) {
-            return true
-        }
-        return matchesHardWrapLineWidthProfile(
-            lineLengths = lineLengths,
-            singleBreaks = singleBreaks,
-            totalBreaks = totalBreaks,
-            listMarkerBreaks = listMarkerBreaks
-        )
-    }
-
-    private fun matchesHardWrapLineWidthProfile(
-        lineLengths: List<Int>,
-        singleBreaks: Int,
-        totalBreaks: Int,
-        listMarkerBreaks: Int
-    ): Boolean {
-        if (totalBreaks <= 0 || lineLengths.size < MIN_PROFILE_LINE_SAMPLES) {
-            return false
-        }
-        val singleBreakRatio = singleBreaks.toDouble() / totalBreaks.toDouble()
-        if (singleBreakRatio < HARD_WRAP_PROFILE_SINGLE_BREAK_RATIO_MIN) {
-            return false
-        }
-        val listMarkerRatio = listMarkerBreaks.toDouble() / singleBreaks.toDouble()
-        if (listMarkerRatio > HARD_WRAP_PROFILE_LIST_MARKER_RATIO_MAX) {
-            return false
-        }
-
-        val sorted = lineLengths.sorted()
-        val median = percentile(sorted, 0.5)
-        if (median !in HARD_WRAP_PROFILE_MEDIAN_MIN..HARD_WRAP_PROFILE_MEDIAN_MAX) {
-            return false
-        }
-        val p20 = percentile(sorted, 0.2)
-        val p80 = percentile(sorted, 0.8)
-        return (p80 - p20) <= HARD_WRAP_PROFILE_SPREAD_MAX
-    }
-
-    private fun percentile(sortedValues: List<Int>, percentile: Double): Int {
-        if (sortedValues.isEmpty()) {
-            return 0
-        }
-        val rank = ((sortedValues.size - 1) * percentile)
-            .toInt()
-            .coerceIn(0, sortedValues.lastIndex)
-        return sortedValues[rank]
     }
 
     private fun startsWithListMarker(chars: CharArray, startIndex: Int): Boolean {
@@ -368,15 +272,6 @@ object SoftBreakProcessor {
 
     private val STRONG_PARAGRAPH_PUNCTUATION = setOf('。', '！', '？', '.', '!', '?', ';', '；', ':', '：')
     private const val MIN_INDENT_PARAGRAPH_CHARS = 12
-    private const val MIN_FORCE_NORMALIZE_TEXT_LENGTH = 240
-    private const val MIN_SOFT_BREAK_CANDIDATES = 5
-    private const val FORCE_SOFT_BREAK_RATIO = 0.40
-    private const val MIN_PROFILE_LINE_SAMPLES = 12
-    private const val HARD_WRAP_PROFILE_MEDIAN_MIN = 16
-    private const val HARD_WRAP_PROFILE_MEDIAN_MAX = 64
-    private const val HARD_WRAP_PROFILE_SPREAD_MAX = 28
-    private const val HARD_WRAP_PROFILE_SINGLE_BREAK_RATIO_MIN = 0.75
-    private const val HARD_WRAP_PROFILE_LIST_MARKER_RATIO_MAX = 0.25
     private val CHINESE_CHAPTER_REGEX = Regex("^\\s*第[0-9一二三四五六七八九十百千零〇两\\d]+[章节卷回部篇集].*")
     private val ENGLISH_CHAPTER_REGEX = Regex("^\\s*(chapter|part|prologue|epilogue)\\b", RegexOption.IGNORE_CASE)
     private val DIRECTORY_TITLE_REGEX = Regex("^(目录|目\\s*录|contents)$", RegexOption.IGNORE_CASE)

@@ -64,6 +64,10 @@ sealed interface ReaderIntent {
     data class GoTo(val locator: Locator) : ReaderIntent
     data class GoToProgress(val percent: Double) : ReaderIntent
     data class ActivateLink(val link: DocumentLink) : ReaderIntent
+    data class SelectionStart(val locator: Locator) : ReaderIntent
+    data class SelectionUpdate(val locator: Locator) : ReaderIntent
+    data object SelectionFinish : ReaderIntent
+    data object ClearSelection : ReaderIntent
 
     data class SearchQueryChanged(val query: String) : ReaderIntent
     data object ExecuteSearch : ReaderIntent

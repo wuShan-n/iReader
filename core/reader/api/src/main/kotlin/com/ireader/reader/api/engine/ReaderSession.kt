@@ -3,6 +3,7 @@ package com.ireader.reader.api.engine
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.api.provider.ResourceProvider
+import com.ireader.reader.api.provider.SelectionController
 import com.ireader.reader.api.provider.SearchProvider
 import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.api.provider.TextProvider
@@ -27,4 +28,5 @@ interface ReaderSession : Closeable {
     val annotations: AnnotationProvider?
     val resources: ResourceProvider? // EPUB 常用：给 WebView/资源加载器
     val selection: SelectionProvider?
+    val selectionController: SelectionController?
 }

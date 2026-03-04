@@ -30,8 +30,8 @@ class LinkDetectorTest {
         links.forEach { link ->
             val range = link.range
             assertNotNull(range)
-            assertEquals(LocatorSchemes.TXT_BLOCK, range!!.start.scheme)
-            assertEquals(LocatorSchemes.TXT_BLOCK, range.end.scheme)
+            assertEquals(LocatorSchemes.TXT_OFFSET, range!!.start.scheme)
+            assertEquals(LocatorSchemes.TXT_OFFSET, range.end.scheme)
         }
     }
 }

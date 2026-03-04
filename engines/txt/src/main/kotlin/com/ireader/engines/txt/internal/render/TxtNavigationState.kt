@@ -4,6 +4,7 @@ import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.common.android.reflow.ReflowPageSlice
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.model.Locator
+import com.ireader.reader.model.LocatorExtraKeys
 import com.ireader.reader.model.Progression
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -44,16 +45,19 @@ internal class TxtNavigationState(
         )
     }
 
-    fun locatorFor(maxOffset: Long): Locator {
+    fun locatorFor(maxOffset: Long, extras: Map<String, String> = emptyMap()): Locator {
         val percent = if (maxOffset == 0L) {
             0.0
         } else {
             currentStart.toDouble() / maxOffset.toDouble()
         }.coerceIn(0.0, 1.0)
+        val mergedExtras = extras + mapOf(
+            LocatorExtraKeys.PROGRESSION to String.format(Locale.US, "%.6f", percent)
+        )
         return TxtBlockLocatorCodec.locatorForOffset(
             offset = currentStart.coerceIn(0L, maxOffset),
             maxOffset = maxOffset,
-            extras = mapOf("progression" to String.format(Locale.US, "%.6f", percent))
+            extras = mergedExtras
         )
     }
 

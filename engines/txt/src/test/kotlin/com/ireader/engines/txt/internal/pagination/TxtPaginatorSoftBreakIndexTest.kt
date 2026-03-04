@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -65,6 +66,33 @@ class TxtPaginatorSoftBreakIndexTest {
                     )
                     assertFalse(page.text.contains('\n'))
                 }
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `pageAt should keep line breaks when hardWrapLikely is false and soft break index is missing`() = runBlocking {
+        val dir = Files.createTempDirectory("txt_paginator_raw_breaks").toFile()
+        val files = createBookFiles(dir)
+        val text = buildSoftWrappedText()
+        Utf16LeFileWriter(files.contentU16).use { writer ->
+            text.forEach(writer::writeChar)
+        }
+        try {
+            Utf16TextStore(files.contentU16).use { store ->
+                val paginator = ReflowPaginator(
+                    source = TxtTextSource(store),
+                    hardWrapLikely = false,
+                    softBreakIndex = null
+                )
+                val page = paginator.pageAt(
+                    startOffset = 0L,
+                    config = RenderConfig.ReflowText(),
+                    constraints = defaultConstraints()
+                )
+                assertTrue(page.text.contains('\n'))
             }
         } finally {
             dir.deleteRecursively()

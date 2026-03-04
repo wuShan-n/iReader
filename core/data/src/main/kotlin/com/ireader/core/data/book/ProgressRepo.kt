@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.map
 data class ProgressRecord(
     val bookId: Long,
     val locatorJson: String,
+    val pageAnchorProfile: String?,
+    val pageAnchorsJson: String?,
     val progression: Double,
     val updatedAtEpochMs: Long
 )
@@ -22,11 +24,25 @@ class ProgressRepo @Inject constructor(
 
     fun observeByBookId(bookId: Long): Flow<ProgressRecord?> = progressDao.observeByBookId(bookId).map { it?.toRecord() }
 
-    suspend fun upsert(bookId: Long, locatorJson: String, progression: Double, updatedAtEpochMs: Long) {
+    suspend fun upsert(
+        bookId: Long,
+        locatorJson: String,
+        progression: Double,
+        updatedAtEpochMs: Long,
+        pageAnchorProfile: String? = null,
+        pageAnchorsJson: String? = null
+    ) {
+        val existing = if (pageAnchorProfile == null && pageAnchorsJson == null) {
+            progressDao.getByBookId(bookId)
+        } else {
+            null
+        }
         progressDao.upsert(
             ProgressEntity(
                 bookId = bookId,
                 locatorJson = locatorJson,
+                pageAnchorProfile = pageAnchorProfile ?: existing?.pageAnchorProfile,
+                pageAnchorsJson = pageAnchorsJson ?: existing?.pageAnchorsJson,
                 progression = progression.coerceIn(0.0, 1.0),
                 updatedAtEpochMs = updatedAtEpochMs
             )
@@ -42,6 +58,8 @@ private fun ProgressEntity.toRecord(): ProgressRecord =
     ProgressRecord(
         bookId = bookId,
         locatorJson = locatorJson,
+        pageAnchorProfile = pageAnchorProfile,
+        pageAnchorsJson = pageAnchorsJson,
         progression = progression,
         updatedAtEpochMs = updatedAtEpochMs
     )

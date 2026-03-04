@@ -6,7 +6,8 @@ import com.ireader.reader.model.LocatorSchemes
 
 /**
  * TXT locator format:
- * value = "<blockStartOffset>:<charOffsetInBlock>"
+ * - preferred: scheme=txt.offset, value="<utf16Offset>"
+ * - legacy: scheme=txt.block, value="<blockStartOffset>:<charOffsetInBlock>"
  */
 internal object TxtBlockLocatorCodec {
 
@@ -17,11 +18,9 @@ internal object TxtBlockLocatorCodec {
     ): Locator {
         val safeMax = maxOffset.coerceAtLeast(0L)
         val safe = offset.coerceIn(0L, safeMax)
-        val blockStart = safe.floorToBlock()
-        val inBlock = (safe - blockStart).coerceAtLeast(0L)
         return Locator(
-            scheme = LocatorSchemes.TXT_BLOCK,
-            value = "$blockStart:$inBlock",
+            scheme = LocatorSchemes.TXT_OFFSET,
+            value = safe.toString(),
             extras = extras
         )
     }
@@ -38,10 +37,11 @@ internal object TxtBlockLocatorCodec {
     }
 
     fun parseOffset(locator: Locator): Long? {
-        if (locator.scheme != LocatorSchemes.TXT_BLOCK) {
-            return null
+        return when (locator.scheme) {
+            LocatorSchemes.TXT_OFFSET -> parseOffsetValue(locator.value)
+            LocatorSchemes.TXT_BLOCK -> parseLegacyBlockOffsetValue(locator.value)
+            else -> null
         }
-        return parseOffsetValue(locator.value)
     }
 
     fun parseOffset(locator: Locator, maxOffset: Long): Long? {
@@ -50,6 +50,11 @@ internal object TxtBlockLocatorCodec {
     }
 
     fun parseOffsetValue(value: String): Long? {
+        val offset = value.toLongOrNull() ?: return null
+        return offset.takeIf { it >= 0L }
+    }
+
+    fun parseLegacyBlockOffsetValue(value: String): Long? {
         val separator = value.indexOf(':')
         if (separator <= 0 || separator >= value.lastIndex) {
             return null
@@ -65,8 +70,6 @@ internal object TxtBlockLocatorCodec {
         }
         return sum
     }
-
-    private fun Long.floorToBlock(): Long = (this / BLOCK_CHARS) * BLOCK_CHARS
 
     private const val BLOCK_CHARS = 2048L
 }

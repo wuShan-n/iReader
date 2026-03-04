@@ -4,6 +4,7 @@ import com.ireader.engines.common.android.pagination.ReflowPaginationProfile
 import com.ireader.engines.common.pagination.PageMap
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.model.LocatorExtraKeys
 import java.io.File
 import java.util.TreeSet
 import kotlin.math.roundToInt
@@ -31,6 +32,39 @@ class ReflowPaginationIndexStore(
             .roundToInt()
             .coerceIn(0, pageStarts.size - 1)
         return pageStarts.elementAt(index)
+    }
+
+    fun locatorExtras(maxAnchors: Int = 96): Map<String, String> {
+        if (!hasActiveProfile()) return emptyMap()
+        val profile = profileKey ?: return emptyMap()
+        val anchors = sampledAnchors(maxAnchors = maxAnchors)
+        if (anchors.isEmpty()) {
+            return mapOf(LocatorExtraKeys.REFLOW_PAGE_PROFILE to profile)
+        }
+        return mapOf(
+            LocatorExtraKeys.REFLOW_PAGE_PROFILE to profile,
+            LocatorExtraKeys.REFLOW_PAGE_ANCHORS to anchors.joinToString(separator = ",")
+        )
+    }
+
+    fun mergeLocatorAnchors(locatorExtras: Map<String, String>) {
+        if (!hasActiveProfile()) return
+        val profile = locatorExtras[LocatorExtraKeys.REFLOW_PAGE_PROFILE] ?: return
+        if (profile != profileKey) return
+        val serialized = locatorExtras[LocatorExtraKeys.REFLOW_PAGE_ANCHORS] ?: return
+        val parsed = serialized
+            .split(',')
+            .asSequence()
+            .map { it.trim() }
+            .mapNotNull { it.toLongOrNull() }
+            .filter { it >= 0L }
+            .toList()
+        if (parsed.isEmpty()) return
+        val before = pageStarts.size
+        pageStarts.addAll(parsed)
+        if (pageStarts.size != before) {
+            dirty = true
+        }
     }
 
     fun reloadIfNeeded(
@@ -91,6 +125,22 @@ class ReflowPaginationIndexStore(
         dirty = false
     }
 
+    private fun sampledAnchors(maxAnchors: Int): List<Long> {
+        if (pageStarts.isEmpty()) return emptyList()
+        val target = maxAnchors.coerceAtLeast(1)
+        if (pageStarts.size <= target) return pageStarts.toList()
+        if (target == 1) return listOf(pageStarts.first())
+
+        val values = pageStarts.toList()
+        val step = (values.size - 1).toDouble() / (target - 1).toDouble()
+        return buildList(target) {
+            for (i in 0 until target) {
+                val idx = (i * step).roundToInt().coerceIn(0, values.lastIndex)
+                add(values[idx])
+            }
+        }.distinct()
+    }
+
     private fun loadPageStarts(profile: String): TreeSet<Long> {
         return PageMap.load(
             binaryFile = profileFile(profile),
@@ -106,4 +156,3 @@ class ReflowPaginationIndexStore(
         return File(paginationDir, "pagemap_v2_$profile.txt")
     }
 }
-

@@ -6,7 +6,7 @@ import org.junit.Test
 class RenderConfigDefaultsTest {
 
     @Test
-    fun `reflow default break strategy should be simple`() {
-        assertEquals(BreakStrategyMode.SIMPLE, RenderConfig.ReflowText().breakStrategy)
+    fun `reflow default break strategy should be balanced`() {
+        assertEquals(BreakStrategyMode.BALANCED, RenderConfig.ReflowText().breakStrategy)
     }
 }

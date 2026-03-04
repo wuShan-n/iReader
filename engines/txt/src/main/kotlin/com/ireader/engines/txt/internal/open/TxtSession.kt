@@ -16,7 +16,11 @@ internal class TxtSession(
     ioDispatcher: CoroutineDispatcher,
     persistOutline: Boolean,
     annotationsProvider: AnnotationProvider?,
-    providerFactory: TxtSessionProviderFactory = DefaultTxtSessionProviderFactory
+    providerFactory: TxtSessionProviderFactory = DefaultTxtSessionProviderFactory,
+    selection: TxtSelectionComponents = providerFactory.createSelectionComponents(
+        store = store,
+        ioDispatcher = ioDispatcher
+    )
 ) : BaseReaderSession(
     id = SessionId(UUID.randomUUID().toString()),
     controller = controller,
@@ -37,5 +41,7 @@ internal class TxtSession(
         store = store,
         ioDispatcher = ioDispatcher
     ),
-    annotations = annotationsProvider
+    annotations = annotationsProvider,
+    selection = selection.provider,
+    selectionController = selection.controller
 )

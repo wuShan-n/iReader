@@ -2,8 +2,6 @@ package com.ireader.engines.txt.internal.render
 
 import com.ireader.engines.common.android.reflow.SoftBreakProcessor
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SoftBreakProcessorTest {
@@ -100,7 +98,7 @@ class SoftBreakProcessorTest {
     }
 
     @Test
-    fun `should normalize soft breaks even when hardWrapLikely is false`() {
+    fun `should keep soft breaks when hardWrapLikely is false`() {
         val raw = buildString {
             repeat(30) { index ->
                 append("这是第")
@@ -120,11 +118,11 @@ class SoftBreakProcessorTest {
             startsAtParagraphBoundary = true
         )
 
-        assertFalse(output.contains('\n'))
+        assertEquals(raw, output.toString())
     }
 
     @Test
-    fun `line width profile should force normalization when soft break ratio is low`() {
+    fun `line width profile text should stay unchanged when hardWrapLikely is false`() {
         val raw = buildString {
             repeat(36) { index ->
                 when (index % 3) {
@@ -146,11 +144,11 @@ class SoftBreakProcessorTest {
             startsAtParagraphBoundary = true
         ).toString()
 
-        assertTrue(output.count { it == '\n' } < raw.count { it == '\n' })
+        assertEquals(raw, output)
     }
 
     @Test
-    fun `forced normalization should preserve chapter and blank line boundaries`() {
+    fun `hardWrapLikely false should keep chapter and blank line boundaries verbatim`() {
         val raw = buildString {
             repeat(12) { index ->
                 append("这是一段连续叙述用于触发自动软换行并验证边界保留能力")
@@ -171,8 +169,7 @@ class SoftBreakProcessorTest {
             startsAtParagraphBoundary = true
         ).toString()
 
-        assertTrue(output.contains("\n第十二章"))
-        assertTrue(output.contains("\n\n"))
+        assertEquals(raw, output)
     }
 
     @Test

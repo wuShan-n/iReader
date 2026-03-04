@@ -50,7 +50,7 @@ class ReaderAnnotationDraftFactoryTest {
 
     @Test
     fun `should fallback to reflow anchor for non-pdf locator`() {
-        val locator = Locator(scheme = LocatorSchemes.TXT_BLOCK, value = "1024:0")
+        val locator = Locator(scheme = LocatorSchemes.TXT_OFFSET, value = "1024")
 
         val result = ReaderAnnotationDraftFactory.create(selection = null, fallbackLocator = locator)
 

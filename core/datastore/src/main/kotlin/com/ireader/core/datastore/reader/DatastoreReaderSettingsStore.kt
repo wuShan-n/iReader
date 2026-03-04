@@ -73,7 +73,7 @@ class DatastoreReaderSettingsStore @Inject constructor(
         pagePaddingDp = 20f,
         fontFamilyName = "serif",
         textAlign = TextAlignMode.JUSTIFY,
-        breakStrategy = BreakStrategyMode.SIMPLE,
+        breakStrategy = BreakStrategyMode.BALANCED,
         hyphenationMode = HyphenationMode.NORMAL,
         includeFontPadding = false,
         pageInsetMode = PageInsetMode.RELAXED,

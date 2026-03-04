@@ -16,6 +16,7 @@ import com.ireader.feature.reader.web.ExternalLinkPolicy
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
+import com.ireader.reader.api.provider.SelectionController
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.InvalidateReason
@@ -223,6 +224,18 @@ class ReaderViewModel @Inject constructor(
                 controller.goToProgress(intent.percent, policy)
             }
             is ReaderIntent.ActivateLink -> handleLink(intent.link.target)
+            is ReaderIntent.SelectionStart -> updateSelection { controller ->
+                controller.start(intent.locator)
+            }
+            is ReaderIntent.SelectionUpdate -> updateSelection { controller ->
+                controller.update(intent.locator)
+            }
+            ReaderIntent.SelectionFinish -> updateSelection { controller ->
+                controller.finish()
+            }
+            ReaderIntent.ClearSelection -> updateSelection { controller ->
+                controller.clear()
+            }
 
             is ReaderIntent.SearchQueryChanged -> {
                 ui.update { current ->
@@ -606,6 +619,19 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    private suspend fun updateSelection(
+        block: suspend (SelectionController) -> ReaderResult<Unit>
+    ) {
+        val sessionHandle = session.currentHandle() ?: return
+        val selectionController = sessionHandle.selectionController ?: return
+        when (block(selectionController)) {
+            is ReaderResult.Ok -> Unit
+            is ReaderResult.Err -> ui.emit(
+                ReaderEffect.Snackbar(UiText.Dynamic("选区操作失败"))
+            )
+        }
+    }
+
     private suspend fun createAnnotation() {
         val sessionHandle = session.currentHandle() ?: return
         val annotationProvider = sessionHandle.annotations
@@ -647,6 +673,7 @@ class ReaderViewModel @Inject constructor(
 
             is ReaderResult.Ok -> {
                 sessionHandle.selection?.clearSelection()
+                sessionHandle.selectionController?.clear()
                 when (sessionHandle.controller.invalidate(InvalidateReason.CONTENT_CHANGED)) {
                     is ReaderResult.Ok -> Unit
                     is ReaderResult.Err -> ui.emit(

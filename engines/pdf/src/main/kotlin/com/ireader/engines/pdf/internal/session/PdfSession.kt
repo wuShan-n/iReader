@@ -4,6 +4,7 @@ import com.ireader.engines.common.android.session.BaseReaderSession
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.api.provider.SearchProvider
+import com.ireader.reader.api.provider.SelectionController
 import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.api.render.ReaderController
@@ -16,7 +17,8 @@ internal class PdfSession(
     search: SearchProvider?,
     text: TextProvider?,
     annotations: AnnotationProvider?,
-    selection: SelectionProvider?
+    selection: SelectionProvider?,
+    selectionController: SelectionController?
 ) : BaseReaderSession(
     id = id,
     controller = controller,
@@ -24,5 +26,6 @@ internal class PdfSession(
     search = search,
     text = text,
     annotations = annotations,
-    selection = selection
+    selection = selection,
+    selectionController = selectionController
 )
