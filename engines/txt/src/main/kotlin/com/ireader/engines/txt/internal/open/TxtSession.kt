@@ -1,9 +1,6 @@
 package com.ireader.engines.txt.internal.open
 
 import com.ireader.engines.common.android.session.BaseReaderSession
-import com.ireader.engines.txt.internal.provider.TxtOutlineProvider
-import com.ireader.engines.txt.internal.provider.TxtSearchProviderPro
-import com.ireader.engines.txt.internal.provider.TxtTextProvider
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.render.ReaderController
@@ -18,24 +15,25 @@ internal class TxtSession(
     store: Utf16TextStore,
     ioDispatcher: CoroutineDispatcher,
     persistOutline: Boolean,
-    annotationsProvider: AnnotationProvider?
+    annotationsProvider: AnnotationProvider?,
+    providerFactory: TxtSessionProviderFactory = DefaultTxtSessionProviderFactory
 ) : BaseReaderSession(
     id = SessionId(UUID.randomUUID().toString()),
     controller = controller,
-    outline = TxtOutlineProvider(
+    outline = providerFactory.createOutlineProvider(
         files = files,
         meta = meta,
         store = store,
         ioDispatcher = ioDispatcher,
         persistOutline = persistOutline
     ),
-    search = TxtSearchProviderPro(
+    search = providerFactory.createSearchProvider(
         files = files,
         store = store,
         meta = meta,
         ioDispatcher = ioDispatcher
     ),
-    text = TxtTextProvider(
+    text = providerFactory.createTextProvider(
         store = store,
         ioDispatcher = ioDispatcher
     ),

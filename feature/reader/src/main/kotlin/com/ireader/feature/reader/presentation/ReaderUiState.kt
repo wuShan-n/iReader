@@ -35,6 +35,13 @@ enum class ReaderDockTab {
     Settings
 }
 
+sealed interface ReaderLayerState {
+    data object Reading : ReaderLayerState
+    data class Dock(val tab: ReaderDockTab) : ReaderLayerState
+    data class Sheet(val sheet: ReaderSheet) : ReaderLayerState
+    data object FullSettings : ReaderLayerState
+}
+
 data class ReaderOverlayState(
     val showTopBar: Boolean = true,
     val showBottomBar: Boolean = true,
@@ -77,10 +84,8 @@ data class ReaderUiState(
     val isOpening: Boolean = false,
     val isRenderingFinal: Boolean = false,
     val chromeVisible: Boolean = true,
-    val sheet: ReaderSheet = ReaderSheet.None,
-    val activeDockTab: ReaderDockTab? = null,
+    val layerState: ReaderLayerState = ReaderLayerState.Reading,
     val activeMenuTab: ReaderMenuTab = ReaderMenuTab.Toc,
-    val overlayState: ReaderOverlayState = ReaderOverlayState(),
     val capabilities: DocumentCapabilities? = null,
     val renderState: RenderState? = null,
     val page: RenderPage? = null,
@@ -95,4 +100,24 @@ data class ReaderUiState(
     val isNightMode: Boolean = false,
     val passwordPrompt: PasswordPrompt? = null,
     val error: ReaderUiError? = null
-)
+) {
+    val sheet: ReaderSheet
+        get() = when (val current = layerState) {
+            is ReaderLayerState.Sheet -> current.sheet
+            ReaderLayerState.FullSettings -> ReaderSheet.FullSettings
+            else -> ReaderSheet.None
+        }
+
+    val activeDockTab: ReaderDockTab?
+        get() = (layerState as? ReaderLayerState.Dock)?.tab
+
+    val overlayState: ReaderOverlayState
+        get() {
+            val chromeShown = chromeVisible && layerState != ReaderLayerState.FullSettings
+            return ReaderOverlayState(
+                showTopBar = chromeShown,
+                showBottomBar = chromeShown,
+                showGestureHint = !chromeVisible && layerState == ReaderLayerState.Reading
+            )
+        }
+}

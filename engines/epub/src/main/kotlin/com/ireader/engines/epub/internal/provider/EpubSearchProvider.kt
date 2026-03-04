@@ -4,6 +4,7 @@ import com.ireader.engines.epub.internal.locator.toAppLocator
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.provider.SearchProvider
+import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -19,21 +20,33 @@ internal class EpubSearchProvider(
 ) : SearchProvider {
 
     override fun search(query: String, options: SearchOptions): Flow<SearchHit> = flow {
+        if (query.isBlank() || options.maxHits <= 0) {
+            return@flow
+        }
+
         val iterator = publication.search(
             query = query,
             options = options.toReadiumSearchOptions()
-        ) ?: return@flow
+        ) ?: throw IllegalStateException("EPUB search service is unavailable")
 
         var emitted = 0
+        var passedStart = options.startFrom == null
         try {
             while (true) {
                 val page = when (val result = iterator.next()) {
                     is Try.Success -> result.value
-                    is Try.Failure -> return@flow
+                    is Try.Failure -> throw IllegalStateException("EPUB search failed: $result")
                 } ?: break
 
                 for (locator in page.locators) {
                     val appLocator = locator.toAppLocator()
+                    if (!passedStart) {
+                        val startFrom = options.startFrom
+                        if (startFrom != null && !isAtOrAfter(appLocator, startFrom)) {
+                            continue
+                        }
+                        passedStart = true
+                    }
                     val excerpt = buildString {
                         append(locator.text.before.orEmpty())
                         append(locator.text.highlight.orEmpty())
@@ -66,4 +79,29 @@ internal class EpubSearchProvider(
             caseSensitive = caseSensitive,
             wholeWord = wholeWord
         )
+}
+
+internal fun isAtOrAfter(candidate: Locator, startFrom: Locator): Boolean {
+    if (candidate.scheme != startFrom.scheme) {
+        return true
+    }
+    if (candidate.value == startFrom.value) {
+        return true
+    }
+
+    val candidatePosition = candidate.extras["position"]?.toIntOrNull()
+    val startPosition = startFrom.extras["position"]?.toIntOrNull()
+    if (candidatePosition != null && startPosition != null) {
+        return candidatePosition >= startPosition
+    }
+
+    val candidateProgression = candidate.extras["totalProgression"]?.toDoubleOrNull()
+        ?: candidate.extras["progression"]?.toDoubleOrNull()
+    val startProgression = startFrom.extras["totalProgression"]?.toDoubleOrNull()
+        ?: startFrom.extras["progression"]?.toDoubleOrNull()
+    if (candidateProgression != null && startProgression != null) {
+        return candidateProgression >= startProgression
+    }
+
+    return true
 }

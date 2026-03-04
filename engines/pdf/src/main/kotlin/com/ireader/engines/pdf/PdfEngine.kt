@@ -5,6 +5,7 @@ import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.common.android.id.SourceDocumentIds
 import com.ireader.engines.pdf.internal.backend.BackendFactory
+import com.ireader.engines.pdf.internal.backend.PdfBackendProvider
 import com.ireader.engines.pdf.internal.open.PdfDocument
 import com.ireader.engines.pdf.internal.open.PdfOpener
 import com.ireader.reader.api.engine.ReaderDocument
@@ -15,31 +16,36 @@ import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.DocumentId
 import kotlinx.coroutines.withContext
 
-class PdfEngine(
-    context: Context,
-    private val config: PdfEngineConfig = PdfEngineConfig()
+class PdfEngine internal constructor(
+    private val config: PdfEngineConfig,
+    private val backendProvider: PdfBackendProvider
 ) : ReaderEngine {
 
-    override val supportedFormats: Set<BookFormat> = setOf(BookFormat.PDF)
+    constructor(
+        context: Context,
+        config: PdfEngineConfig = PdfEngineConfig()
+    ) : this(
+        config = config,
+        backendProvider = BackendFactory(
+            opener = PdfOpener(
+                context = context.applicationContext,
+                ioDispatcher = config.ioDispatcher
+            ),
+            config = config
+        )
+    )
 
-    private val opener = PdfOpener(
-        context = context.applicationContext,
-        ioDispatcher = config.ioDispatcher
-    )
-    private val backendFactory = BackendFactory(
-        opener = opener,
-        config = config
-    )
+    override val supportedFormats: Set<BookFormat> = setOf(BookFormat.PDF)
 
     override suspend fun open(
         source: DocumentSource,
         options: OpenOptions
     ): ReaderResult<ReaderDocument> = withContext(config.ioDispatcher) {
-        val opened = when (val result = backendFactory.open(source, options.password)) {
+        val opened = when (val result = backendProvider.open(source, options.password)) {
             is ReaderResult.Err -> return@withContext result
             is ReaderResult.Ok -> result.value
         }
-        runCatching {
+        val created = runCatching {
             val pageCount = opened.backend.pageCount()
             val documentId = buildDocumentId(source)
 
@@ -61,6 +67,10 @@ class PdfEngine(
                 )
             }
         )
+        if (created is ReaderResult.Err) {
+            runCatching { opened.cleanup.close() }
+        }
+        created
     }
 
     private fun buildDocumentId(source: DocumentSource): DocumentId {

@@ -12,6 +12,7 @@ import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.model.OutlineNode
 import kotlin.coroutines.coroutineContext
 import kotlin.math.min
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -43,8 +44,10 @@ internal class TxtOutlineProvider(
                     saveToCache(detected)
                 }
                 ReaderResult.Ok(detected)
-            } catch (t: Throwable) {
-                ReaderResult.Err(t.toReaderError())
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                ReaderResult.Err(e.toReaderError())
             }
         }
     }

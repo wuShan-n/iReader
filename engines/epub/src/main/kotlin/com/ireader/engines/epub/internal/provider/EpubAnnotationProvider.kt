@@ -1,6 +1,7 @@
 package com.ireader.engines.epub.internal.provider
 
 import com.ireader.engines.epub.internal.locator.toReadiumLocatorOrNull
+import com.ireader.engines.epub.internal.locator.withReadiumFragments
 import com.ireader.engines.epub.internal.render.EpubDecorationsHost
 import com.ireader.reader.api.annotation.Decoration as AppDecoration
 import com.ireader.reader.api.error.ReaderResult
@@ -29,19 +30,23 @@ internal class EpubAnnotationProvider(
 ) : AnnotationProvider {
 
     companion object {
-        private const val GROUP_ANNOTATIONS = "user.annotations"
+        private const val GROUP_ANNOTATION_PREFIX = "user.annotation."
         private const val DEFAULT_HIGHLIGHT: Int = 0x66FFF59D
     }
+
+    private var renderedDecorations: Map<String, Decoration> = emptyMap()
 
     private val observeJob: Job = scope.launch {
         store.observe(documentId)
             .distinctUntilChanged()
             .catch { emit(emptyList()) }
             .collectLatest { annotations ->
-                val decorations = annotations.mapNotNull { annotation ->
-                    annotation.toReadiumDecorationOrNull()
+                val next = annotations.associateNotNull { annotation ->
+                    annotation.toReadiumDecorationOrNull()?.let { decoration ->
+                        annotation.id.value to decoration
+                    }
                 }
-                decorationsHost.apply(GROUP_ANNOTATIONS, decorations)
+                applyIncrementalDecorations(next)
             }
     }
 
@@ -91,11 +96,12 @@ internal class EpubAnnotationProvider(
 
     fun closeInternal() {
         observeJob.cancel()
+        renderedDecorations = emptyMap()
     }
 
     private fun Annotation.toReadiumDecorationOrNull(): Decoration? {
         val reflow = anchor as? AnnotationAnchor.ReflowRange ?: return null
-        val locator = reflow.range.start.toReadiumLocatorOrNull() ?: return null
+        val locator = rangeToReadiumLocatorOrNull(reflow.range) ?: return null
 
         val tint = applyOpacity(
             colorArgb = style.colorArgb ?: DEFAULT_HIGHLIGHT,
@@ -120,9 +126,54 @@ internal class EpubAnnotationProvider(
         )
     }
 
+    private suspend fun applyIncrementalDecorations(next: Map<String, Decoration>) {
+        val previous = renderedDecorations
+        val removedIds = previous.keys - next.keys
+        for (id in removedIds) {
+            decorationsHost.apply(groupFor(id), emptyList())
+        }
+        for ((id, decoration) in next) {
+            val previousDecoration = previous[id]
+            if (previousDecoration != decoration) {
+                decorationsHost.apply(groupFor(id), listOf(decoration))
+            }
+        }
+        renderedDecorations = next
+    }
+
+    private fun groupFor(annotationId: String): String = GROUP_ANNOTATION_PREFIX + annotationId
+
+    private fun rangeToReadiumLocatorOrNull(range: com.ireader.reader.model.LocatorRange): org.readium.r2.shared.publication.Locator? {
+        val start = range.start.toReadiumLocatorOrNull() ?: return null
+        val end = range.end.toReadiumLocatorOrNull()
+        val startFragments = start.locations.fragments.filter { it.isNotBlank() }
+        val endFragments = end?.locations?.fragments?.filter { it.isNotBlank() }.orEmpty()
+        val mergedFragments = when {
+            startFragments.isEmpty() && endFragments.isEmpty() -> emptyList()
+            startFragments.isEmpty() -> listOf(endFragments.first())
+            endFragments.isEmpty() -> listOf(startFragments.first())
+            else -> listOf(startFragments.first(), endFragments.last())
+        }
+        if (mergedFragments.isEmpty()) {
+            return start
+        }
+        return range.start
+            .withReadiumFragments(mergedFragments)
+            .toReadiumLocatorOrNull()
+    }
+
     private fun applyOpacity(colorArgb: Int, opacity: Float?): Int {
         if (opacity == null) return colorArgb
         val alpha = ((opacity.coerceIn(0f, 1f) * 255f).toInt() and 0xFF) shl 24
         return (colorArgb and 0x00FFFFFF) or alpha
     }
+}
+
+private inline fun <K, V, R> Iterable<V>.associateNotNull(transform: (V) -> Pair<K, R>?): Map<K, R> {
+    val out = LinkedHashMap<K, R>()
+    for (item in this) {
+        val pair = transform(item) ?: continue
+        out[pair.first] = pair.second
+    }
+    return out
 }

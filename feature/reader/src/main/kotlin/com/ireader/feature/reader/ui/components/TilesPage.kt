@@ -85,7 +85,8 @@ fun TilesPage(
         val normalizedScale = (drawScale * 100f).roundToInt() / 100f
         val quality = if (isGesturing) RenderPolicy.Quality.DRAFT else RenderPolicy.Quality.FINAL
 
-        val tilePageSize = (512f / drawScale).coerceIn(96f, 2048f)
+        val tileBaseSize = content.baseTileSizePx.coerceAtLeast(128).toFloat()
+        val tilePageSize = (tileBaseSize / drawScale).coerceIn(96f, 2048f)
         val leftPage = ((0f - pageLeft) / drawScale).coerceIn(0f, pageWidth)
         val topPage = ((0f - pageTop) / drawScale).coerceIn(0f, pageHeight)
         val rightPage = ((viewportWidth - pageLeft) / drawScale).coerceIn(0f, pageWidth)
@@ -130,6 +131,25 @@ fun TilesPage(
         }
 
         LaunchedEffect(needed) {
+            val neededSet = needed.toSet()
+            inflight.entries
+                .toList()
+                .filter { (key, _) -> key !in neededSet }
+                .forEach { (key, job) ->
+                    job.cancel()
+                    inflight.remove(key)
+                }
+
+            bitmaps.entries
+                .toList()
+                .filter { (key, _) -> key !in neededSet }
+                .forEach { (key, bitmap) ->
+                    bitmaps.remove(key)
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                }
+
             needed.forEach { key ->
                 if (bitmaps.containsKey(key) || inflight.containsKey(key)) return@forEach
                 val requestJob = scope.launch {
@@ -149,14 +169,6 @@ fun TilesPage(
                     bitmaps.put(key, bitmap)?.let { previous ->
                         if (previous != bitmap && !previous.isRecycled) {
                             previous.recycle()
-                        }
-                    }
-
-                    while (bitmaps.size > 120) {
-                        val first = bitmaps.entries.firstOrNull() ?: break
-                        bitmaps.remove(first.key)
-                        if (!first.value.isRecycled) {
-                            first.value.recycle()
                         }
                     }
                 }

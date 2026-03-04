@@ -30,5 +30,17 @@ class PdfLocatorsTest {
         val locator = Locator(scheme = LocatorSchemes.PDF_PAGE, value = "999")
         assertEquals(4, locator.toPdfPageIndexOrNull(pageCount = 5))
     }
-}
 
+    @Test
+    fun `char locator helpers encode offsets`() {
+        val start = startCharLocator(pageIndex = 2, pageCount = 10, charStart = 11)
+        val end = endCharLocator(pageIndex = 2, pageCount = 10, charEnd = 19)
+
+        assertEquals("11", start.extras[PdfLocatorExtras.CharStart])
+        assertEquals("11", start.extras[PdfLocatorExtras.CharIndex])
+        assertEquals("19", end.extras[PdfLocatorExtras.CharEnd])
+        assertEquals("19", end.extras[PdfLocatorExtras.CharIndex])
+        assertEquals(11, start.charStartOrDefault(defaultValue = 0))
+        assertEquals(19, end.charEndOrDefault(defaultValue = 0))
+    }
+}

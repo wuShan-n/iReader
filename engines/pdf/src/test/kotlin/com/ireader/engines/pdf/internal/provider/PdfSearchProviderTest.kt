@@ -8,10 +8,13 @@ import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.DocumentMetadata
+import com.ireader.reader.model.Locator
+import com.ireader.reader.model.LocatorSchemes
 import com.ireader.reader.model.OutlineNode
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PdfSearchProviderTest {
@@ -41,6 +44,62 @@ class PdfSearchProviderTest {
 
         val wholeWordHits = provider.search("cat", SearchOptions(wholeWord = true)).toList()
         assertEquals(2, wholeWordHits.size)
+    }
+
+    @Test
+    fun `search respects start page and max hits`() = runTest {
+        val backend = FakeBackend(
+            pages = listOf(
+                "alpha zero",
+                "alpha one alpha",
+                "alpha two"
+            )
+        )
+        val textProvider = PdfTextProvider(backend = backend, pageCount = 3)
+        val provider = PdfSearchProvider(pageCount = 3, textProvider = textProvider)
+
+        val hits = provider.search(
+            query = "alpha",
+            options = SearchOptions(
+                maxHits = 2,
+                startFrom = Locator(scheme = LocatorSchemes.PDF_PAGE, value = "1")
+            )
+        ).toList()
+
+        assertEquals(2, hits.size)
+        assertEquals("1", hits[0].range.start.value)
+        assertEquals("1", hits[1].range.start.value)
+    }
+
+    @Test
+    fun `search hit locators include char offsets`() = runTest {
+        val backend = FakeBackend(
+            pages = listOf("prefix alpha suffix")
+        )
+        val textProvider = PdfTextProvider(backend = backend, pageCount = 1)
+        val provider = PdfSearchProvider(pageCount = 1, textProvider = textProvider)
+
+        val hit = provider.search("alpha", SearchOptions()).toList().single()
+        val startExtras = hit.range.start.extras
+        val endExtras = hit.range.end.extras
+
+        assertEquals("7", startExtras["charIndex"])
+        assertEquals("7", startExtras["charStart"])
+        assertEquals("12", endExtras["charIndex"])
+        assertEquals("12", endExtras["charEnd"])
+        assertTrue(hit.excerpt.contains("alpha"))
+    }
+
+    @Test
+    fun `blank query returns no hits`() = runTest {
+        val backend = FakeBackend(
+            pages = listOf("alpha beta")
+        )
+        val textProvider = PdfTextProvider(backend = backend, pageCount = 1)
+        val provider = PdfSearchProvider(pageCount = 1, textProvider = textProvider)
+
+        val hits = provider.search("   ", SearchOptions()).toList()
+        assertTrue(hits.isEmpty())
     }
 
     private class FakeBackend(
@@ -78,4 +137,3 @@ class PdfSearchProviderTest {
         override fun close() = Unit
     }
 }
-

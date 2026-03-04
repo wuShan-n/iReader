@@ -15,6 +15,8 @@ import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.common.hash.Hashing
 import com.ireader.engines.common.id.DocumentIds
 import com.ireader.engines.txt.internal.encoding.EncodingDetector
+import com.ireader.engines.txt.internal.util.prepareTempFile
+import com.ireader.engines.txt.internal.util.replaceFileAtomically
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.DocumentId
@@ -24,6 +26,7 @@ import java.io.RandomAccessFile
 import java.security.MessageDigest
 import kotlin.math.sqrt
 import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -81,8 +84,10 @@ internal class TxtOpener(
                         }
                     }
                 }
-            } catch (t: Throwable) {
-                ReaderResult.Err(t.toReaderError())
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                ReaderResult.Err(e.toReaderError())
             }
         }
     }
@@ -145,10 +150,32 @@ internal class TxtOpener(
     ): TxtMeta {
         val charset = java.nio.charset.Charset.forName(charsetName)
         val temp = File(files.bookDir, "content.u16.tmp")
-        if (temp.exists()) {
-            temp.delete()
-        }
+        prepareTempFile(temp)
 
+        val content = writeUtf16Content(source = source, charset = charset, temp = temp)
+
+        replaceFileAtomically(tempFile = temp, targetFile = files.contentU16)
+
+        val meta = TxtMeta(
+            version = schemaVersion,
+            sourceUri = source.uri.toString(),
+            displayName = source.displayName,
+            sizeBytes = source.sizeBytes,
+            sampleHash = sampleHash,
+            originalCharset = charset.name(),
+            lengthChars = content.lengthChars,
+            hardWrapLikely = content.hardWrapLikely,
+            createdAtEpochMs = System.currentTimeMillis()
+        )
+        files.metaJson.writeText(meta.toJson().toString())
+        return meta
+    }
+
+    private suspend fun writeUtf16Content(
+        source: DocumentSource,
+        charset: java.nio.charset.Charset,
+        temp: File
+    ): CacheContent {
         val writer = Utf16LeFileWriter(temp)
         val stats = LineStatsCollector(sampleCapacity = 6000)
         var pendingCr = false
@@ -223,28 +250,14 @@ internal class TxtOpener(
         }
         stats.onLineFinishedIfHasData(lineLength, lastNonSpace)
 
-        val lengthChars = writer.totalCharsWritten
-        writer.close()
-
-        if (files.contentU16.exists()) {
-            files.contentU16.delete()
+        return try {
+            CacheContent(
+                lengthChars = writer.totalCharsWritten,
+                hardWrapLikely = stats.snapshot().hardWrapLikely
+            )
+        } finally {
+            writer.close()
         }
-        temp.renameTo(files.contentU16)
-
-        val snapshot = stats.snapshot()
-        val meta = TxtMeta(
-            version = schemaVersion,
-            sourceUri = source.uri.toString(),
-            displayName = source.displayName,
-            sizeBytes = source.sizeBytes,
-            sampleHash = sampleHash,
-            originalCharset = charset.name(),
-            lengthChars = lengthChars,
-            hardWrapLikely = snapshot.hardWrapLikely,
-            createdAtEpochMs = System.currentTimeMillis()
-        )
-        files.metaJson.writeText(meta.toJson().toString())
-        return meta
     }
 
     private fun writeNewLine(
@@ -302,6 +315,11 @@ internal class TxtOpener(
     }
 
     private data class LineStatsSnapshot(
+        val hardWrapLikely: Boolean
+    )
+
+    private data class CacheContent(
+        val lengthChars: Long,
         val hardWrapLikely: Boolean
     )
 

@@ -2,7 +2,10 @@ package com.ireader.engines.pdf.di
 
 import android.content.Context
 import com.ireader.engines.pdf.PdfEngine
+import com.ireader.engines.pdf.PdfEngineConfig
+import com.ireader.engines.pdf.internal.provider.StoredPdfAnnotationProvider
 import com.ireader.reader.api.engine.ReaderEngine
+import com.ireader.reader.api.provider.AnnotationStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -19,9 +22,19 @@ object PdfEngineModule {
     @IntoSet
     @Singleton
     fun providePdfEngine(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        annotationStore: AnnotationStore
     ): ReaderEngine {
-        return PdfEngine(context = context)
+        return PdfEngine(
+            context = context,
+            config = PdfEngineConfig(
+                annotationProviderFactory = { documentId ->
+                    StoredPdfAnnotationProvider(
+                        documentId = documentId,
+                        store = annotationStore
+                    )
+                }
+            )
+        )
     }
 }
-

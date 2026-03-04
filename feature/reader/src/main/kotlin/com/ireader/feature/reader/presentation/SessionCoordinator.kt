@@ -67,9 +67,7 @@ internal class SessionCoordinator {
         }
 
         if (current != null) {
-            runCatching { current.controller.unbindSurface() }
             runCatching { current.close() }
         }
     }
 }
-

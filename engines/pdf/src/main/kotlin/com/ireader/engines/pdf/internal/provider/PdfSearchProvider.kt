@@ -3,9 +3,10 @@ package com.ireader.engines.pdf.internal.provider
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.provider.SearchProvider
-import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
-import com.ireader.reader.model.LocatorSchemes
+import com.ireader.engines.pdf.internal.util.endCharLocator
+import com.ireader.engines.pdf.internal.util.startCharLocator
+import com.ireader.engines.pdf.internal.util.toPdfPageIndexOrNull
 import java.util.Locale
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -22,7 +23,7 @@ internal class PdfSearchProvider(
         if (q.isEmpty()) return@flow
 
         val ctx = currentCoroutineContext()
-        val startPage = options.startFrom.toPageIndexOrNull(pageCount) ?: 0
+        val startPage = options.startFrom?.toPdfPageIndexOrNull(pageCount) ?: 0
         val needle = if (options.caseSensitive) q else q.lowercase(Locale.ROOT)
         var emitted = 0
 
@@ -45,21 +46,15 @@ internal class PdfSearchProvider(
                 }
 
                 val excerpt = excerpt(pageText, idx, end)
-                val startLocator = Locator(
-                    scheme = LocatorSchemes.PDF_PAGE,
-                    value = pageIndex.toString(),
-                    extras = mapOf(
-                        "charIndex" to idx.toString(),
-                        "charStart" to idx.toString()
-                    )
+                val startLocator = startCharLocator(
+                    pageIndex = pageIndex,
+                    pageCount = pageCount,
+                    charStart = idx
                 )
-                val endLocator = Locator(
-                    scheme = LocatorSchemes.PDF_PAGE,
-                    value = pageIndex.toString(),
-                    extras = mapOf(
-                        "charIndex" to end.toString(),
-                        "charEnd" to end.toString()
-                    )
+                val endLocator = endCharLocator(
+                    pageIndex = pageIndex,
+                    pageCount = pageCount,
+                    charEnd = end
                 )
 
                 emit(
@@ -90,12 +85,4 @@ internal class PdfSearchProvider(
             .replace('\r', ' ')
             .trim()
     }
-
-    private fun Locator?.toPageIndexOrNull(pageCount: Int): Int? {
-        if (this == null) return null
-        if (scheme != LocatorSchemes.PDF_PAGE) return null
-        val page = value.toIntOrNull() ?: return null
-        return page.coerceIn(0, pageCount.coerceAtLeast(1) - 1)
-    }
 }
-

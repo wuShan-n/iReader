@@ -55,9 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,7 +69,6 @@ import com.ireader.feature.reader.presentation.ReaderIntent
 import com.ireader.feature.reader.presentation.ReaderMenuTab
 import com.ireader.feature.reader.presentation.ReaderSheet
 import com.ireader.feature.reader.presentation.ReaderUiState
-import com.ireader.feature.reader.presentation.PageTurnDirection
 import com.ireader.feature.reader.presentation.asString
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.feature.reader.ui.components.ErrorPane
@@ -134,7 +131,7 @@ fun ReaderScaffold(
 
     LaunchedEffect(prefs.fullScreenMode) {
         if (!prefs.fullScreenMode && !state.chromeVisible) {
-            onIntent(ReaderIntent.ToggleChrome)
+            onIntent(ReaderIntent.ToggleImmersiveChrome)
         }
     }
     ApplyReaderBrightness(prefs = prefs)
@@ -154,20 +151,23 @@ fun ReaderScaffold(
                 textColor = readerTextColor,
                 backgroundColor = bgColor,
                 onBackgroundTap = { tap, size ->
-                    handleReaderTap(
-                        tap = tap,
-                        size = size,
-                        currentSheet = state.sheet,
-                        activeDockTab = state.activeDockTab,
-                        allowChromeToggle = prefs.fullScreenMode,
-                        onIntent = onIntent
+                    onIntent(
+                        ReaderIntent.HandleTap(
+                            xPx = tap.x,
+                            yPx = tap.y,
+                            viewportWidthPx = size.width,
+                            viewportHeightPx = size.height
+                        )
                     )
                 },
-                onPageTurn = { direction ->
-                    when (direction) {
-                        PageTurnDirection.NEXT -> onIntent(ReaderIntent.Next)
-                        PageTurnDirection.PREV -> onIntent(ReaderIntent.Prev)
-                    }
+                onDragEnd = { axis, deltaPx, viewportMainAxisPx ->
+                    onIntent(
+                        ReaderIntent.HandleDragEnd(
+                            axis = axis,
+                            deltaPx = deltaPx,
+                            viewportMainAxisPx = viewportMainAxisPx
+                        )
+                    )
                 },
                 onLinkActivated = { link -> onIntent(ReaderIntent.ActivateLink(link)) },
                 onWebSchemeUrl = onWebSchemeUrl
@@ -368,32 +368,6 @@ fun ReaderScaffold(
                 onVerticalPagingChanged = { onIntent(ReaderIntent.SetVerticalPaging(it)) }
             )
         }
-    }
-}
-
-private fun handleReaderTap(
-    tap: Offset,
-    size: IntSize,
-    currentSheet: ReaderSheet,
-    activeDockTab: ReaderDockTab?,
-    allowChromeToggle: Boolean,
-    onIntent: (ReaderIntent) -> Unit
-) {
-    if (currentSheet != ReaderSheet.None) {
-        onIntent(ReaderIntent.CloseSheet)
-        return
-    }
-    if (activeDockTab != null) {
-        onIntent(ReaderIntent.CloseDockPanel)
-        return
-    }
-
-    val width = size.width.toFloat().coerceAtLeast(1f)
-    when {
-        tap.x < width * 0.3f -> onIntent(ReaderIntent.Prev)
-        tap.x > width * 0.7f -> onIntent(ReaderIntent.Next)
-        allowChromeToggle -> onIntent(ReaderIntent.ToggleChrome)
-        else -> Unit
     }
 }
 

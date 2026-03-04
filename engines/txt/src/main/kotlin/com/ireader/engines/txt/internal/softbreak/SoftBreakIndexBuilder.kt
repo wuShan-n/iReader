@@ -6,6 +6,8 @@ import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.provider.ChapterDetector
 import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.engines.txt.internal.util.prepareTempFile
+import com.ireader.engines.txt.internal.util.replaceFileAtomically
 import com.ireader.engines.txt.internal.util.writeStringUtf8
 import com.ireader.engines.txt.internal.util.writeVarLong
 import java.io.File
@@ -46,9 +48,7 @@ internal object SoftBreakIndexBuilder {
                 }
 
                 val tmp = File(files.bookDir, "softbreak.idx.tmp")
-                if (tmp.exists()) {
-                    tmp.delete()
-                }
+                prepareTempFile(tmp)
                 val blocks = ArrayList<SoftBreakIndex.BlockMeta>(128)
 
                 RandomAccessFile(tmp, "rw").use { raf ->
@@ -275,13 +275,7 @@ internal object SoftBreakIndexBuilder {
                     raf.writeLong(newlineCount)
                 }
 
-                if (files.softBreakIdx.exists()) {
-                    files.softBreakIdx.delete()
-                }
-                if (!tmp.renameTo(files.softBreakIdx)) {
-                    tmp.copyTo(files.softBreakIdx, overwrite = true)
-                    tmp.delete()
-                }
+                replaceFileAtomically(tempFile = tmp, targetFile = files.softBreakIdx)
             }
         }
     }

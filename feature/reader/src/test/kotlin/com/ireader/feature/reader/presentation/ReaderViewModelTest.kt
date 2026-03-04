@@ -79,6 +79,7 @@ class ReaderViewModelTest {
 
         vm.dispatch(ReaderIntent.OpenMenu)
 
+        assertEquals(ReaderLayerState.Dock(ReaderDockTab.Menu), vm.state.value.layerState)
         assertEquals(ReaderSheet.None, vm.state.value.sheet)
         assertEquals(ReaderDockTab.Menu, vm.state.value.activeDockTab)
     }
@@ -90,6 +91,7 @@ class ReaderViewModelTest {
         vm.dispatch(ReaderIntent.ToggleDockTab(ReaderDockTab.Menu))
         vm.dispatch(ReaderIntent.ToggleDockTab(ReaderDockTab.Menu))
 
+        assertEquals(ReaderLayerState.Reading, vm.state.value.layerState)
         assertEquals(null, vm.state.value.activeDockTab)
     }
 
@@ -100,6 +102,52 @@ class ReaderViewModelTest {
         vm.dispatch(ReaderIntent.SetMenuTab(ReaderMenuTab.Notes))
 
         assertEquals(ReaderMenuTab.Notes, vm.state.value.activeMenuTab)
+    }
+
+    @Test
+    fun `back pressed should move full settings to settings dock then reading`() = runTest {
+        val vm = newViewModel(bookById = emptyMap())
+
+        vm.dispatch(ReaderIntent.OpenFullSettings)
+        vm.dispatch(ReaderIntent.BackPressed)
+        assertEquals(ReaderLayerState.Dock(ReaderDockTab.Settings), vm.state.value.layerState)
+
+        vm.dispatch(ReaderIntent.BackPressed)
+        assertEquals(ReaderLayerState.Reading, vm.state.value.layerState)
+    }
+
+    @Test
+    fun `tap should close dock panel before any navigation action`() = runTest {
+        val vm = newViewModel(bookById = emptyMap())
+        vm.dispatch(ReaderIntent.OpenMenu)
+
+        vm.dispatch(
+            ReaderIntent.HandleTap(
+                xPx = 20f,
+                yPx = 200f,
+                viewportWidthPx = 1080,
+                viewportHeightPx = 1920
+            )
+        )
+
+        assertEquals(ReaderLayerState.Reading, vm.state.value.layerState)
+    }
+
+    @Test
+    fun `center tap should toggle immersive chrome in fullscreen`() = runTest {
+        val vm = newViewModel(bookById = emptyMap())
+        assertTrue(vm.state.value.chromeVisible)
+
+        vm.dispatch(
+            ReaderIntent.HandleTap(
+                xPx = 540f,
+                yPx = 960f,
+                viewportWidthPx = 1080,
+                viewportHeightPx = 1920
+            )
+        )
+
+        assertFalse(vm.state.value.chromeVisible)
     }
 
     private fun newViewModel(

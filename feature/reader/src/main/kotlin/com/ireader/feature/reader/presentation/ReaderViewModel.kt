@@ -12,6 +12,7 @@ import com.ireader.core.files.source.BookSourceResolver
 import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
 import com.ireader.feature.reader.domain.usecase.OpenReaderSession
 import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
+import com.ireader.feature.reader.web.ExternalLinkPolicy
 import com.ireader.feature.reader.web.ReaderWebViewLinkRouter
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
@@ -22,6 +23,7 @@ import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.model.LinkTarget
@@ -74,10 +76,13 @@ class ReaderViewModel @Inject constructor(
     private val render = RenderCoordinator(scope = viewModelScope) {
         renderCurrentPageImmediate()
     }
+    private val gestureInterpreter = ReaderGestureInterpreter()
+    private val interactionTracker: ReaderInteractionTracker = ReaderInteractionTracker.None
 
     private val intents = Channel<ReaderIntent>(capacity = Channel.UNLIMITED)
     private var currentStartArgs: StartArgs? = null
     private var searchJob: Job? = null
+    private var pendingUndoTurn: PendingUndoTurn? = null
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
@@ -99,12 +104,7 @@ class ReaderViewModel @Inject constructor(
                         current.copy(
                             displayPrefs = prefs,
                             isNightMode = prefs.nightMode,
-                            chromeVisible = chromeVisible,
-                            overlayState = current.overlayState.copy(
-                                showTopBar = chromeVisible,
-                                showBottomBar = chromeVisible,
-                                showGestureHint = !chromeVisible
-                            )
+                            chromeVisible = chromeVisible
                         )
                     }
                 }
@@ -161,17 +161,12 @@ class ReaderViewModel @Inject constructor(
 
             is ReaderIntent.LayoutChanged -> applyLayout(intent.constraints)
             ReaderIntent.RefreshPage -> render.requestRender(RenderRequest.REFRESH)
-            ReaderIntent.ToggleChrome -> ui.update { current ->
-                val chromeVisible = !current.chromeVisible
-                current.copy(
-                    chromeVisible = chromeVisible,
-                    overlayState = current.overlayState.copy(
-                        showTopBar = chromeVisible,
-                        showBottomBar = chromeVisible,
-                        showGestureHint = !chromeVisible
-                    )
-                )
-            }
+            ReaderIntent.ToggleChrome,
+            ReaderIntent.ToggleImmersiveChrome -> toggleImmersiveChrome()
+            ReaderIntent.BackPressed,
+            ReaderIntent.BackInSheetHierarchy -> handleBackPressed()
+            is ReaderIntent.HandleTap -> handleTap(intent)
+            is ReaderIntent.HandleDragEnd -> handleDragEnd(intent)
 
             ReaderIntent.OpenAnnotations -> {
                 val bookId = ui.state.value.bookId
@@ -182,32 +177,16 @@ class ReaderViewModel @Inject constructor(
 
             ReaderIntent.OpenToc,
             ReaderIntent.OpenMenu -> {
-                ui.update { current ->
-                    val next = if (current.activeDockTab == ReaderDockTab.Menu) {
-                        null
-                    } else {
-                        ReaderDockTab.Menu
-                    }
-                    current.copy(
-                        sheet = ReaderSheet.None,
-                        activeDockTab = next
-                    )
-                }
-                loadTocIfNeeded()
+                val opened = toggleDockTab(ReaderDockTab.Menu)
+                if (opened) loadTocIfNeeded()
             }
             is ReaderIntent.ToggleDockTab -> {
-                ui.update { current ->
-                    val next = if (current.activeDockTab == intent.tab) null else intent.tab
-                    current.copy(
-                        sheet = ReaderSheet.None,
-                        activeDockTab = next
-                    )
-                }
-                if (intent.tab == ReaderDockTab.Menu) {
+                val opened = toggleDockTab(intent.tab)
+                if (opened && intent.tab == ReaderDockTab.Menu) {
                     loadTocIfNeeded()
                 }
             }
-            ReaderIntent.CloseDockPanel -> ui.update { it.copy(activeDockTab = null) }
+            ReaderIntent.CloseDockPanel -> closeLayerToReading()
             is ReaderIntent.SetMenuTab -> {
                 ui.update { it.copy(activeMenuTab = intent.tab) }
                 if (intent.tab == ReaderMenuTab.Toc) {
@@ -215,22 +194,12 @@ class ReaderViewModel @Inject constructor(
                 }
             }
 
-            ReaderIntent.OpenSearch -> ui.update {
-                it.copy(sheet = ReaderSheet.Search, activeDockTab = null)
-            }
-            ReaderIntent.OpenBrightness -> ui.update {
-                it.copy(sheet = ReaderSheet.None, activeDockTab = ReaderDockTab.Brightness)
-            }
-            ReaderIntent.OpenSettings -> ui.update {
-                it.copy(sheet = ReaderSheet.None, activeDockTab = ReaderDockTab.Settings)
-            }
+            ReaderIntent.OpenSearch -> openSheet(ReaderSheet.Search)
+            ReaderIntent.OpenBrightness -> openDock(ReaderDockTab.Brightness)
+            ReaderIntent.OpenSettings -> openDock(ReaderDockTab.Settings)
             is ReaderIntent.OpenSettingsSub -> openSubSheet(intent.sheet)
-            ReaderIntent.OpenReaderMore -> ui.update {
-                it.copy(sheet = ReaderSheet.ReaderMore, activeDockTab = null)
-            }
-            ReaderIntent.OpenFullSettings -> ui.update {
-                it.copy(sheet = ReaderSheet.FullSettings, activeDockTab = null)
-            }
+            ReaderIntent.OpenReaderMore -> openSheet(ReaderSheet.ReaderMore)
+            ReaderIntent.OpenFullSettings -> openFullSettings()
             ReaderIntent.ShareBook -> ui.emit(ReaderEffect.ShareText(buildShareText(ui.state.value)))
             ReaderIntent.ToggleNightMode -> updateDisplayPrefs { prefs ->
                 prefs.copy(nightMode = !prefs.nightMode)
@@ -254,31 +223,22 @@ class ReaderViewModel @Inject constructor(
                 prefs.copy(fullScreenMode = intent.enabled)
             }
             is ReaderIntent.SetVerticalPaging -> updateVerticalPaging(intent.enabled)
-            ReaderIntent.CloseSheet -> ui.update { it.copy(sheet = ReaderSheet.None) }
-            ReaderIntent.BackInSheetHierarchy -> ui.update { current ->
-                when (current.sheet) {
-                    ReaderSheet.SettingsFont,
-                    ReaderSheet.SettingsSpacing,
-                    ReaderSheet.SettingsPageTurn,
-                    ReaderSheet.SettingsMoreBackground,
-                    ReaderSheet.FullSettings -> current.copy(
-                        sheet = ReaderSheet.None,
-                        activeDockTab = ReaderDockTab.Settings
-                    )
-
-                    ReaderSheet.None -> current.copy(activeDockTab = null)
-                    else -> current.copy(sheet = ReaderSheet.None)
-                }
-            }
+            ReaderIntent.CloseSheet -> closeLayerToReading()
 
             ReaderIntent.Next -> navigate(direction = PageTurnDirection.NEXT) { controller, policy ->
+                pendingUndoTurn = null
                 controller.next(policy)
             }
             ReaderIntent.Prev -> navigate(direction = PageTurnDirection.PREV) { controller, policy ->
+                pendingUndoTurn = null
                 controller.prev(policy)
             }
-            is ReaderIntent.GoTo -> navigate { controller, policy -> controller.goTo(intent.locator, policy) }
+            is ReaderIntent.GoTo -> navigate { controller, policy ->
+                pendingUndoTurn = null
+                controller.goTo(intent.locator, policy)
+            }
             is ReaderIntent.GoToProgress -> navigate { controller, policy ->
+                pendingUndoTurn = null
                 controller.goToProgress(intent.percent, policy)
             }
             is ReaderIntent.ActivateLink -> handleLink(intent.link.target)
@@ -302,13 +262,15 @@ class ReaderViewModel @Inject constructor(
         closeSession()
         searchJob?.cancel()
         searchJob = null
+        pendingUndoTurn = null
 
         ui.update {
             it.copy(
                 bookId = args.bookId,
                 isOpening = true,
                 title = null,
-                sheet = ReaderSheet.None,
+                layerState = ReaderLayerState.Reading,
+                chromeVisible = true,
                 page = null,
                 controller = null,
                 resources = null,
@@ -318,8 +280,6 @@ class ReaderViewModel @Inject constructor(
                 passwordPrompt = null,
                 error = null,
                 activeMenuTab = ReaderMenuTab.Toc,
-                activeDockTab = null,
-                overlayState = ReaderOverlayState(),
                 toc = TocState(),
                 search = SearchState()
             )
@@ -553,8 +513,9 @@ class ReaderViewModel @Inject constructor(
     private suspend fun navigate(
         direction: PageTurnDirection? = null,
         block: suspend (ReaderController, RenderPolicy) -> ReaderResult<RenderPage>
-    ) {
-        val sessionHandle = session.currentHandle() ?: return
+    ): Boolean {
+        val sessionHandle = session.currentHandle() ?: return false
+        var success = false
         render.withNavigationLock {
             val fixed = sessionHandle.document.capabilities.fixedLayout
             val actionPolicy = if (fixed) {
@@ -564,20 +525,25 @@ class ReaderViewModel @Inject constructor(
             }
 
             when (val result = block(sessionHandle.controller, actionPolicy)) {
-                is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
+                is ReaderResult.Err -> {
+                    ui.update { it.copy(error = errorMapper.map(result.error)) }
+                    success = false
+                }
                 is ReaderResult.Ok -> if (fixed) {
                     renderWithFinalPass(
                         controller = sessionHandle.controller,
                         draft = result,
                         direction = direction
                     )
+                    success = true
                 } else {
                     applyRenderResult(result, direction = direction)
+                    success = true
                 }
             }
 
-            runCatching { sessionHandle.controller.prefetchNeighbors(count = 1) }
         }
+        return success
     }
 
     private fun applyRenderResult(
@@ -585,19 +551,7 @@ class ReaderViewModel @Inject constructor(
         direction: PageTurnDirection? = null
     ) {
         when (result) {
-            is ReaderResult.Ok -> ui.update { current ->
-                val turnDirection = direction
-                val shouldAnimate = turnDirection != null && current.page?.id != result.value.id
-                current.copy(
-                    page = result.value,
-                    error = null,
-                    pageTransition = if (shouldAnimate) {
-                        current.pageTransition.next(turnDirection)
-                    } else {
-                        current.pageTransition
-                    }
-                )
-            }
+            is ReaderResult.Ok -> replacePage(result.value, direction)
             is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
         }
     }
@@ -608,19 +562,7 @@ class ReaderViewModel @Inject constructor(
         direction: PageTurnDirection? = null
     ) {
         when (draft) {
-            is ReaderResult.Ok -> ui.update { current ->
-                val turnDirection = direction
-                val shouldAnimate = turnDirection != null && current.page?.id != draft.value.id
-                current.copy(
-                    page = draft.value,
-                    error = null,
-                    pageTransition = if (shouldAnimate) {
-                        current.pageTransition.next(turnDirection)
-                    } else {
-                        current.pageTransition
-                    }
-                )
-            }
+            is ReaderResult.Ok -> replacePage(draft.value, direction)
             is ReaderResult.Err -> {
                 ui.update { it.copy(error = errorMapper.map(draft.error), isRenderingFinal = false) }
                 return
@@ -629,12 +571,9 @@ class ReaderViewModel @Inject constructor(
 
         ui.update { it.copy(isRenderingFinal = true) }
         when (val final = controller.render(RenderPolicy(quality = RenderPolicy.Quality.FINAL))) {
-            is ReaderResult.Ok -> ui.update {
-                it.copy(
-                    page = final.value,
-                    error = null,
-                    isRenderingFinal = false
-                )
+            is ReaderResult.Ok -> {
+                replacePage(final.value, direction = null)
+                ui.update { it.copy(isRenderingFinal = false) }
             }
 
             is ReaderResult.Err -> ui.update {
@@ -670,12 +609,7 @@ class ReaderViewModel @Inject constructor(
             state.copy(
                 displayPrefs = updated,
                 isNightMode = updated.nightMode,
-                chromeVisible = chromeVisible,
-                overlayState = state.overlayState.copy(
-                    showTopBar = chromeVisible,
-                    showBottomBar = chromeVisible,
-                    showGestureHint = !chromeVisible
-                )
+                chromeVisible = chromeVisible
             )
         }
     }
@@ -711,7 +645,16 @@ class ReaderViewModel @Inject constructor(
             }
 
             is LinkTarget.External -> {
-                ui.emit(ReaderEffect.OpenExternalUrl(target.url))
+                val decision = ExternalLinkPolicy.evaluate(target.url)
+                if (decision is ExternalLinkPolicy.Decision.Allow) {
+                    ui.emit(ReaderEffect.OpenExternalUrl(decision.url))
+                } else {
+                    ui.emit(
+                        ReaderEffect.Snackbar(
+                            UiText.Dynamic("Blocked unsafe external link")
+                        )
+                    )
+                }
             }
         }
     }
@@ -869,6 +812,9 @@ class ReaderViewModel @Inject constructor(
     private suspend fun closeSession() {
         searchJob?.cancel()
         searchJob = null
+        pendingUndoTurn = null
+        releasePageContent(ui.state.value.page)
+        ui.update { it.copy(page = null, isRenderingFinal = false) }
         session.closeCurrent { bookId, locator, progression ->
             saveReadingProgress(
                 bookId = bookId,
@@ -878,26 +824,263 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private fun openSubSheet(sheet: ReaderSheet) {
-        val supported = sheet == ReaderSheet.SettingsFont ||
-            sheet == ReaderSheet.SettingsSpacing ||
-            sheet == ReaderSheet.SettingsPageTurn ||
-            sheet == ReaderSheet.SettingsMoreBackground
-        if (!supported) return
+    private fun toggleImmersiveChrome() {
+        ui.update { current ->
+            if (!current.displayPrefs.fullScreenMode) {
+                current.copy(chromeVisible = true)
+            } else {
+                current.copy(chromeVisible = !current.chromeVisible)
+            }
+        }
+    }
+
+    private fun openDock(tab: ReaderDockTab) {
         ui.update {
-            it.copy(
-                sheet = sheet,
-                activeDockTab = ReaderDockTab.Settings
+            it.copy(layerState = ReaderLayerState.Dock(tab))
+        }
+    }
+
+    private fun openSheet(sheet: ReaderSheet) {
+        ui.update { current ->
+            when (sheet) {
+                ReaderSheet.None -> current.copy(layerState = ReaderLayerState.Reading)
+                ReaderSheet.FullSettings -> current.copy(layerState = ReaderLayerState.FullSettings)
+                else -> current.copy(layerState = ReaderLayerState.Sheet(sheet))
+            }
+        }
+    }
+
+    private fun openFullSettings() {
+        ui.update {
+            it.copy(layerState = ReaderLayerState.FullSettings)
+        }
+    }
+
+    private fun toggleDockTab(tab: ReaderDockTab): Boolean {
+        val opened = ui.state.value.layerState != ReaderLayerState.Dock(tab)
+        ui.update { current ->
+            current.copy(
+                layerState = if (opened) {
+                    ReaderLayerState.Dock(tab)
+                } else {
+                    ReaderLayerState.Reading
+                }
             )
         }
+        return opened
+    }
+
+    private fun closeLayerToReading() {
+        ui.update {
+            it.copy(layerState = ReaderLayerState.Reading)
+        }
+    }
+
+    private fun handleBackPressed() {
+        val current = ui.state.value
+        when (val layer = current.layerState) {
+            ReaderLayerState.Reading -> {
+                if (current.displayPrefs.fullScreenMode && !current.chromeVisible) {
+                    ui.update { it.copy(chromeVisible = true) }
+                } else {
+                    ui.emit(ReaderEffect.Back)
+                }
+            }
+
+            is ReaderLayerState.Dock -> {
+                ui.update { it.copy(layerState = ReaderLayerState.Reading) }
+            }
+
+            is ReaderLayerState.Sheet -> {
+                val nextLayer = if (layer.sheet.isSettingsSubSheet()) {
+                    ReaderLayerState.Dock(ReaderDockTab.Settings)
+                } else {
+                    ReaderLayerState.Reading
+                }
+                ui.update { it.copy(layerState = nextLayer) }
+            }
+
+            ReaderLayerState.FullSettings -> {
+                ui.update { it.copy(layerState = ReaderLayerState.Dock(ReaderDockTab.Settings)) }
+            }
+        }
+    }
+
+    private suspend fun handleTap(intent: ReaderIntent.HandleTap) {
+        val current = ui.state.value
+        when (current.layerState) {
+            is ReaderLayerState.Dock,
+            is ReaderLayerState.Sheet -> {
+                interactionTracker.track(ReaderInteractionEvent.ClosePanelByTap)
+                closeLayerToReading()
+                return
+            }
+
+            ReaderLayerState.FullSettings -> return
+            ReaderLayerState.Reading -> Unit
+        }
+
+        if (current.displayPrefs.preventAccidentalTurn) {
+            val height = intent.viewportHeightPx.coerceAtLeast(1).toFloat()
+            val y = intent.yPx.coerceIn(0f, height)
+            val verticalGuard = height * 0.04f
+            if (y <= verticalGuard || y >= height - verticalGuard) {
+                return
+            }
+        }
+
+        when (
+            gestureInterpreter.resolveTapAction(
+                xPx = intent.xPx,
+                viewportWidthPx = intent.viewportWidthPx,
+                prefs = current.displayPrefs
+            )
+        ) {
+            ReaderTapAction.PREV -> performGestureTurn(
+                direction = PageTurnDirection.PREV,
+                event = ReaderInteractionEvent.TapPrev
+            )
+
+            ReaderTapAction.NEXT -> performGestureTurn(
+                direction = PageTurnDirection.NEXT,
+                event = ReaderInteractionEvent.TapNext
+            )
+
+            ReaderTapAction.CENTER -> {
+                if (tryUndoPageTurn()) return
+                if (current.displayPrefs.fullScreenMode) {
+                    toggleImmersiveChrome()
+                    interactionTracker.track(ReaderInteractionEvent.CenterTapToggleChrome)
+                }
+            }
+
+            ReaderTapAction.NONE -> Unit
+        }
+    }
+
+    private suspend fun handleDragEnd(intent: ReaderIntent.HandleDragEnd) {
+        val current = ui.state.value
+        if (current.layerState != ReaderLayerState.Reading) return
+        val direction = gestureInterpreter.resolveDragDirection(
+            axis = intent.axis,
+            deltaPx = intent.deltaPx,
+            viewportMainAxisPx = intent.viewportMainAxisPx,
+            pageTurnMode = current.pageTurnMode,
+            prefs = current.displayPrefs
+        ) ?: return
+
+        val event = when (direction) {
+            PageTurnDirection.NEXT -> ReaderInteractionEvent.DragNext
+            PageTurnDirection.PREV -> ReaderInteractionEvent.DragPrev
+        }
+        performGestureTurn(direction = direction, event = event)
+    }
+
+    private suspend fun performGestureTurn(
+        direction: PageTurnDirection,
+        event: ReaderInteractionEvent
+    ) {
+        val succeeded = when (direction) {
+            PageTurnDirection.NEXT -> navigate(direction = direction) { controller, policy ->
+                controller.next(policy)
+            }
+
+            PageTurnDirection.PREV -> navigate(direction = direction) { controller, policy ->
+                controller.prev(policy)
+            }
+        }
+        if (!succeeded) return
+        interactionTracker.track(event)
+
+        val prefs = ui.state.value.displayPrefs
+        if (!prefs.preventAccidentalTurn) {
+            pendingUndoTurn = null
+            return
+        }
+        pendingUndoTurn = PendingUndoTurn(
+            direction = direction,
+            expiresAtMs = System.currentTimeMillis() + UNDO_WINDOW_MS
+        )
+        ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("翻页完成，800ms 内点击中间区域可撤销")))
+    }
+
+    private suspend fun tryUndoPageTurn(): Boolean {
+        val pending = pendingUndoTurn ?: return false
+        if (System.currentTimeMillis() > pending.expiresAtMs) {
+            pendingUndoTurn = null
+            return false
+        }
+        pendingUndoTurn = null
+        val direction = when (pending.direction) {
+            PageTurnDirection.NEXT -> PageTurnDirection.PREV
+            PageTurnDirection.PREV -> PageTurnDirection.NEXT
+        }
+        val succeeded = when (direction) {
+            PageTurnDirection.NEXT -> navigate(direction = direction) { controller, policy ->
+                controller.next(policy)
+            }
+
+            PageTurnDirection.PREV -> navigate(direction = direction) { controller, policy ->
+                controller.prev(policy)
+            }
+        }
+        if (!succeeded) return false
+        interactionTracker.track(ReaderInteractionEvent.UndoPageTurn)
+        ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("已撤销上一次翻页")))
+        return true
+    }
+
+    private fun openSubSheet(sheet: ReaderSheet) {
+        if (!sheet.isSettingsSubSheet()) return
+        openSheet(sheet)
     }
 
     override fun onCleared() {
         render.cancel()
+        releasePageContent(ui.state.value.page)
         cleanupScope.launch {
             closeSession()
         }
         super.onCleared()
+    }
+
+    private fun replacePage(
+        nextPage: RenderPage,
+        direction: PageTurnDirection?
+    ) {
+        val previous = ui.state.value.page
+        if (previous != null && previous !== nextPage) {
+            releasePageContent(previous)
+        }
+        ui.update { current ->
+            val turnDirection = direction
+            val shouldAnimate = turnDirection != null && current.page?.id != nextPage.id
+            current.copy(
+                page = nextPage,
+                error = null,
+                pageTransition = if (shouldAnimate) {
+                    current.pageTransition.next(turnDirection)
+                } else {
+                    current.pageTransition
+                }
+            )
+        }
+    }
+
+    private fun releasePageContent(page: RenderPage?) {
+        when (val content = page?.content) {
+            is RenderContent.BitmapPage -> {
+                if (!content.bitmap.isRecycled) {
+                    content.bitmap.recycle()
+                }
+            }
+
+            is RenderContent.Tiles -> {
+                runCatching { content.tileProvider.close() }
+            }
+
+            else -> Unit
+        }
     }
 
     private data class StartArgs(
@@ -909,4 +1092,20 @@ class ReaderViewModel @Inject constructor(
         val node: OutlineNode,
         val depth: Int
     )
+
+    private data class PendingUndoTurn(
+        val direction: PageTurnDirection,
+        val expiresAtMs: Long
+    )
+
+    private companion object {
+        const val UNDO_WINDOW_MS = 800L
+    }
+}
+
+private fun ReaderSheet.isSettingsSubSheet(): Boolean {
+    return this == ReaderSheet.SettingsFont ||
+        this == ReaderSheet.SettingsSpacing ||
+        this == ReaderSheet.SettingsPageTurn ||
+        this == ReaderSheet.SettingsMoreBackground
 }

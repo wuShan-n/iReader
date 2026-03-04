@@ -2,6 +2,7 @@
 
 package com.ireader.engines.pdf.internal.render
 
+import android.graphics.Bitmap
 import com.ireader.engines.pdf.PdfEngineConfig
 import com.ireader.engines.pdf.internal.backend.PdfBackend
 import com.ireader.engines.pdf.internal.cache.TileCache
@@ -46,6 +47,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.system.measureTimeMillis
+import kotlin.math.roundToInt
 
 internal class PdfController(
     private val backend: PdfBackend,
@@ -202,16 +204,39 @@ internal class PdfController(
             ?: emptyList()
 
         runCatching { activeTileProvider?.close() }
-        val tileProvider = PdfTileProvider(
-            pageIndex = currentPage,
-            renderConfig = currentConfig,
-            backend = backend,
-            cache = tileCache,
-            inflight = tileInflight,
-            config = engineConfig,
-            scope = CoroutineScope(SupervisorJob() + engineConfig.renderDispatcher)
-        )
-        activeTileProvider = tileProvider
+        activeTileProvider = null
+
+        val content = runCatching {
+            if (backend.capabilities.preciseRegionRendering) {
+                val tileProvider = PdfTileProvider(
+                    pageIndex = currentPage,
+                    renderConfig = currentConfig,
+                    backend = backend,
+                    cache = tileCache,
+                    inflight = tileInflight,
+                    config = engineConfig,
+                    scope = CoroutineScope(SupervisorJob() + engineConfig.renderDispatcher)
+                )
+                activeTileProvider = tileProvider
+                RenderContent.Tiles(
+                    pageWidthPx = transform.pageWidthPx,
+                    pageHeightPx = transform.pageHeightPx,
+                    baseTileSizePx = engineConfig.tileBaseSizePx,
+                    tileProvider = tileProvider
+                )
+            } else {
+                RenderContent.BitmapPage(
+                    bitmap = renderSingleBitmapPage(
+                        pageIndex = currentPage,
+                        widthPx = transform.pageWidthPx,
+                        heightPx = transform.pageHeightPx,
+                        quality = policy.quality
+                    )
+                )
+            }
+        }.getOrElse {
+            return ReaderResult.Err(ReaderError.Internal("Failed to render PDF content", it))
+        }
 
         var metrics: RenderMetrics? = null
         val elapsed = measureTimeMillis {
@@ -237,11 +262,7 @@ internal class PdfController(
                 }
             ),
             locator = pageLocator,
-            content = RenderContent.Tiles(
-                pageWidthPx = transform.pageWidthPx,
-                pageHeightPx = transform.pageHeightPx,
-                tileProvider = tileProvider
-            ),
+            content = content,
             links = links,
             decorations = decorations,
             metrics = metrics?.copy(renderTimeMs = elapsed)
@@ -251,6 +272,33 @@ internal class PdfController(
         eventsMutable.tryEmit(ReaderEvent.PageChanged(pageLocator))
         eventsMutable.tryEmit(ReaderEvent.Rendered(page.id, page.metrics))
         return ReaderResult.Ok(page)
+    }
+
+    private suspend fun renderSingleBitmapPage(
+        pageIndex: Int,
+        widthPx: Int,
+        heightPx: Int,
+        quality: RenderPolicy.Quality
+    ): Bitmap {
+        val safeWidth = widthPx.coerceAtLeast(1)
+        val safeHeight = heightPx.coerceAtLeast(1)
+        val maxEdge = 4096
+        val maxSide = maxOf(safeWidth, safeHeight)
+        val scale = if (maxSide <= maxEdge) 1f else maxEdge.toFloat() / maxSide.toFloat()
+        val outputWidth = (safeWidth * scale).roundToInt().coerceAtLeast(1)
+        val outputHeight = (safeHeight * scale).roundToInt().coerceAtLeast(1)
+
+        val bitmap = Bitmap.createBitmap(outputWidth, outputHeight, Bitmap.Config.ARGB_8888)
+        backend.renderRegion(
+            pageIndex = pageIndex,
+            bitmap = bitmap,
+            regionLeftPx = 0,
+            regionTopPx = 0,
+            regionWidthPx = outputWidth,
+            regionHeightPx = outputHeight,
+            quality = quality
+        )
+        return bitmap
     }
 
     private fun updateStateLocked() {

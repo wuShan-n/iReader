@@ -2,6 +2,7 @@ package com.ireader.engines.pdf.internal.backend
 
 import android.os.ParcelFileDescriptor
 import com.ireader.core.files.source.DocumentSource
+import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.pdf.PdfEngineConfig
 import com.ireader.engines.pdf.internal.backend.pdfium.PdfiumBackend
 import com.ireader.engines.pdf.internal.backend.platform.PlatformPdfBackend
@@ -14,8 +15,8 @@ import java.io.Closeable
 internal class BackendFactory(
     private val opener: PdfOpener,
     private val config: PdfEngineConfig
-) {
-    suspend fun open(source: DocumentSource, password: String?): ReaderResult<OpenedPdf> {
+) : PdfBackendProvider {
+    override suspend fun open(source: DocumentSource, password: String?): ReaderResult<OpenedPdf> {
         val opened = when (val result = opener.open(source)) {
             is ReaderResult.Err -> return result
             is ReaderResult.Ok -> result.value
@@ -24,30 +25,67 @@ internal class BackendFactory(
         val primaryPfd = opened.descriptor
         val tempFile = opened.tempFile
 
-        try {
-            val backend = when {
-                config.forcePdfiumBackend -> openPdfium(primaryPfd, password)
-                config.forcePlatformBackend -> openPlatform(primaryPfd)
-                config.preferPlatformBackend -> {
-                    val platform = runCatching { openPlatform(primaryPfd) }.getOrNull()
-                    if (platform != null && platform.capabilities.supportsFullReaderFeatures()) {
-                        platform
-                    } else {
-                        platform.closeQuietly()
-                        openPdfium(primaryPfd, password)
-                    }
-                }
-                else -> openPdfium(primaryPfd, password)
+        return try {
+            val selected = when {
+                config.forcePdfiumBackend -> SelectedBackend(
+                    backend = openPdfium(primaryPfd, password),
+                    degraded = false
+                )
+
+                config.forcePlatformBackend -> SelectedBackend(
+                    backend = openPlatform(primaryPfd),
+                    degraded = true
+                )
+
+                else -> openWithPdfiumFallback(primaryPfd, password)
             }
 
             val cleanup = Closeable {
-                backend.closeQuietly()
+                selected.backend.closeQuietly()
                 tempFile?.let { file -> runCatching { file.delete() } }
             }
-            return ReaderResult.Ok(OpenedPdf(backend = backend, cleanup = cleanup))
+            ReaderResult.Ok(
+                OpenedPdf(
+                    backend = selected.backend,
+                    cleanup = cleanup,
+                    degradedBackend = selected.degraded
+                )
+            )
+        } catch (t: Throwable) {
+            ReaderResult.Err(
+                t.toReaderError(invalidPasswordKeywords = setOf("password", "encrypted"))
+            )
         } finally {
             primaryPfd.closeQuietly()
         }
+    }
+
+    private suspend fun openWithPdfiumFallback(
+        sourceDescriptor: ParcelFileDescriptor,
+        password: String?
+    ): SelectedBackend {
+        val pdfiumAttempt = runCatching { openPdfium(sourceDescriptor, password) }
+        if (pdfiumAttempt.isSuccess) {
+            return SelectedBackend(
+                backend = pdfiumAttempt.getOrThrow(),
+                degraded = false
+            )
+        }
+
+        val platformAttempt = runCatching { openPlatform(sourceDescriptor) }
+        if (platformAttempt.isSuccess) {
+            return SelectedBackend(
+                backend = platformAttempt.getOrThrow(),
+                degraded = true
+            )
+        }
+
+        val pdfiumError = pdfiumAttempt.exceptionOrNull()
+        val platformError = platformAttempt.exceptionOrNull()
+        if (pdfiumError != null && platformError != null) {
+            pdfiumError.addSuppressed(platformError)
+        }
+        throw pdfiumError ?: platformError ?: IllegalStateException("Unknown PDF backend open error")
     }
 
     private suspend fun openPdfium(
@@ -69,4 +107,9 @@ internal class BackendFactory(
             ioDispatcher = config.ioDispatcher
         )
     }
+
+    private data class SelectedBackend(
+        val backend: PdfBackend,
+        val degraded: Boolean
+    )
 }

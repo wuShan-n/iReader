@@ -12,6 +12,8 @@ import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.OutlineNode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 internal class PlatformPdfBackend(
     private val descriptor: ParcelFileDescriptor,
@@ -22,10 +24,13 @@ internal class PlatformPdfBackend(
         outline = false,
         links = false,
         textExtraction = false,
-        search = false
+        search = false,
+        preciseRegionRendering = false
     )
 
     private val renderer = PdfRenderer(descriptor)
+    private val pageSizeMutex = Mutex()
+    private val pageSizeCache = mutableMapOf<Int, PdfPageSize>()
 
     override suspend fun pageCount(): Int = withContext(ioDispatcher) {
         renderer.pageCount
@@ -43,8 +48,15 @@ internal class PlatformPdfBackend(
     }
 
     override suspend fun pageSize(pageIndex: Int): PdfPageSize = withContext(ioDispatcher) {
+        val cached = pageSizeMutex.withLock { pageSizeCache[pageIndex] }
+        if (cached != null) return@withContext cached
+
         renderer.openPage(pageIndex).use { page ->
-            PdfPageSize(widthPt = page.width, heightPt = page.height)
+            val measured = PdfPageSize(widthPt = page.width, heightPt = page.height)
+            pageSizeMutex.withLock {
+                pageSizeCache[pageIndex] = measured
+            }
+            measured
         }
     }
 
@@ -74,4 +86,3 @@ internal class PlatformPdfBackend(
         runCatching { descriptor.close() }
     }
 }
-

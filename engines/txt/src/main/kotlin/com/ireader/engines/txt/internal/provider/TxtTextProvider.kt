@@ -11,6 +11,7 @@ import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
 import kotlin.math.min
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
@@ -35,8 +36,10 @@ internal class TxtTextProvider(
                 val length = (maxOffset - minOffset).toInt().coerceAtLeast(0)
                 val capped = length.coerceAtMost(MAX_EXTRACT_CHARS)
                 ReaderResult.Ok(store.readString(minOffset, capped))
-            } catch (t: Throwable) {
-                ReaderResult.Err(t.toReaderError())
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                ReaderResult.Err(e.toReaderError())
             }
         }
     }
@@ -50,8 +53,10 @@ internal class TxtTextProvider(
                     )
                 val half = (maxChars / 2).coerceAtLeast(16)
                 ReaderResult.Ok(store.readAround(offset, before = half, after = half))
-            } catch (t: Throwable) {
-                ReaderResult.Err(t.toReaderError())
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                ReaderResult.Err(e.toReaderError())
             }
         }
     }

@@ -16,7 +16,8 @@ internal data class PdfBackendCapabilities(
     val outline: Boolean,
     val links: Boolean,
     val textExtraction: Boolean,
-    val search: Boolean
+    val search: Boolean,
+    val preciseRegionRendering: Boolean = true
 ) {
     fun supportsFullReaderFeatures(): Boolean =
         outline && links && textExtraction && search
@@ -47,4 +48,3 @@ internal interface PdfBackend : Closeable {
 
     suspend fun pageText(pageIndex: Int): String?
 }
-

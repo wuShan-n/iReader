@@ -129,6 +129,13 @@ internal class EpubController(
                 locatorCollectionJob?.cancel()
                 locatorCollectionJob = null
                 decorationsHost.unbind()
+                surface?.let { fragmentSurface ->
+                    val fragment = fragmentRef.getAndSet(null)
+                    removeNavigatorFragment(
+                        fm = fragmentSurface.fragmentManager,
+                        fragment = fragment
+                    )
+                } ?: fragmentRef.set(null)
                 surface = null
                 ReaderResult.Ok(Unit)
             } catch (t: Throwable) {
@@ -164,28 +171,37 @@ internal class EpubController(
 
     override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> =
         navMutex.withLock {
+            val likelyBoundary = !_state.value.nav.canGoNext
             val fragment = fragmentRef.get()
                 ?: return ReaderResult.Err(ReaderError.Internal("EPUB surface is not bound"))
 
             val previous = _state.value.locator.value
             withContext(mainDispatcher) { fragment.goForward(animated = true) }
-            awaitLocatorChange(previous)
+            if (!likelyBoundary) {
+                awaitLocatorChange(previous)
+            }
             render(policy)
         }
 
     override suspend fun prev(policy: RenderPolicy): ReaderResult<RenderPage> =
         navMutex.withLock {
+            val likelyBoundary = !_state.value.nav.canGoPrev
             val fragment = fragmentRef.get()
                 ?: return ReaderResult.Err(ReaderError.Internal("EPUB surface is not bound"))
 
             val previous = _state.value.locator.value
             withContext(mainDispatcher) { fragment.goBackward(animated = true) }
-            awaitLocatorChange(previous)
+            if (!likelyBoundary) {
+                awaitLocatorChange(previous)
+            }
             render(policy)
         }
 
     override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> =
         navMutex.withLock {
+            if (_state.value.locator.value == locator.value) {
+                return render(policy)
+            }
             val fragment = fragmentRef.get()
             if (fragment == null) {
                 pendingLocator = locator
@@ -237,16 +253,20 @@ internal class EpubController(
         val fragment = fragmentRef.getAndSet(null)
         if (currentSurface != null && fragment != null) {
             Handler(Looper.getMainLooper()).post {
-                val fm = currentSurface.fragmentManager
-                if (!fm.isStateSaved) {
-                    runCatching {
-                        fm.beginTransaction()
-                            .remove(fragment)
-                            .commitNowAllowingStateLoss()
-                    }
-                }
+                removeNavigatorFragment(
+                    fm = currentSurface.fragmentManager,
+                    fragment = fragment
+                )
+            }
+        } else if (currentSurface != null) {
+            Handler(Looper.getMainLooper()).post {
+                removeNavigatorFragment(
+                    fm = currentSurface.fragmentManager,
+                    fragment = null
+                )
             }
         }
+        surface = null
 
         scope.coroutineContext[Job]?.cancel()
     }
@@ -309,7 +329,10 @@ internal class EpubController(
                         label = position?.toString(),
                         current = position
                     ),
-                    nav = NavigationAvailability(canGoPrev = true, canGoNext = true),
+                    nav = NavigationAvailability(
+                        canGoPrev = progression > NAV_EPSILON,
+                        canGoNext = progression < (1.0 - NAV_EPSILON)
+                    ),
                     titleInView = locator.title ?: appLocator.extras["title"]
                 )
 
@@ -330,10 +353,45 @@ internal class EpubController(
         )
     }
 
-    private suspend fun awaitLocatorChange(previousLocatorValue: String) {
-        withTimeoutOrNull(1_500L) {
+    private suspend fun awaitLocatorChange(previousLocatorValue: String): Boolean {
+        return withTimeoutOrNull(NAVIGATION_WAIT_TIMEOUT_MS) {
             state.filter { it.locator.value != previousLocatorValue }.first()
+        } != null
+    }
+
+    private fun removeNavigatorFragment(
+        fm: FragmentManager,
+        fragment: EpubNavigatorFragment?
+    ) {
+        val target = fragment ?: (fm.findFragmentByTag(navigatorFragmentTag()) as? EpubNavigatorFragment)
+        if (target == null || fm.isDestroyed) {
+            return
+        }
+
+        if (fm.isStateSaved) {
+            runCatching {
+                fm.beginTransaction()
+                    .remove(target)
+                    .commitAllowingStateLoss()
+            }
+            return
+        }
+
+        runCatching {
+            fm.beginTransaction()
+                .remove(target)
+                .commitNowAllowingStateLoss()
+        }.onFailure {
+            runCatching {
+                fm.beginTransaction()
+                    .remove(target)
+                    .commitAllowingStateLoss()
+            }
         }
     }
 
+    private companion object {
+        private const val NAVIGATION_WAIT_TIMEOUT_MS = 400L
+        private const val NAV_EPSILON = 0.0005
+    }
 }

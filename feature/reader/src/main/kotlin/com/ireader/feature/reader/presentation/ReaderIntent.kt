@@ -6,6 +6,11 @@ import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
 
+enum class GestureAxis {
+    HORIZONTAL,
+    VERTICAL
+}
+
 sealed interface ReaderIntent {
     data class Start(val bookId: Long, val locatorArg: String?) : ReaderIntent
     data object RetryOpen : ReaderIntent
@@ -16,6 +21,19 @@ sealed interface ReaderIntent {
     data object RefreshPage : ReaderIntent
 
     data object ToggleChrome : ReaderIntent
+    data object ToggleImmersiveChrome : ReaderIntent
+    data object BackPressed : ReaderIntent
+    data class HandleTap(
+        val xPx: Float,
+        val yPx: Float,
+        val viewportWidthPx: Int,
+        val viewportHeightPx: Int
+    ) : ReaderIntent
+    data class HandleDragEnd(
+        val axis: GestureAxis,
+        val deltaPx: Float,
+        val viewportMainAxisPx: Int
+    ) : ReaderIntent
     data object OpenAnnotations : ReaderIntent
     data object OpenToc : ReaderIntent
     data object OpenMenu : ReaderIntent

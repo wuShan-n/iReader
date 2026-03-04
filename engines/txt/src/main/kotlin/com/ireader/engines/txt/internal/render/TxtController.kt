@@ -7,6 +7,8 @@
 
 package com.ireader.engines.txt.internal.render
 
+import android.util.Log
+import com.ireader.engines.common.cache.LruCache
 import com.ireader.engines.txt.internal.link.LinkDetector
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
@@ -16,6 +18,7 @@ import com.ireader.engines.txt.internal.pagination.TxtPaginator
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.error.getOrNull
@@ -34,7 +37,10 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.api.render.RenderSurface
+import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
+import com.ireader.reader.model.LocatorRange
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -46,6 +52,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -80,7 +87,11 @@ internal class TxtController(
         documentKey = documentKey,
         paginationDir = files.paginationDir
     )
+    private val pageExtrasCache = LruCache<PageExtrasCacheKey, PageExtras>((maxPageCache * 3).coerceAtLeast(8))
+
     private var pageCompletionJob: Job? = null
+    private var annotationObserverJob: Job? = null
+    private var annotationRevision: Long = 0L
 
     private val eventsMutable = MutableSharedFlow<ReaderEvent>(extraBufferCapacity = 32)
     override val events: Flow<ReaderEvent> = eventsMutable.asSharedFlow()
@@ -107,19 +118,19 @@ internal class TxtController(
 
     init {
         if (meta.hardWrapLikely && softBreakIndex == null) {
-            scope.launch {
-                runCatching {
-                    SoftBreakIndexBuilder.buildIfNeeded(files, meta, ioDispatcher)
-                    val loaded = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)
-                    mutex.withLock {
-                        softBreakIndex?.close()
-                        softBreakIndex = loaded
-                        paginator.setSoftBreakIndex(loaded)
-                        sliceCache.clear()
-                    }
+            launchSafely("soft-break-index") {
+                SoftBreakIndexBuilder.buildIfNeeded(files, meta, ioDispatcher)
+                val loaded = SoftBreakIndex.openIfValid(files.softBreakIdx, meta)
+                mutex.withLock {
+                    softBreakIndex?.close()
+                    softBreakIndex = loaded
+                    paginator.setSoftBreakIndex(loaded)
+                    sliceCache.clear()
+                    pageExtrasCache.clear()
                 }
             }
         }
+        observeAnnotationChangesIfNeeded()
     }
 
     override suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit> {
@@ -134,6 +145,7 @@ internal class TxtController(
         return mutex.withLock {
             this.constraints = constraints
             sliceCache.clear()
+            pageExtrasCache.clear()
             reloadPaginationIndexIfNeededLocked()
             updateStateLocked()
             ReaderResult.Ok(Unit)
@@ -148,6 +160,7 @@ internal class TxtController(
             currentEffectiveConfig = reflow.toTxtEffectiveConfig()
             stateMutable.value = stateMutable.value.copy(config = reflow)
             sliceCache.clear()
+            pageExtrasCache.clear()
             reloadPaginationIndexIfNeededLocked()
             ReaderResult.Ok(Unit)
         }
@@ -158,9 +171,7 @@ internal class TxtController(
             renderLocked(policy)
         }
         if (renderResult is ReaderResult.Ok && policy.prefetchNeighbors > 0) {
-            scope.launch {
-                runCatching { prefetchNeighbors(policy.prefetchNeighbors) }
-            }
+            launchSafely("prefetch-neighbors") { prefetchNeighbors(policy.prefetchNeighbors) }
         }
         return renderResult
     }
@@ -291,6 +302,7 @@ internal class TxtController(
     override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
         return mutex.withLock {
             sliceCache.clear()
+            pageExtrasCache.clear()
             if (reason == InvalidateReason.CONFIG_CHANGED || reason == InvalidateReason.LAYOUT_CHANGED) {
                 paginationIndex.invalidateProfile()
                 pageCompletionJob?.cancel()
@@ -301,8 +313,11 @@ internal class TxtController(
 
     override fun close() {
         runCatching { paginationIndex.saveIfDirty() }
+            .onFailure { reportBackgroundFailure("save-pagination-index", it) }
         pageCompletionJob?.cancel()
+        annotationObserverJob?.cancel()
         runCatching { softBreakIndex?.close() }
+            .onFailure { reportBackgroundFailure("close-soft-break-index", it) }
         scope.cancel()
     }
 
@@ -354,11 +369,12 @@ internal class TxtController(
             endOffset = slice.endOffset,
             maxOffset = store.lengthChars
         )
-        val decorations = annotationProvider
-            ?.decorationsFor(AnnotationQuery(range = pageRange))
-            ?.getOrNull()
-            ?: emptyList()
-        val links = LinkDetector.detect(slice.text)
+        val extras = pageExtrasFor(
+            startOffset = slice.startOffset,
+            endOffset = slice.endOffset,
+            text = slice.text,
+            range = pageRange
+        )
 
         val page = RenderPage(
             id = PageId("${slice.startOffset}-${slice.endOffset}"),
@@ -367,8 +383,8 @@ internal class TxtController(
                 text = slice.text,
                 mapping = TxtTextMapping(slice.startOffset, slice.endOffset)
             ),
-            links = links,
-            decorations = decorations,
+            links = extras.links,
+            decorations = extras.decorations,
             metrics = RenderMetrics(
                 renderTimeMs = renderTimeMs,
                 cacheHit = cacheHit
@@ -377,6 +393,32 @@ internal class TxtController(
         eventsMutable.tryEmit(ReaderEvent.Rendered(page.id, page.metrics))
         eventsMutable.tryEmit(ReaderEvent.PageChanged(page.locator))
         return ReaderResult.Ok(page)
+    }
+
+    private suspend fun pageExtrasFor(
+        startOffset: Long,
+        endOffset: Long,
+        text: CharSequence,
+        range: LocatorRange
+    ): PageExtras {
+        val key = PageExtrasCacheKey(
+            startOffset = startOffset,
+            endOffset = endOffset,
+            annotationRevision = annotationRevision
+        )
+        val cached = pageExtrasCache[key]
+        if (cached != null) {
+            return cached
+        }
+        val computed = PageExtras(
+            links = LinkDetector.detect(text),
+            decorations = annotationProvider
+                ?.decorationsFor(AnnotationQuery(range = range))
+                ?.getOrNull()
+                ?: emptyList()
+        )
+        pageExtrasCache[key] = computed
+        return computed
     }
 
     private fun updateStateLocked() {
@@ -407,24 +449,55 @@ internal class TxtController(
             return
         }
         val constraintsLocal = constraints ?: return
-        pageCompletionJob = scope.launch {
-            runCatching {
-                mutex.withLock {
-                    completePageMapForwardLocked(constraintsLocal, maxPages = 24)
-                }
-            }
+        pageCompletionJob = launchSafely("page-map-completion") {
+            completePageMapForward(
+                constraints = constraintsLocal,
+                maxPages = 24,
+                batchSize = PAGE_COMPLETION_BATCH_SIZE
+            )
         }
     }
 
-    private suspend fun completePageMapForwardLocked(
+    private suspend fun completePageMapForward(
         constraints: LayoutConstraints,
-        maxPages: Int
+        maxPages: Int,
+        batchSize: Int
     ) {
         if (maxPages <= 0 || store.lengthChars <= 0L) {
             return
         }
-        var cursor = paginationIndex.lastKnownStart() ?: navigation.currentStart
-        cursor = cursor.coerceIn(0L, store.lengthChars)
+        var remaining = maxPages
+        var cursor = mutex.withLock {
+            (paginationIndex.lastKnownStart() ?: navigation.currentStart).coerceIn(0L, store.lengthChars)
+        }
+        while (remaining > 0 && cursor < store.lengthChars) {
+            val batchResult = mutex.withLock {
+                completePageMapBatchLocked(
+                    constraints = constraints,
+                    startCursor = cursor,
+                    maxPages = minOf(batchSize, remaining)
+                )
+            }
+            cursor = batchResult.nextCursor
+            if (batchResult.steps <= 0) {
+                break
+            }
+            remaining -= batchResult.steps
+        }
+        mutex.withLock {
+            paginationIndex.saveIfDirty()
+        }
+    }
+
+    private suspend fun completePageMapBatchLocked(
+        constraints: LayoutConstraints,
+        startCursor: Long,
+        maxPages: Int
+    ): PageCompletionBatchResult {
+        if (maxPages <= 0 || startCursor >= store.lengthChars) {
+            return PageCompletionBatchResult(nextCursor = startCursor, steps = 0)
+        }
+        var cursor = startCursor.coerceIn(0L, store.lengthChars)
         var steps = 0
         while (cursor < store.lengthChars && steps < maxPages) {
             val slice = sliceCache.getOrBuild(
@@ -440,6 +513,55 @@ internal class TxtController(
             cursor = slice.endOffset
             steps++
         }
-        paginationIndex.saveIfDirty()
+        return PageCompletionBatchResult(nextCursor = cursor, steps = steps)
+    }
+
+    private fun observeAnnotationChangesIfNeeded() {
+        val provider = annotationProvider ?: return
+        annotationObserverJob = launchSafely("observe-annotations") {
+            provider.observeAll().collect {
+                mutex.withLock {
+                    annotationRevision++
+                    pageExtrasCache.clear()
+                }
+            }
+        }
+    }
+
+    private fun launchSafely(name: String, block: suspend () -> Unit): Job {
+        return scope.launch {
+            try {
+                block()
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                reportBackgroundFailure(name, e)
+            }
+        }
+    }
+
+    private fun reportBackgroundFailure(stage: String, throwable: Throwable) {
+        Log.w(TAG, "TXT controller background task failed: $stage", throwable)
+    }
+
+    private data class PageCompletionBatchResult(
+        val nextCursor: Long,
+        val steps: Int
+    )
+
+    private data class PageExtrasCacheKey(
+        val startOffset: Long,
+        val endOffset: Long,
+        val annotationRevision: Long
+    )
+
+    private data class PageExtras(
+        val links: List<DocumentLink>,
+        val decorations: List<Decoration>
+    )
+
+    private companion object {
+        private const val TAG = "TxtController"
+        private const val PAGE_COMPLETION_BATCH_SIZE = 4
     }
 }

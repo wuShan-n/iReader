@@ -3,6 +3,7 @@ package com.ireader.engines.epub.internal.open
 import android.content.Context
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.common.android.id.SourceDocumentIds
 import com.ireader.engines.epub.internal.readium.ReadiumEpubToolkit
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
@@ -11,7 +12,6 @@ import com.ireader.reader.api.provider.AnnotationStore
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
-import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -74,9 +74,9 @@ internal class EpubOpener(
                 )
             }
 
-            val docId = DocumentId(
-                publication.metadata.identifier
-                    ?: UUID.nameUUIDFromBytes(source.uri.toString().toByteArray()).toString()
+            val docId: DocumentId = SourceDocumentIds.fromSourceSha1(
+                prefix = "epub",
+                source = source
             )
 
             val capabilities = DocumentCapabilities(

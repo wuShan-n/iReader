@@ -50,6 +50,7 @@ sealed interface RenderContent {
     data class Tiles(
         val pageWidthPx: Int,
         val pageHeightPx: Int,
+        val baseTileSizePx: Int = 512,
         val tileProvider: TileProvider
     ) : RenderContent
 

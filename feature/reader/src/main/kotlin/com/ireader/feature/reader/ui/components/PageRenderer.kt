@@ -27,6 +27,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
+import com.ireader.feature.reader.presentation.GestureAxis
 import com.ireader.feature.reader.presentation.PageTurnDirection
 import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.ui.ReaderSurface
@@ -35,7 +36,6 @@ import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.model.DocumentLink
-import kotlin.math.max
 
 @Composable
 fun PageRenderer(
@@ -43,7 +43,7 @@ fun PageRenderer(
     textColor: Color,
     backgroundColor: Color,
     onBackgroundTap: (Offset, IntSize) -> Unit,
-    onPageTurn: (PageTurnDirection) -> Unit,
+    onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
     onWebSchemeUrl: (String) -> Boolean,
     modifier: Modifier = Modifier
@@ -75,7 +75,7 @@ fun PageRenderer(
                 textColor = textColor,
                 backgroundColor = backgroundColor,
                 onBackgroundTap = onBackgroundTap,
-                onPageTurn = onPageTurn,
+                onDragEnd = onDragEnd,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -125,7 +125,7 @@ private fun AnimatedTextPage(
     textColor: Color,
     backgroundColor: Color,
     onBackgroundTap: (Offset, IntSize) -> Unit,
-    onPageTurn: (PageTurnDirection) -> Unit,
+    onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val mode = state.pageTurnMode
@@ -169,7 +169,7 @@ private fun AnimatedTextPage(
                 pageId = targetPage.id.value,
                 mode = mode,
                 onBackgroundTap = onBackgroundTap,
-                onPageTurn = onPageTurn,
+                onDragEnd = onDragEnd,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -186,7 +186,7 @@ private fun TextGestureOverlay(
     pageId: String,
     mode: PageTurnMode,
     onBackgroundTap: (Offset, IntSize) -> Unit,
-    onPageTurn: (PageTurnDirection) -> Unit,
+    onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var dragDeltaPx by remember(pageId, mode) { mutableFloatStateOf(0f) }
@@ -201,11 +201,11 @@ private fun TextGestureOverlay(
                 },
                 onDragCancel = { dragDeltaPx = 0f },
                 onDragEnd = {
-                    val threshold = max(size.width * 0.12f, 56f)
-                    when {
-                        dragDeltaPx <= -threshold -> onPageTurn(PageTurnDirection.NEXT)
-                        dragDeltaPx >= threshold -> onPageTurn(PageTurnDirection.PREV)
-                    }
+                    onDragEnd(
+                        GestureAxis.HORIZONTAL,
+                        dragDeltaPx,
+                        size.width
+                    )
                     dragDeltaPx = 0f
                 }
             )
@@ -220,11 +220,11 @@ private fun TextGestureOverlay(
                 },
                 onDragCancel = { dragDeltaPx = 0f },
                 onDragEnd = {
-                    val threshold = max(size.height * 0.12f, 56f)
-                    when {
-                        dragDeltaPx <= -threshold -> onPageTurn(PageTurnDirection.NEXT)
-                        dragDeltaPx >= threshold -> onPageTurn(PageTurnDirection.PREV)
-                    }
+                    onDragEnd(
+                        GestureAxis.VERTICAL,
+                        dragDeltaPx,
+                        size.height
+                    )
                     dragDeltaPx = 0f
                 }
             )

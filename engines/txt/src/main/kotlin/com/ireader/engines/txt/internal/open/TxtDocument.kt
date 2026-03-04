@@ -5,7 +5,6 @@ package com.ireader.engines.txt.internal.open
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
-import com.ireader.engines.txt.internal.render.TxtController
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
@@ -19,6 +18,7 @@ import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
@@ -33,20 +33,23 @@ internal class TxtDocument(
     private val maxPageCache: Int,
     private val annotationProviderFactory: ((DocumentId) -> AnnotationProvider?)?,
     private val ioDispatcher: CoroutineDispatcher,
-    private val defaultDispatcher: CoroutineDispatcher
+    private val defaultDispatcher: CoroutineDispatcher,
+    private val controllerFactory: TxtControllerFactory = DefaultTxtControllerFactory,
+    private val sessionFactory: TxtSessionFactory = DefaultTxtSessionFactory()
 ) : ReaderDocument {
 
     override val format: BookFormat = BookFormat.TXT
 
-    override val capabilities: DocumentCapabilities = DocumentCapabilities(
-        reflowable = true,
-        fixedLayout = false,
-        outline = true,
-        search = true,
-        textExtraction = true,
-        annotations = true,
-        links = true
-    )
+    override val capabilities: DocumentCapabilities
+        get() = DocumentCapabilities(
+            reflowable = true,
+            fixedLayout = false,
+            outline = true,
+            search = true,
+            textExtraction = true,
+            annotations = annotationProviderFactory != null,
+            links = true
+        )
 
     private val store: Utf16TextStore by lazy {
         Utf16TextStore(files.contentU16)
@@ -80,7 +83,7 @@ internal class TxtDocument(
                 }.coerceIn(0L, store.lengthChars)
                 val annotationProvider = annotationProviderFactory?.invoke(id)
 
-                val controller = TxtController(
+                val controller = controllerFactory.create(
                     documentKey = id.value,
                     store = store,
                     meta = meta,
@@ -94,7 +97,7 @@ internal class TxtDocument(
                     defaultDispatcher = defaultDispatcher
                 )
                 ReaderResult.Ok(
-                    TxtSession(
+                    sessionFactory.create(
                         controller = controller,
                         files = files,
                         meta = meta,
@@ -104,8 +107,10 @@ internal class TxtDocument(
                         annotationsProvider = annotationProvider
                     )
                 )
-            } catch (t: Throwable) {
-                ReaderResult.Err(t.toReaderError())
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                ReaderResult.Err(e.toReaderError())
             }
         }
     }

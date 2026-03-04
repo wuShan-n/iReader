@@ -61,6 +61,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val backgroundPreset = stringPreferencesKey("reader.display.backgroundPreset")
             val showReadingProgress = booleanPreferencesKey("reader.display.showReadingProgress")
             val fullScreenMode = booleanPreferencesKey("reader.display.fullScreenMode")
+            val tapZonePreset = stringPreferencesKey("reader.display.tapZonePreset")
+            val preventAccidentalTurn = booleanPreferencesKey("reader.display.preventAccidentalTurn")
         }
     }
 
@@ -152,7 +154,12 @@ class DatastoreReaderSettingsStore @Inject constructor(
                 showReadingProgress = prefs[Keys.Display.showReadingProgress]
                     ?: defaultDisplay.showReadingProgress,
                 fullScreenMode = prefs[Keys.Display.fullScreenMode]
-                    ?: defaultDisplay.fullScreenMode
+                    ?: defaultDisplay.fullScreenMode,
+                tapZonePreset = TapZonePreset.fromStorageValue(
+                    prefs[Keys.Display.tapZonePreset]
+                ),
+                preventAccidentalTurn = prefs[Keys.Display.preventAccidentalTurn]
+                    ?: defaultDisplay.preventAccidentalTurn
             )
         }.distinctUntilChanged()
 
@@ -204,6 +211,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
             mutablePrefs[Keys.Display.backgroundPreset] = prefs.backgroundPreset.storageValue
             mutablePrefs[Keys.Display.showReadingProgress] = prefs.showReadingProgress
             mutablePrefs[Keys.Display.fullScreenMode] = prefs.fullScreenMode
+            mutablePrefs[Keys.Display.tapZonePreset] = prefs.tapZonePreset.storageValue
+            mutablePrefs[Keys.Display.preventAccidentalTurn] = prefs.preventAccidentalTurn
         }
     }
 

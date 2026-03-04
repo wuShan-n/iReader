@@ -51,12 +51,26 @@ class RoomAnnotationStore @Inject constructor(
         documentId: DocumentId,
         query: AnnotationQuery
     ): ReaderResult<List<Annotation>> {
-        return when (val listed = list(documentId)) {
-            is ReaderResult.Err -> listed
-            is ReaderResult.Ok -> ReaderResult.Ok(
-                listed.value.filter { annotation -> annotation.matches(query) }
-            )
-        }
+        return runCatching {
+            val entities = when {
+                query.page != null -> annotationDao.listByDocumentIdAndAnchorType(
+                    documentId = documentId.value,
+                    anchorType = AnnotationAnchorType.FIXED_RECTS
+                )
+
+                query.range != null -> annotationDao.listByDocumentIdAndAnchorType(
+                    documentId = documentId.value,
+                    anchorType = AnnotationAnchorType.REFLOW_RANGE
+                )
+
+                else -> annotationDao.listByDocumentId(documentId.value)
+            }
+            entities.mapNotNull { entity -> entity.toModelOrNull() }
+                .filter { annotation -> annotation.matches(query) }
+        }.fold(
+            onSuccess = { ReaderResult.Ok(it) },
+            onFailure = { ReaderResult.Err(ReaderError.Internal(cause = it)) }
+        )
     }
 
     override suspend fun create(

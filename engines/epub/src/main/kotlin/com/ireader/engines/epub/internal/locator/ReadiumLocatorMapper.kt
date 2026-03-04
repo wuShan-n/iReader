@@ -1,6 +1,7 @@
 package com.ireader.engines.epub.internal.locator
 
 import com.ireader.reader.model.Locator
+import org.json.JSONArray
 import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator as ReadiumLocator
 
@@ -30,4 +31,30 @@ internal fun Locator.toReadiumLocatorOrNull(): ReadiumLocator? {
     return runCatching {
         ReadiumLocator.fromJSON(JSONObject(value))
     }.getOrNull()
+}
+
+internal fun Locator.withReadiumFragments(fragments: List<String>): Locator {
+    if (scheme != ReadiumLocatorSchemes.READIUM_LOCATOR_JSON) {
+        return this
+    }
+    val normalized = fragments.map { it.trim() }.filter { it.isNotEmpty() }
+    return runCatching {
+        val root = JSONObject(value)
+        val locations = root.optJSONObject("locations") ?: JSONObject().also { root.put("locations", it) }
+        val fragmentArray = JSONArray()
+        normalized.forEach(fragmentArray::put)
+        locations.put("fragments", fragmentArray)
+        copy(
+            value = root.toString(),
+            extras = buildMap {
+                putAll(this@withReadiumFragments.extras)
+                val first = normalized.firstOrNull()
+                if (first == null) {
+                    remove("fragment")
+                } else {
+                    put("fragment", first)
+                }
+            }
+        )
+    }.getOrElse { this }
 }

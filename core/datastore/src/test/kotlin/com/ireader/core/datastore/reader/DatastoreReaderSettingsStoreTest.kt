@@ -119,7 +119,9 @@ class DatastoreReaderSettingsStoreTest {
             nightMode = true,
             backgroundPreset = ReaderBackgroundPreset.NAVY,
             showReadingProgress = false,
-            fullScreenMode = false
+            fullScreenMode = false,
+            tapZonePreset = TapZonePreset.LEFT_HAND,
+            preventAccidentalTurn = false
         )
 
         store.setDisplayPrefs(prefs)

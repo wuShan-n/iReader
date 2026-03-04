@@ -17,9 +17,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ireader.feature.reader.presentation.ReaderEffect
 import com.ireader.feature.reader.presentation.ReaderIntent
-import com.ireader.feature.reader.presentation.ReaderSheet
 import com.ireader.feature.reader.presentation.UiText
 import com.ireader.feature.reader.presentation.ReaderViewModel
+import com.ireader.feature.reader.web.ExternalLinkPolicy
 import com.ireader.reader.api.render.LayoutConstraints
 
 @Composable
@@ -46,11 +46,19 @@ fun ReaderScreen(
                 ReaderEffect.Back -> onBack()
                 is ReaderEffect.OpenAnnotations -> onOpenAnnotations(effect.bookId)
                 is ReaderEffect.OpenExternalUrl -> {
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse(effect.url))
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
+                    when (ExternalLinkPolicy.evaluate(effect.url)) {
+                        is ExternalLinkPolicy.Decision.Allow -> runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(effect.url))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }.onFailure {
+                            snackbarHost.showSnackbar("无法打开外部链接")
+                        }
+
+                        is ExternalLinkPolicy.Decision.Block -> {
+                            snackbarHost.showSnackbar("已拦截不安全外部链接")
+                        }
                     }
                 }
                 is ReaderEffect.ShareText -> {
@@ -77,14 +85,8 @@ fun ReaderScreen(
         }
     }
 
-    BackHandler(enabled = state.sheet != ReaderSheet.None) {
-        vm.dispatch(ReaderIntent.BackInSheetHierarchy)
-    }
-    BackHandler(enabled = state.sheet == ReaderSheet.None && state.activeDockTab != null) {
-        vm.dispatch(ReaderIntent.CloseDockPanel)
-    }
-    BackHandler(enabled = state.sheet == ReaderSheet.None && state.activeDockTab == null && !state.chromeVisible) {
-        onBack()
+    BackHandler {
+        vm.dispatch(ReaderIntent.BackPressed)
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {

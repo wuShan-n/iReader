@@ -54,8 +54,12 @@ internal class PdfDocument(
         runCatching {
             val backendMetadata = openedPdf.backend.metadata()
             val defaultTitle = source.displayName?.substringBeforeLast('.')
+            val extra = backendMetadata.extra + mapOf(
+                "degradedBackend" to openedPdf.degradedBackend.toString()
+            )
             backendMetadata.copy(
-                title = backendMetadata.title ?: defaultTitle
+                title = backendMetadata.title ?: defaultTitle,
+                extra = extra
             )
         }.fold(
             onSuccess = { ReaderResult.Ok(it) },

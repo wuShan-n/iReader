@@ -1,6 +1,7 @@
 package com.ireader.engines.epub.internal.provider
 
 import com.ireader.engines.epub.internal.locator.toAppLocator
+import com.ireader.engines.epub.internal.locator.withReadiumFragments
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.SelectionProvider
@@ -37,18 +38,30 @@ internal class EpubSelectionProvider(
                 }
                 val text = readiumLocator.text.highlight?.takeIf { it.isNotBlank() }
                 val rects = listOfNotNull(bounds)
-                val fragment = readiumLocator.locations.fragments.firstOrNull()
+                val fragments = readiumLocator.locations.fragments.filter { it.isNotBlank() }
+                val startLocator = if (fragments.isEmpty()) {
+                    locator
+                } else {
+                    locator.withReadiumFragments(listOf(fragments.first()))
+                }
+                val endLocator = if (fragments.isEmpty()) {
+                    locator
+                } else {
+                    locator.withReadiumFragments(listOf(fragments.last()))
+                }
 
                 ReaderResult.Ok(
                     SelectionProvider.Selection(
                         locator = locator,
                         bounds = bounds,
-                        start = locator,
-                        end = locator,
+                        start = startLocator,
+                        end = endLocator,
                         selectedText = text,
                         rects = rects,
                         extras = buildMap {
-                            fragment?.let { put("fragment", it) }
+                            fragments.firstOrNull()?.let { put("fragment", it) }
+                            fragments.firstOrNull()?.let { put("startFragment", it) }
+                            fragments.lastOrNull()?.let { put("endFragment", it) }
                         }
                     )
                 )

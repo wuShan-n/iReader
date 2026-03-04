@@ -2,24 +2,27 @@ package com.ireader.engines.pdf.internal.provider
 
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.pdf.internal.backend.PdfBackend
+import com.ireader.engines.pdf.internal.util.charEndOrDefault
+import com.ireader.engines.pdf.internal.util.charIndexOrNull
+import com.ireader.engines.pdf.internal.util.charStartOrDefault
+import com.ireader.engines.pdf.internal.util.toPdfPageIndexOrNull
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
-import com.ireader.reader.model.LocatorSchemes
 import kotlin.math.max
 import kotlin.math.min
 
 internal class PdfTextProvider(
     private val backend: PdfBackend,
     private val pageCount: Int
-) : TextProvider {
+    ) : TextProvider {
 
     override suspend fun getText(range: LocatorRange): ReaderResult<String> {
-        val startPage = range.start.toPageIndexOrNull(pageCount)
+        val startPage = range.start.toPdfPageIndexOrNull(pageCount)
             ?: return ReaderResult.Err(ReaderError.Internal("Invalid PDF start locator"))
-        val endPage = range.end.toPageIndexOrNull(pageCount)
+        val endPage = range.end.toPdfPageIndexOrNull(pageCount)
             ?: return ReaderResult.Err(ReaderError.Internal("Invalid PDF end locator"))
 
         val from = min(startPage, endPage)
@@ -31,18 +34,18 @@ internal class PdfTextProvider(
                     val text = backend.pageText(page).orEmpty()
                     val sliced = when {
                         page == startPage && page == endPage -> {
-                            val start = range.start.extras["charStart"]?.toIntOrNull() ?: 0
-                            val end = range.end.extras["charEnd"]?.toIntOrNull() ?: text.length
+                            val start = range.start.charStartOrDefault(defaultValue = 0)
+                            val end = range.end.charEndOrDefault(defaultValue = text.length)
                             safeSubstring(text, start, end)
                         }
 
                         page == startPage -> {
-                            val start = range.start.extras["charStart"]?.toIntOrNull() ?: 0
+                            val start = range.start.charStartOrDefault(defaultValue = 0)
                             safeSubstring(text, start, text.length)
                         }
 
                         page == endPage -> {
-                            val end = range.end.extras["charEnd"]?.toIntOrNull() ?: text.length
+                            val end = range.end.charEndOrDefault(defaultValue = text.length)
                             safeSubstring(text, 0, end)
                         }
 
@@ -59,14 +62,14 @@ internal class PdfTextProvider(
     }
 
     override suspend fun getTextAround(locator: Locator, maxChars: Int): ReaderResult<String> {
-        val pageIndex = locator.toPageIndexOrNull(pageCount)
+        val pageIndex = locator.toPdfPageIndexOrNull(pageCount)
             ?: return ReaderResult.Err(ReaderError.Internal("Invalid PDF locator"))
         return runCatching {
             val text = backend.pageText(pageIndex).orEmpty()
             if (text.isEmpty()) return@runCatching ""
 
-            val center = locator.extras["charIndex"]?.toIntOrNull()
-                ?: locator.extras["charStart"]?.toIntOrNull()
+            val center = locator.charIndexOrNull()
+                ?: locator.charStartOrDefault(defaultValue = -1).takeIf { it >= 0 }
                 ?: (text.length / 2)
 
             val half = (maxChars.coerceAtLeast(1) / 2).coerceAtLeast(1)
@@ -86,11 +89,5 @@ internal class PdfTextProvider(
         val safeStart = startInclusive.coerceIn(0, text.length)
         val safeEnd = endExclusive.coerceIn(safeStart, text.length)
         return text.substring(safeStart, safeEnd)
-    }
-
-    private fun Locator.toPageIndexOrNull(pageCount: Int): Int? {
-        if (scheme != LocatorSchemes.PDF_PAGE) return null
-        val index = value.toIntOrNull() ?: return null
-        return index.coerceIn(0, pageCount.coerceAtLeast(1) - 1)
     }
 }

@@ -2,7 +2,9 @@ package com.ireader.engines.txt.internal.search
 
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.engines.txt.internal.util.prepareTempFile
 import com.ireader.engines.txt.internal.util.readStringUtf8
+import com.ireader.engines.txt.internal.util.replaceFileAtomically
 import com.ireader.engines.txt.internal.util.writeStringUtf8
 import java.io.File
 import java.io.RandomAccessFile
@@ -91,9 +93,7 @@ internal class TrigramBloomIndex private constructor(
                     val bitsetBytes = BITSET_BITS / 8
 
                     val tmp = File(file.parentFile, "${file.name}.tmp")
-                    if (tmp.exists()) {
-                        tmp.delete()
-                    }
+                    prepareTempFile(tmp)
 
                     RandomAccessFile(tmp, "rw").use { raf ->
                         raf.setLength(0L)
@@ -120,13 +120,7 @@ internal class TrigramBloomIndex private constructor(
                         }
                     }
 
-                    if (file.exists()) {
-                        file.delete()
-                    }
-                    if (!tmp.renameTo(file)) {
-                        tmp.copyTo(file, overwrite = true)
-                        tmp.delete()
-                    }
+                    replaceFileAtomically(tempFile = tmp, targetFile = file)
                 }
             }
         }

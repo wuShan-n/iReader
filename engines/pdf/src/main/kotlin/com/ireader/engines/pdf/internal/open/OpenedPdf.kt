@@ -5,6 +5,6 @@ import java.io.Closeable
 
 internal data class OpenedPdf(
     val backend: PdfBackend,
-    val cleanup: Closeable
+    val cleanup: Closeable,
+    val degradedBackend: Boolean
 )
-

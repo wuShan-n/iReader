@@ -4,6 +4,7 @@ import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.AnnotationQuery
+import com.ireader.reader.api.provider.AnnotationStore
 import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.Locator
@@ -22,6 +23,7 @@ internal class InMemoryPdfAnnotationProvider(
 ) : AnnotationProvider {
 
     private val state = MutableStateFlow<List<Annotation>>(emptyList())
+    private var pageIndex: Map<String, List<Annotation>> = emptyMap()
 
     override fun observeAll(): Flow<List<Annotation>> = state.asStateFlow()
 
@@ -32,7 +34,7 @@ internal class InMemoryPdfAnnotationProvider(
         val pageQuery = query.page
         val rangeQuery = query.range
         val filtered = when {
-            pageQuery != null -> all.filter { ann -> ann.matchesPage(pageQuery) }
+            pageQuery != null -> pageIndex[pageQuery.pageKey()].orEmpty()
             rangeQuery != null -> all.filter { ann -> ann.matchesRange(rangeQuery.start, rangeQuery.end) }
             else -> all
         }
@@ -51,19 +53,19 @@ internal class InMemoryPdfAnnotationProvider(
             updatedAtEpochMs = now,
             extra = draft.extra
         )
-        state.value = state.value + created
+        updateState(state.value + created)
         return ReaderResult.Ok(created)
     }
 
     override suspend fun update(annotation: Annotation): ReaderResult<Unit> {
-        state.value = state.value.map {
+        updateState(state.value.map {
             if (it.id == annotation.id) annotation.copy(updatedAtEpochMs = System.currentTimeMillis()) else it
-        }
+        })
         return ReaderResult.Ok(Unit)
     }
 
     override suspend fun delete(id: AnnotationId): ReaderResult<Unit> {
-        state.value = state.value.filterNot { it.id == id }
+        updateState(state.value.filterNot { it.id == id })
         return ReaderResult.Ok(Unit)
     }
 
@@ -90,6 +92,16 @@ internal class InMemoryPdfAnnotationProvider(
         )
     }
 
+    private fun updateState(next: List<Annotation>) {
+        state.value = next
+        pageIndex = next.groupBy { annotation ->
+            when (val anchor = annotation.anchor) {
+                is AnnotationAnchor.FixedRects -> anchor.page.pageKey()
+                is AnnotationAnchor.ReflowRange -> anchor.range.start.pageKey()
+            }
+        }
+    }
+
     private fun Annotation.matchesPage(page: Locator): Boolean {
         return when (val anchor = anchor) {
             is AnnotationAnchor.FixedRects -> anchor.page.samePdfPage(page)
@@ -109,6 +121,53 @@ internal class InMemoryPdfAnnotationProvider(
     private fun Locator.samePdfPage(other: Locator): Boolean {
         if (scheme != LocatorSchemes.PDF_PAGE || other.scheme != LocatorSchemes.PDF_PAGE) return false
         return value == other.value
+    }
+
+    private fun Locator.pageKey(): String = "$scheme:$value"
+}
+
+internal class StoredPdfAnnotationProvider(
+    private val documentId: DocumentId,
+    private val store: AnnotationStore
+) : AnnotationProvider {
+
+    override fun observeAll(): Flow<List<Annotation>> = store.observe(documentId)
+
+    override suspend fun listAll(): ReaderResult<List<Annotation>> = store.list(documentId)
+
+    override suspend fun query(query: AnnotationQuery): ReaderResult<List<Annotation>> =
+        store.query(documentId, query)
+
+    override suspend fun create(draft: AnnotationDraft): ReaderResult<Annotation> =
+        store.create(documentId, draft)
+
+    override suspend fun update(annotation: Annotation): ReaderResult<Unit> =
+        store.update(documentId, annotation)
+
+    override suspend fun delete(id: AnnotationId): ReaderResult<Unit> =
+        store.delete(documentId, id)
+
+    override suspend fun decorationsFor(query: AnnotationQuery): ReaderResult<List<Decoration>> {
+        val items = when (val result = store.query(documentId, query)) {
+            is ReaderResult.Err -> return result
+            is ReaderResult.Ok -> result.value
+        }
+        return ReaderResult.Ok(
+            items.map { ann ->
+                when (val anchor = ann.anchor) {
+                    is AnnotationAnchor.FixedRects -> Decoration.Fixed(
+                        page = anchor.page,
+                        rects = anchor.rects,
+                        style = ann.style
+                    )
+
+                    is AnnotationAnchor.ReflowRange -> Decoration.Reflow(
+                        range = anchor.range,
+                        style = ann.style
+                    )
+                }
+            }
+        )
     }
 }
 

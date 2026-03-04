@@ -26,6 +26,19 @@ interface AnnotationDao {
     )
     suspend fun listByDocumentId(documentId: String): List<AnnotationEntity>
 
+    @Query(
+        """
+        SELECT * FROM annotations
+        WHERE documentId = :documentId
+          AND anchorType = :anchorType
+        ORDER BY updatedAtEpochMs DESC
+        """
+    )
+    suspend fun listByDocumentIdAndAnchorType(
+        documentId: String,
+        anchorType: String
+    ): List<AnnotationEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: AnnotationEntity)
 

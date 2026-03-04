@@ -15,6 +15,7 @@ import java.io.BufferedInputStream
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
+import kotlinx.coroutines.CancellationException
 
 internal data class EncodingResult(
     val charset: Charset,
@@ -61,8 +62,10 @@ internal class EncodingDetector {
                     )
                 }
             }
-        } catch (t: Throwable) {
-            ReaderResult.Err(t.toReaderError())
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            ReaderResult.Err(e.toReaderError())
         }
     }
 
@@ -109,7 +112,7 @@ internal class EncodingDetector {
                 decoder.decode(ByteBuffer.wrap(bytes, 0, read))
                 true
             }
-        } catch (_: Throwable) {
+        } catch (_: Exception) {
             false
         }
     }

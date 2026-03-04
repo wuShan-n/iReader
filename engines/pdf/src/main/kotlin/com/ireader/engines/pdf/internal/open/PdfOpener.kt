@@ -8,6 +8,7 @@ import com.ireader.reader.api.error.ReaderResult
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
@@ -49,13 +50,27 @@ internal class PdfOpener(
 
     private suspend fun copyToCache(source: DocumentSource): File {
         val target = cacheStore.fileFor(source.uri)
-        source.openInputStream().use { input ->
-            FileOutputStream(target).use { output ->
-                input.copyTo(output)
-                output.flush()
+        val parent = target.parentFile ?: throw IOException("Invalid cache path: ${target.absolutePath}")
+        val temp = File(parent, "${target.name}.tmp-${UUID.randomUUID()}")
+        try {
+            source.openInputStream().use { input ->
+                FileOutputStream(temp).use { output ->
+                    input.copyTo(output)
+                    output.flush()
+                    output.fd.sync()
+                }
             }
+            if (target.exists() && !target.delete()) {
+                throw IOException("Failed to replace cached PDF: ${target.absolutePath}")
+            }
+            if (!temp.renameTo(target)) {
+                throw IOException("Failed to finalize cached PDF: ${target.absolutePath}")
+            }
+            return target
+        } catch (t: Throwable) {
+            runCatching { temp.delete() }
+            throw t
         }
-        return target
     }
 }
 
@@ -63,4 +78,3 @@ internal data class OpenedPdfSource(
     val descriptor: ParcelFileDescriptor,
     val tempFile: File?
 )
-

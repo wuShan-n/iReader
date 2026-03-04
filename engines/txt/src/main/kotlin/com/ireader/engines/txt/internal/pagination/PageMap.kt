@@ -1,5 +1,7 @@
 package com.ireader.engines.txt.internal.pagination
 
+import com.ireader.engines.txt.internal.util.prepareTempFile
+import com.ireader.engines.txt.internal.util.replaceFileAtomically
 import com.ireader.engines.txt.internal.util.readVarLongOrNull
 import com.ireader.engines.txt.internal.util.writeVarLong
 import java.io.File
@@ -29,10 +31,7 @@ internal object PageMap {
             }
         }
         val tmp = File(binaryFile.parentFile, "${binaryFile.name}.tmp")
-        if (tmp.exists()) {
-            tmp.delete()
-        }
-        tmp.parentFile?.mkdirs()
+        prepareTempFile(tmp)
 
         RandomAccessFile(tmp, "rw").use { raf ->
             raf.setLength(0L)
@@ -47,13 +46,7 @@ internal object PageMap {
             }
         }
 
-        if (binaryFile.exists()) {
-            binaryFile.delete()
-        }
-        if (!tmp.renameTo(binaryFile)) {
-            tmp.copyTo(binaryFile, overwrite = true)
-            tmp.delete()
-        }
+        replaceFileAtomically(tempFile = tmp, targetFile = binaryFile)
     }
 
     private fun readBinary(file: File): TreeSet<Long>? {

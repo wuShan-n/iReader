@@ -12,7 +12,6 @@ data class PdfEngineConfig(
     val renderDispatcher: CoroutineDispatcher = Dispatchers.Default,
     val tileBaseSizePx: Int = 512,
     val tileCacheMaxBytes: Int = defaultTileCacheBytes(),
-    val preferPlatformBackend: Boolean = true,
     val forcePlatformBackend: Boolean = false,
     val forcePdfiumBackend: Boolean = false,
     val annotationProviderFactory: ((DocumentId) -> AnnotationProvider?)? = null
@@ -25,4 +24,3 @@ data class PdfEngineConfig(
         }
     }
 }
-

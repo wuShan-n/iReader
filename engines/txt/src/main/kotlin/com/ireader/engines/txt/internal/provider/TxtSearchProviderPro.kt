@@ -79,64 +79,119 @@ internal class TxtSearchProviderPro(
         val startBlock = (startOffset / bloom.blockChars).toInt().coerceAtLeast(0)
         var emitted = 0
         val emittedStart = HashSet<Long>()
+        val scannedBlocks = HashSet<Int>()
 
         RandomAccessFile(files.bloomIdx, "r").use { raf ->
-            val candidates = ArrayList<Int>(128)
             for (bi in startBlock until blocks) {
-                coroutineContext.ensureActive()
-                if (bloom.mayContainAll(raf, bi, trigramHashes)) {
-                    candidates.add(bi)
-                    if (bi > 0) candidates.add(bi - 1)
-                    if (bi + 1 < blocks) candidates.add(bi + 1)
-                }
-            }
-            candidates.sort()
-            val unique = candidates.distinct()
-            for (bi in unique) {
                 coroutineContext.ensureActive()
                 if (emitted >= options.maxHits) {
                     break
                 }
-                val range = bloom.blockRange(bi)
-                val scanStart = (range.start - (pattern.size + 8).toLong()).coerceAtLeast(startOffset)
-                val scanEnd = (range.endExclusive + (pattern.size + 8).toLong())
-                    .coerceAtMost(store.lengthChars)
-                val len = (scanEnd - scanStart).toInt().coerceAtLeast(0)
-                if (len <= 0) {
+                if (!bloom.mayContainAll(raf, bi, trigramHashes)) {
                     continue
                 }
-                val chunk = store.readChars(scanStart, len)
-                for (hitIndex in matcher.findAll(chunk)) {
-                    coroutineContext.ensureActive()
-                    val globalStart = scanStart + hitIndex.toLong()
-                    val globalEnd = globalStart + pattern.size.toLong()
-                    if (globalStart < startOffset) {
-                        continue
-                    }
-                    if (!emittedStart.add(globalStart)) {
-                        continue
-                    }
-                    if (options.wholeWord && !isWholeWord(chunk, hitIndex, pattern.size)) {
-                        continue
-                    }
-                    trySend(
-                        SearchHit(
-                            range = TxtBlockLocatorCodec.rangeForOffsets(
-                                startOffset = globalStart,
-                                endOffset = globalEnd,
-                                maxOffset = store.lengthChars
-                            ),
-                            excerpt = buildExcerpt(globalStart, pattern.size),
-                            sectionTitle = null
-                        )
-                    )
-                    emitted++
-                    if (emitted >= options.maxHits) {
-                        break
-                    }
-                }
+                emitted = scanBloomCandidateBlock(
+                    blockIndex = bi,
+                    blocksCount = blocks,
+                    bloom = bloom,
+                    startOffset = startOffset,
+                    pattern = pattern,
+                    matcher = matcher,
+                    options = options,
+                    emitted = emitted,
+                    emittedStart = emittedStart,
+                    scannedBlocks = scannedBlocks
+                )
+                emitted = scanBloomCandidateBlock(
+                    blockIndex = bi - 1,
+                    blocksCount = blocks,
+                    bloom = bloom,
+                    startOffset = startOffset,
+                    pattern = pattern,
+                    matcher = matcher,
+                    options = options,
+                    emitted = emitted,
+                    emittedStart = emittedStart,
+                    scannedBlocks = scannedBlocks
+                )
+                emitted = scanBloomCandidateBlock(
+                    blockIndex = bi + 1,
+                    blocksCount = blocks,
+                    bloom = bloom,
+                    startOffset = startOffset,
+                    pattern = pattern,
+                    matcher = matcher,
+                    options = options,
+                    emitted = emitted,
+                    emittedStart = emittedStart,
+                    scannedBlocks = scannedBlocks
+                )
             }
         }
+    }
+
+    private suspend fun ProducerScope<SearchHit>.scanBloomCandidateBlock(
+        blockIndex: Int,
+        blocksCount: Int,
+        bloom: TrigramBloomIndex,
+        startOffset: Long,
+        pattern: CharArray,
+        matcher: KmpMatcher,
+        options: SearchOptions,
+        emitted: Int,
+        emittedStart: MutableSet<Long>,
+        scannedBlocks: MutableSet<Int>
+    ): Int {
+        if (blockIndex < 0 || blockIndex >= blocksCount || emitted >= options.maxHits) {
+            return emitted
+        }
+        if (!scannedBlocks.add(blockIndex)) {
+            return emitted
+        }
+
+        var currentEmitted = emitted
+        val range = bloom.blockRange(blockIndex)
+        val scanStart = (range.start - (pattern.size + 8).toLong()).coerceAtLeast(startOffset)
+        val scanEnd = (range.endExclusive + (pattern.size + 8).toLong())
+            .coerceAtMost(store.lengthChars)
+        val len = (scanEnd - scanStart).toInt().coerceAtLeast(0)
+        if (len <= 0) {
+            return currentEmitted
+        }
+        val chunk = store.readChars(scanStart, len)
+        for (hitIndex in matcher.findAll(chunk)) {
+            coroutineContext.ensureActive()
+            val globalStart = scanStart + hitIndex.toLong()
+            val globalEnd = globalStart + pattern.size.toLong()
+            if (globalStart < startOffset) {
+                continue
+            }
+            if (!emittedStart.add(globalStart)) {
+                continue
+            }
+            if (options.wholeWord && !isWholeWord(chunk, hitIndex, pattern.size)) {
+                continue
+            }
+            val sent = trySend(
+                SearchHit(
+                    range = TxtBlockLocatorCodec.rangeForOffsets(
+                        startOffset = globalStart,
+                        endOffset = globalEnd,
+                        maxOffset = store.lengthChars
+                    ),
+                    excerpt = buildExcerpt(globalStart, pattern.size),
+                    sectionTitle = null
+                )
+            )
+            if (sent.isFailure) {
+                break
+            }
+            currentEmitted++
+            if (currentEmitted >= options.maxHits) {
+                break
+            }
+        }
+        return currentEmitted
     }
 
     private suspend fun ProducerScope<SearchHit>.streamingScan(
