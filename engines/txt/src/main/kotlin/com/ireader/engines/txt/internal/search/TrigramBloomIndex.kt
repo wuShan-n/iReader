@@ -194,17 +194,28 @@ internal class TrigramBloomIndex private constructor(
         return out.toIntArray()
     }
 
-    fun mayContainAll(raf: RandomAccessFile, blockIndex: Int, hashes: IntArray): Boolean {
+    fun bitsetBytes(): Int = bitsetBits / 8
+
+    fun mayContainAll(
+        raf: RandomAccessFile,
+        blockIndex: Int,
+        hashes: IntArray,
+        scratch: ByteArray?
+    ): Boolean {
         if (hashes.isEmpty()) {
             return true
         }
         if (blockIndex < 0 || blockIndex >= blocksCount) {
             return false
         }
-        val bitsetBytes = bitsetBits / 8
-        val bitset = ByteArray(bitsetBytes)
-        raf.seek(dataOffset + blockIndex.toLong() * bitsetBytes.toLong())
-        raf.readFully(bitset)
+        val bytes = bitsetBytes()
+        val bitset = if (scratch != null && scratch.size >= bytes) {
+            scratch
+        } else {
+            ByteArray(bytes)
+        }
+        raf.seek(dataOffset + blockIndex.toLong() * bytes.toLong())
+        raf.readFully(bitset, 0, bytes)
         for (hash in hashes) {
             val bit = normalizeHash(hash, bitsetBits)
             val byteIdx = bit ushr 3
@@ -214,6 +225,10 @@ internal class TrigramBloomIndex private constructor(
             }
         }
         return true
+    }
+
+    fun mayContainAll(raf: RandomAccessFile, blockIndex: Int, hashes: IntArray): Boolean {
+        return mayContainAll(raf, blockIndex, hashes, scratch = null)
     }
 
     fun blockRange(blockIndex: Int): BlockRange {

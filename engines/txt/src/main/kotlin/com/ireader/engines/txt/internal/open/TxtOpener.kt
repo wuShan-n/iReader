@@ -21,9 +21,13 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.DocumentId
 import java.io.BufferedInputStream
+import java.io.FileInputStream
 import java.io.File
+import java.io.InputStream
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 import java.security.MessageDigest
+import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
@@ -38,7 +42,7 @@ internal class TxtOpener(
 ) {
 
     private val encodingDetector = EncodingDetector()
-    private val schemaVersion = 5
+    private val schemaVersion = 6
 
     suspend fun open(source: DocumentSource, options: OpenOptions): ReaderResult<TxtOpenResult> {
         return withContext(ioDispatcher) {
@@ -117,14 +121,26 @@ internal class TxtOpener(
         if (!files.contentU16.exists() || !files.metaJson.exists()) {
             return null
         }
-        val json = JSONObject(files.metaJson.readText())
-        val meta = TxtMeta.fromJson(json)
+
+        val meta = runCatching {
+            val json = JSONObject(files.metaJson.readText())
+            TxtMeta.fromJson(json)
+        }.getOrElse {
+            return null
+        }
+
         if (meta.version != schemaVersion) {
             return null
         }
         if (meta.sourceUri != source.uri.toString()) {
             return null
         }
+
+        val contentBytes = files.contentU16.length()
+        if (contentBytes <= 0L || contentBytes % 2L != 0L) {
+            return null
+        }
+
         val cachedSize = meta.sizeBytes ?: -1L
         val currentSize = source.sizeBytes ?: -1L
         if (cachedSize != currentSize) {
@@ -136,7 +152,9 @@ internal class TxtOpener(
         if (!meta.originalCharset.equals(expectedCharset, ignoreCase = true)) {
             return null
         }
-        if (meta.lengthChars != files.contentU16.length() / 2L) {
+
+        val expectedChars = contentBytes / 2L
+        if (meta.lengthChars != expectedChars) {
             return null
         }
         return meta
@@ -167,7 +185,10 @@ internal class TxtOpener(
             hardWrapLikely = content.hardWrapLikely,
             createdAtEpochMs = System.currentTimeMillis()
         )
-        files.metaJson.writeText(meta.toJson().toString())
+        val metaTemp = File(files.bookDir, "meta.json.tmp")
+        prepareTempFile(metaTemp)
+        metaTemp.writeText(meta.toJson().toString())
+        replaceFileAtomically(tempFile = metaTemp, targetFile = files.metaJson)
         return meta
     }
 
@@ -285,20 +306,103 @@ internal class TxtOpener(
 
     private suspend fun computeSampleHash(source: DocumentSource, limitBytes: Int): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        source.openInputStream().use { input ->
-            val buffer = ByteArray(8 * 1024)
-            var remaining = limitBytes
-            while (remaining > 0) {
+        val size = source.sizeBytes?.takeIf { it > 0L }
+        val windowBytes = limitBytes.coerceAtLeast(1)
+        val totalHeadBytes = (windowBytes * 3).coerceAtLeast(windowBytes)
+
+        if (size != null && size > totalHeadBytes.toLong()) {
+            val maxOffset = (size - windowBytes.toLong()).coerceAtLeast(0L)
+            val midOffset = ((size / 2L) - (windowBytes.toLong() / 2L)).coerceIn(0L, maxOffset)
+            val offsets = linkedSetOf(0L, midOffset, maxOffset)
+            for (offset in offsets) {
                 coroutineContext.ensureActive()
-                val read = input.read(buffer, 0, buffer.size.coerceAtMost(remaining))
-                if (read <= 0) {
-                    break
+                val sample = readSampleWindow(source = source, offset = offset, maxBytes = windowBytes)
+                if (sample.isNotEmpty()) {
+                    digest.update(sample)
                 }
-                digest.update(buffer, 0, read)
-                remaining -= read
             }
+            return Hashing.toHexLower(digest.digest())
+        }
+
+        val headBytes = readSampleWindow(source = source, offset = 0L, maxBytes = totalHeadBytes)
+        if (headBytes.isNotEmpty()) {
+            digest.update(headBytes)
         }
         return Hashing.toHexLower(digest.digest())
+    }
+
+    private suspend fun readSampleWindow(source: DocumentSource, offset: Long, maxBytes: Int): ByteArray {
+        val fdBytes = runCatching {
+            readSampleWindowViaFd(source = source, offset = offset, maxBytes = maxBytes)
+        }.getOrNull()
+        if (fdBytes != null) {
+            return fdBytes
+        }
+
+        return source.openInputStream().use { input ->
+            skipFully(input = input, bytesToSkip = offset)
+            readAtMost(input = input, maxBytes = maxBytes)
+        }
+    }
+
+    private suspend fun readSampleWindowViaFd(source: DocumentSource, offset: Long, maxBytes: Int): ByteArray? {
+        val pfd = source.openFileDescriptor("r") ?: return null
+        return try {
+            FileInputStream(pfd.fileDescriptor).use { fis ->
+                val channel = fis.channel
+                channel.position(offset.coerceAtLeast(0L))
+                val buffer = ByteArray(maxBytes)
+                val byteBuffer = ByteBuffer.wrap(buffer)
+                while (byteBuffer.hasRemaining()) {
+                    coroutineContext.ensureActive()
+                    val read = channel.read(byteBuffer)
+                    if (read <= 0) {
+                        break
+                    }
+                }
+                val total = byteBuffer.position()
+                if (total == buffer.size) {
+                    buffer
+                } else {
+                    buffer.copyOf(total)
+                }
+            }
+        } finally {
+            runCatching { pfd.close() }
+        }
+    }
+
+    private suspend fun readAtMost(input: InputStream, maxBytes: Int): ByteArray {
+        val buffer = ByteArray(maxBytes.coerceAtLeast(1))
+        var total = 0
+        while (total < buffer.size) {
+            coroutineContext.ensureActive()
+            val read = input.read(buffer, total, buffer.size - total)
+            if (read <= 0) {
+                break
+            }
+            total += read
+        }
+        return if (total == buffer.size) buffer else buffer.copyOf(total)
+    }
+
+    private suspend fun skipFully(input: InputStream, bytesToSkip: Long) {
+        var remaining = bytesToSkip.coerceAtLeast(0L)
+        val scratch = ByteArray(8 * 1024)
+        while (remaining > 0L) {
+            coroutineContext.ensureActive()
+            val skipped = input.skip(remaining)
+            if (skipped > 0L) {
+                remaining -= skipped
+                continue
+            }
+            val toRead = min(scratch.size.toLong(), remaining).toInt()
+            val read = input.read(scratch, 0, toRead)
+            if (read <= 0) {
+                break
+            }
+            remaining -= read.toLong()
+        }
     }
 
     private fun computeDocumentId(source: DocumentSource, sampleHash: String): DocumentId {

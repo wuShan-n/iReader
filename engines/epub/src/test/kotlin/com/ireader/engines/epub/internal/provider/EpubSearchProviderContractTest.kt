@@ -1,5 +1,6 @@
 package com.ireader.engines.epub.internal.provider
 
+import com.ireader.engines.epub.internal.locator.ReadiumLocatorExtras
 import com.ireader.engines.epub.internal.locator.ReadiumLocatorSchemes
 import com.ireader.reader.model.Locator
 import org.junit.Assert.assertFalse
@@ -41,8 +42,8 @@ class EpubSearchProviderContractTest {
 
     private fun readiumLocator(position: Int?, progression: Double): Locator {
         val extras = buildMap {
-            position?.let { put("position", it.toString()) }
-            put("totalProgression", progression.toString())
+            position?.let { put(ReadiumLocatorExtras.POSITION, it.toString()) }
+            put(ReadiumLocatorExtras.TOTAL_PROGRESSION, progression.toString())
         }
         return Locator(
             scheme = ReadiumLocatorSchemes.READIUM_LOCATOR_JSON,

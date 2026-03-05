@@ -19,24 +19,29 @@ import javax.inject.Singleton
 object TxtEngineModule {
 
     @Provides
-    @IntoSet
     @Singleton
-    fun provideTxtEngine(
+    fun provideTxtEngineConfig(
         @ApplicationContext context: Context,
         annotationStore: AnnotationStore
-    ): ReaderEngine {
-        return TxtEngine(
-            config = TxtEngineConfig(
-                cacheDir = context.cacheDir,
-                persistPagination = true,
-                persistOutline = false,
-                annotationProviderFactory = { documentId ->
-                    StoredTxtAnnotationProvider(
-                        documentId = documentId,
-                        store = annotationStore
-                    )
-                }
-            )
+    ): TxtEngineConfig {
+        return TxtEngineConfig(
+            cacheDir = context.cacheDir,
+            persistPagination = true,
+            persistOutline = false,
+            maxPageCache = 7,
+            annotationProviderFactory = { documentId ->
+                StoredTxtAnnotationProvider(
+                    documentId = documentId,
+                    store = annotationStore
+                )
+            }
         )
+    }
+
+    @Provides
+    @IntoSet
+    @Singleton
+    fun provideTxtEngine(config: TxtEngineConfig): ReaderEngine {
+        return TxtEngine(config = config)
     }
 }

@@ -53,6 +53,7 @@ internal class BackendFactory(
                 )
             )
         } catch (t: Throwable) {
+            tempFile?.let { file -> runCatching { file.delete() } }
             ReaderResult.Err(
                 t.toReaderError(invalidPasswordKeywords = setOf("password", "encrypted"))
             )
@@ -93,20 +94,30 @@ internal class BackendFactory(
         sourceDescriptor: ParcelFileDescriptor,
         password: String?
     ): PdfBackend {
-        val pfd = ParcelFileDescriptor.dup(sourceDescriptor.fileDescriptor)
-        return PdfiumBackend.open(
-            descriptor = pfd,
-            password = password,
-            ioDispatcher = config.ioDispatcher
-        )
+        val dup = ParcelFileDescriptor.dup(sourceDescriptor.fileDescriptor)
+        return try {
+            PdfiumBackend.open(
+                descriptor = dup,
+                password = password,
+                ioDispatcher = config.ioDispatcher
+            )
+        } catch (t: Throwable) {
+            dup.closeQuietly()
+            throw t
+        }
     }
 
     private fun openPlatform(sourceDescriptor: ParcelFileDescriptor): PdfBackend {
-        val pfd = ParcelFileDescriptor.dup(sourceDescriptor.fileDescriptor)
-        return PlatformPdfBackend(
-            descriptor = pfd,
-            ioDispatcher = config.ioDispatcher
-        )
+        val dup = ParcelFileDescriptor.dup(sourceDescriptor.fileDescriptor)
+        return try {
+            PlatformPdfBackend(
+                descriptor = dup,
+                ioDispatcher = config.ioDispatcher
+            )
+        } catch (t: Throwable) {
+            dup.closeQuietly()
+            throw t
+        }
     }
 
     private data class SelectedBackend(

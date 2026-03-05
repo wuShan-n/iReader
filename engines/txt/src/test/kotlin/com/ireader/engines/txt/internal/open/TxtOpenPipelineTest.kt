@@ -115,6 +115,39 @@ class TxtOpenPipelineTest {
     }
 
     @Test
+    fun `open should produce different cache entries when only tail content changes`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_cache_tail_change").toFile()
+            val head = "A".repeat(80_000)
+            val middle = "中".repeat(30_000)
+            val tailA = "尾部A".repeat(4_000)
+            val tailB = "尾部B".repeat(4_000)
+            val payloadA = (head + middle + tailA).toByteArray(Charsets.UTF_8)
+            val payloadB = (head + middle + tailB).toByteArray(Charsets.UTF_8)
+            assertEquals(payloadA.size, payloadB.size)
+
+            val sourceA = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/tail-change.txt"),
+                payload = payloadA
+            )
+            val sourceB = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/tail-change.txt"),
+                payload = payloadB
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            engine.open(sourceA, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            engine.open(sourceB, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+
+            val metaFiles = readMetaFiles(cacheDir)
+            assertEquals(2, metaFiles.size)
+            val sampleHashes = metaFiles.map { JSONObject(it.readText()).getString("sampleHash") }.toSet()
+            assertEquals(2, sampleHashes.size)
+            cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `open should rebuild cached content when explicit encoding changes`() {
         runBlocking {
             val cacheDir = Files.createTempDirectory("txt_cache_rebuild").toFile()
@@ -155,7 +188,7 @@ class TxtOpenPipelineTest {
             val meta = readSingleMeta(cacheDir)
 
             assertTrue(meta.getBoolean("hardWrapLikely"))
-            assertEquals(5, meta.getInt("version"))
+            assertEquals(6, meta.getInt("version"))
             cacheDir.deleteRecursively()
         }
     }
@@ -174,7 +207,7 @@ class TxtOpenPipelineTest {
             val meta = readSingleMeta(cacheDir)
 
             assertTrue(meta.getBoolean("hardWrapLikely"))
-            assertEquals(5, meta.getInt("version"))
+            assertEquals(6, meta.getInt("version"))
             cacheDir.deleteRecursively()
         }
     }
@@ -201,7 +234,33 @@ class TxtOpenPipelineTest {
             engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
             val rebuiltMeta = readSingleMeta(cacheDir)
 
-            assertEquals(5, rebuiltMeta.getInt("version"))
+            assertEquals(6, rebuiltMeta.getInt("version"))
+            assertTrue(rebuiltMeta.getLong("createdAtEpochMs") > firstCreatedAt)
+            cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `open should rebuild cache when cached meta json is corrupted`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_cache_corrupted_meta").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/corrupted-meta.txt"),
+                payload = sampleText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            val metaFile = readSingleMetaFile(cacheDir)
+            val firstCreatedAt = JSONObject(metaFile.readText()).getLong("createdAtEpochMs")
+
+            metaFile.writeText("{broken")
+
+            Thread.sleep(20L)
+            engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            val rebuiltMeta = readSingleMeta(cacheDir)
+
+            assertEquals(6, rebuiltMeta.getInt("version"))
             assertTrue(rebuiltMeta.getLong("createdAtEpochMs") > firstCreatedAt)
             cacheDir.deleteRecursively()
         }
@@ -250,14 +309,18 @@ class TxtOpenPipelineTest {
     }
 
     private fun readSingleMetaFile(cacheDir: File): File {
-        val matches = cacheDir
-            .walkTopDown()
-            .filter { it.isFile && it.name == "meta.json" }
-            .toList()
+        val matches = readMetaFiles(cacheDir)
         assertEquals(1, matches.size)
         val file = matches.firstOrNull()
         assertNotNull(file)
         return file!!
+    }
+
+    private fun readMetaFiles(cacheDir: File): List<File> {
+        return cacheDir
+            .walkTopDown()
+            .filter { it.isFile && it.name == "meta.json" }
+            .toList()
     }
 
     private fun <T> ReaderResult<T>.requireOk(): T {

@@ -32,13 +32,12 @@ import com.ireader.reader.api.render.TileRequest
 import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorSchemes
 import com.ireader.reader.model.NormalizedRect
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -69,13 +68,21 @@ internal class PdfController(
     dispatcher = engineConfig.renderDispatcher
 ) {
     private val tileCache = TileCache(engineConfig.tileCacheMaxBytes)
-    private val tileInflight = TileInflight(scope)
-    private var activeTileProvider: PdfTileProvider? = null
+    private val tileInflight = TileInflight()
+    private val cacheGeneration = AtomicLong(0L)
+
+    private var activeTiles: ActiveTiles? = null
     private var prefetchJob: Job? = null
 
     private var currentPage = initialPageIndex.coerceIn(0, pageCount.coerceAtLeast(1) - 1)
     private var currentConfig = initialConfig
     private var constraints: LayoutConstraints? = null
+
+    private val linksCache = object : LinkedHashMap<Int, List<DocumentLink>>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, List<DocumentLink>>): Boolean {
+            return size > 32
+        }
+    }
 
     override suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
@@ -91,6 +98,7 @@ internal class PdfController(
     override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> {
         val fixed = config as? RenderConfig.FixedPage
             ?: return ReaderResult.Err(ReaderError.Internal("PDF requires RenderConfig.FixedPage"))
+
         return mutex.withLock {
             val sanitized = fixed.sanitized()
             currentConfig = sanitized
@@ -122,6 +130,7 @@ internal class PdfController(
     override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> {
         val page = locator.toPdfPageIndexOrNull(pageCount)
             ?: return ReaderResult.Err(ReaderError.Internal("Unsupported locator for PDF: ${locator.scheme}"))
+
         return mutex.withLock {
             currentPage = page
             renderLocked(policy)
@@ -132,6 +141,7 @@ internal class PdfController(
         val page = ((pageCount - 1).coerceAtLeast(0) * percent.coerceIn(0.0, 1.0))
             .toInt()
             .coerceIn(0, pageCount.coerceAtLeast(1) - 1)
+
         return mutex.withLock {
             currentPage = page
             renderLocked(policy)
@@ -140,33 +150,45 @@ internal class PdfController(
 
     override suspend fun prefetchNeighbors(count: Int): ReaderResult<Unit> {
         if (count <= 0) return ReaderResult.Ok(Unit)
-        return mutex.withLock {
-            val layout = constraints ?: return@withLock ReaderResult.Ok(Unit)
-            val start = (currentPage - count).coerceAtLeast(0)
-            val end = (currentPage + count).coerceAtMost(pageCount - 1)
-            for (page in start..end) {
-                if (page == currentPage) continue
-                runCatching { prewarmNeighborPageLocked(page, layout) }
-            }
-            ReaderResult.Ok(Unit)
+
+        val snapshot = mutex.withLock {
+            val layout = constraints ?: return@withLock null
+            PrefetchSnapshot(
+                currentPage = currentPage,
+                config = currentConfig,
+                layout = layout
+            )
+        } ?: return ReaderResult.Ok(Unit)
+
+        val start = (snapshot.currentPage - count).coerceAtLeast(0)
+        val end = (snapshot.currentPage + count).coerceAtMost(pageCount - 1)
+
+        for (page in start..end) {
+            if (page == snapshot.currentPage) continue
+            runCatching { prewarmNeighborPage(page, snapshot.config, snapshot.layout) }
         }
+
+        return ReaderResult.Ok(Unit)
     }
 
     override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
         return mutex.withLock {
-            runCatching { activeTileProvider?.close() }
-            activeTileProvider = null
-            runCatching { runBlocking { tileCache.clear() } }
+            cacheGeneration.incrementAndGet()
+            closeActiveTileProviderLocked()
+            tileInflight.clear()
+            tileCache.clear(recycleBitmaps = false)
+            linksCache.clear()
             ReaderResult.Ok(Unit)
         }
     }
 
     override fun onClose() {
         prefetchJob?.cancel()
-        runCatching { activeTileProvider?.close() }
-        activeTileProvider = null
-        runCatching { runBlocking { tileInflight.clear() } }
-        runCatching { runBlocking { tileCache.clear() } }
+        runCatching { activeTiles?.provider?.close() }
+        activeTiles = null
+        tileInflight.clear()
+        tileCache.clear(recycleBitmaps = true)
+        linksCache.clear()
     }
 
     private suspend fun renderLocked(policy: RenderPolicy): ReaderResult<RenderPage> {
@@ -185,34 +207,30 @@ internal class PdfController(
             constraints = layout
         )
 
-        val pageLocator = pageLocator(currentPage, pageCount)
-        val links = if (backend.capabilities.links) {
-            runCatching { backend.pageLinks(currentPage) }
+        val locator = pageLocator(currentPage, pageCount)
+
+        val rawLinks = if (backend.capabilities.links) {
+            linksCache[currentPage] ?: runCatching { backend.pageLinks(currentPage) }
                 .getOrDefault(emptyList())
-                .rotateBy(currentConfig.rotationDegrees)
+                .also { linksCache[currentPage] = it }
         } else {
             emptyList()
         }
+
+        val links = rawLinks.rotateBy(currentConfig.rotationDegrees)
+
         val decorations = annotationProvider
-            ?.decorationsFor(AnnotationQuery(page = pageLocator))
+            ?.decorationsFor(AnnotationQuery(page = locator))
             ?.getOrNull()
             ?: emptyList()
 
-        runCatching { activeTileProvider?.close() }
-        activeTileProvider = null
-
         val content = runCatching {
             if (backend.capabilities.preciseRegionRendering) {
-                val tileProvider = PdfTileProvider(
+                val tileProvider = getOrCreateTileProviderLocked(
                     pageIndex = currentPage,
-                    renderConfig = currentConfig,
-                    backend = backend,
-                    cache = tileCache,
-                    inflight = tileInflight,
-                    config = engineConfig,
-                    scope = CoroutineScope(SupervisorJob() + engineConfig.renderDispatcher)
+                    config = currentConfig
                 )
-                activeTileProvider = tileProvider
+
                 RenderContent.Tiles(
                     pageWidthPx = transform.pageWidthPx,
                     pageHeightPx = transform.pageHeightPx,
@@ -220,6 +238,7 @@ internal class PdfController(
                     tileProvider = tileProvider
                 )
             } else {
+                closeActiveTileProviderLocked()
                 RenderContent.BitmapPage(
                     bitmap = renderSingleBitmapPage(
                         pageIndex = currentPage,
@@ -232,24 +251,29 @@ internal class PdfController(
         }.getOrElse {
             return ReaderResult.Err(ReaderError.Internal("Failed to render PDF content", it))
         }
+
         val elapsedMs = ((System.nanoTime() - startTimeNs) / 1_000_000L).coerceAtLeast(0L)
 
+        val pageId = PageId(
+            buildString {
+                append("pdf:")
+                append(currentPage)
+                append(':')
+                append(transform.pageWidthPx)
+                append('x')
+                append(transform.pageHeightPx)
+                append(':')
+                append(currentConfig.fitMode)
+                append(':')
+                append(zoomBucketMilli(currentConfig.zoom))
+                append(':')
+                append(currentConfig.rotationDegrees)
+            }
+        )
+
         val page = RenderPage(
-            id = PageId(
-                buildString {
-                    append("pdf:")
-                    append(currentPage)
-                    append(':')
-                    append(transform.pageWidthPx)
-                    append('x')
-                    append(transform.pageHeightPx)
-                    append(':')
-                    append(currentConfig.zoom)
-                    append(':')
-                    append(currentConfig.rotationDegrees)
-                }
-            ),
-            locator = pageLocator,
+            id = pageId,
+            locator = locator,
             content = content,
             links = links,
             decorations = decorations,
@@ -260,9 +284,52 @@ internal class PdfController(
         )
 
         updateStateLocked()
-        eventsMutable.tryEmit(ReaderEvent.PageChanged(pageLocator))
+        eventsMutable.tryEmit(ReaderEvent.PageChanged(locator))
         eventsMutable.tryEmit(ReaderEvent.Rendered(page.id, page.metrics))
         return ReaderResult.Ok(page)
+    }
+
+    private fun getOrCreateTileProviderLocked(
+        pageIndex: Int,
+        config: RenderConfig.FixedPage
+    ): PdfTileProvider {
+        val existing = activeTiles?.provider
+        if (existing != null && existing.matches(pageIndex, config)) {
+            return existing
+        }
+
+        runCatching { existing?.close() }
+
+        val generation = cacheGeneration.get()
+        val provider = PdfTileProvider(
+            pageIndex = pageIndex,
+            renderConfig = config,
+            backend = backend,
+            cache = tileCache,
+            inflight = tileInflight,
+            scope = newTileScope(),
+            cacheGeneration = generation,
+            currentGeneration = { cacheGeneration.get() }
+        )
+
+        activeTiles = ActiveTiles(
+            pageIndex = pageIndex,
+            config = config,
+            provider = provider
+        )
+
+        return provider
+    }
+
+    private fun closeActiveTileProviderLocked() {
+        runCatching { activeTiles?.provider?.close() }
+        activeTiles = null
+    }
+
+    private fun newTileScope(): CoroutineScope {
+        val parentJob = scope.coroutineContext[Job]
+        val job = if (parentJob != null) SupervisorJob(parentJob) else SupervisorJob()
+        return CoroutineScope(job + engineConfig.renderDispatcher)
     }
 
     private suspend fun renderSingleBitmapPage(
@@ -312,29 +379,35 @@ internal class PdfController(
         }
     }
 
-    private suspend fun prewarmNeighborPageLocked(pageIndex: Int, layout: LayoutConstraints) {
+    private suspend fun prewarmNeighborPage(
+        pageIndex: Int,
+        config: RenderConfig.FixedPage,
+        layout: LayoutConstraints
+    ) {
+        if (!backend.capabilities.preciseRegionRendering) return
+
         val pageSize = backend.pageSize(pageIndex)
-        if (!backend.capabilities.preciseRegionRendering) {
-            return
-        }
         val transform = computePageTransform(
             pageWidthPt = pageSize.widthPt,
             pageHeightPt = pageSize.heightPt,
-            config = currentConfig,
+            config = config,
             constraints = layout
         )
-        val tileProvider = PdfTileProvider(
+
+        val provider = PdfTileProvider(
             pageIndex = pageIndex,
-            renderConfig = currentConfig,
+            renderConfig = config,
             backend = backend,
             cache = tileCache,
             inflight = tileInflight,
-            config = engineConfig,
-            scope = CoroutineScope(SupervisorJob() + engineConfig.renderDispatcher)
+            scope = newTileScope(),
+            cacheGeneration = cacheGeneration.get(),
+            currentGeneration = { cacheGeneration.get() }
         )
+
         try {
             val tileSize = engineConfig.tileBaseSizePx.coerceAtLeast(128)
-            tileProvider.renderTile(
+            provider.renderTile(
                 TileRequest(
                     leftPx = 0,
                     topPx = 0,
@@ -345,7 +418,7 @@ internal class PdfController(
                 )
             )
         } finally {
-            tileProvider.close()
+            provider.close()
         }
     }
 
@@ -379,6 +452,7 @@ internal class PdfController(
         val maxX = points.maxOf { it.first }.coerceIn(0f, 1f)
         val minY = points.minOf { it.second }.coerceIn(0f, 1f)
         val maxY = points.maxOf { it.second }.coerceIn(0f, 1f)
+
         return NormalizedRect(
             left = minX,
             top = minY,
@@ -386,4 +460,16 @@ internal class PdfController(
             bottom = maxY
         )
     }
+
+    private data class ActiveTiles(
+        val pageIndex: Int,
+        val config: RenderConfig.FixedPage,
+        val provider: PdfTileProvider
+    )
+
+    private data class PrefetchSnapshot(
+        val currentPage: Int,
+        val config: RenderConfig.FixedPage,
+        val layout: LayoutConstraints
+    )
 }

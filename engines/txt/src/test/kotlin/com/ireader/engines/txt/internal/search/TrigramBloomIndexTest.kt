@@ -1,8 +1,15 @@
 package com.ireader.engines.txt.internal.search
 
 import com.ireader.engines.txt.internal.open.TxtMeta
+import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.engines.txt.testing.createBookFiles
+import com.ireader.engines.txt.testing.writeUtf16Text
+import java.io.RandomAccessFile
 import java.nio.file.Files
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrigramBloomIndexTest {
@@ -26,5 +33,61 @@ class TrigramBloomIndexTest {
         val opened = TrigramBloomIndex.openIfValid(indexFile, meta)
         assertNull(opened)
         root.deleteRecursively()
+    }
+
+    @Test
+    fun `mayContainAll with scratch should match legacy path`() = runBlocking {
+        val root = Files.createTempDirectory("trigram_scratch").toFile()
+        val files = createBookFiles(root)
+        val text = buildString {
+            repeat(35_000) { append("abcdefg hijklmn opqrst uvwxyz\n") }
+            append("needle marker\n")
+            repeat(35_000) { append("abcdefg hijklmn opqrst uvwxyz\n") }
+        }
+        writeUtf16Text(files.contentU16, text)
+
+        val store = Utf16TextStore(files.contentU16)
+        val meta = TxtMeta(
+            version = 1,
+            sourceUri = "file://book.txt",
+            displayName = "book.txt",
+            sizeBytes = text.length.toLong(),
+            sampleHash = "hash",
+            originalCharset = "UTF-8",
+            lengthChars = store.lengthChars,
+            hardWrapLikely = false,
+            createdAtEpochMs = 0L
+        )
+
+        try {
+            TrigramBloomIndex.buildIfNeeded(
+                file = files.bloomIdx,
+                lockFile = files.bloomLock,
+                store = store,
+                meta = meta,
+                ioDispatcher = Dispatchers.IO
+            )
+            val opened = TrigramBloomIndex.openIfValid(files.bloomIdx, meta)
+            checkNotNull(opened)
+
+            val hashes = opened.buildQueryTrigramHashes("needle")
+            val scratch = ByteArray(opened.bitsetBytes())
+
+            RandomAccessFile(files.bloomIdx, "r").use { raf ->
+                var compared = 0
+                for (blockIndex in 0 until opened.blocksCount()) {
+                    val legacy = opened.mayContainAll(raf, blockIndex, hashes)
+                    val withScratch = opened.mayContainAll(raf, blockIndex, hashes, scratch)
+                    assertTrue("block=$blockIndex", legacy == withScratch)
+                    compared++
+                    if (compared >= 16) {
+                        break
+                    }
+                }
+            }
+        } finally {
+            store.close()
+            root.deleteRecursively()
+        }
     }
 }

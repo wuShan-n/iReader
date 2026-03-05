@@ -15,9 +15,7 @@ import java.io.BufferedInputStream
 import java.io.FileInputStream
 import java.io.InputStream
 import java.nio.ByteBuffer
-import java.nio.CharBuffer
 import java.nio.charset.Charset
-import java.nio.charset.CodingErrorAction
 import kotlin.math.min
 import kotlinx.coroutines.CancellationException
 
@@ -50,12 +48,18 @@ internal class EncodingDetector {
                 } else {
                     val samples = readSamples(source, sampleBytes = 128 * 1024)
                     val utf8 = samples.map(::checkUtf8)
-                    if (utf8.all { it.valid } && utf8.any { it.hasNonAscii }) {
+                    if (utf8.all { it.valid }) {
+                        val hasAnyNonAscii = utf8.any { it.hasNonAscii }
+                        val confidence = if (hasAnyNonAscii) 0.9 else 0.7
                         ReaderResult.Ok(
                             EncodingResult(
                                 charset = Charsets.UTF_8,
-                                confidence = 0.9,
-                                reason = "utf8_valid_multi_window"
+                                confidence = confidence,
+                                reason = if (hasAnyNonAscii) {
+                                    "utf8_valid_multi_window"
+                                } else {
+                                    "utf8_ascii_multi_window"
+                                }
                             )
                         )
                     } else {
@@ -110,47 +114,110 @@ internal class EncodingDetector {
 
     private fun checkUtf8(bytes: ByteArray): Utf8Check {
         val hasNonAscii = bytes.any { b -> (b.toInt() and 0xFF) >= 0x80 }
-        val decoder = Charsets.UTF_8.newDecoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
-
-        val trimmed = trimUtf8LeadingContinuationBytes(bytes)
-        if (trimmed.isEmpty()) {
+        val startIndex = trimUtf8LeadingContinuationBytes(bytes)
+        if (startIndex >= bytes.size) {
             return Utf8Check(valid = true, hasNonAscii = hasNonAscii)
         }
-
-        return try {
-            val input = ByteBuffer.wrap(trimmed)
-            val output = CharBuffer.allocate(trimmed.size)
-            while (true) {
-                val result = decoder.decode(input, output, false)
-                if (result.isError) {
-                    return Utf8Check(valid = false, hasNonAscii = hasNonAscii)
-                }
-                if (result.isOverflow) {
-                    continue
-                }
-                if (result.isUnderflow) {
-                    break
-                }
-            }
-            Utf8Check(valid = true, hasNonAscii = hasNonAscii)
-        } catch (_: Exception) {
-            Utf8Check(valid = false, hasNonAscii = hasNonAscii)
-        }
+        return Utf8Check(
+            valid = validateUtf8(bytes = bytes, startIndex = startIndex),
+            hasNonAscii = hasNonAscii
+        )
     }
 
-    private fun trimUtf8LeadingContinuationBytes(bytes: ByteArray): ByteArray {
+    private fun trimUtf8LeadingContinuationBytes(bytes: ByteArray): Int {
         var start = 0
         val maxTrim = min(3, bytes.size)
         while (start < maxTrim && isUtf8Continuation(bytes[start])) {
             start += 1
         }
-        return if (start == 0) bytes else bytes.copyOfRange(start, bytes.size)
+        return start
     }
 
     private fun isUtf8Continuation(byte: Byte): Boolean {
         return (byte.toInt() and 0xC0) == 0x80
+    }
+
+    private fun validateUtf8(bytes: ByteArray, startIndex: Int): Boolean {
+        var i = startIndex
+        while (i < bytes.size) {
+            val b0 = bytes[i].toInt() and 0xFF
+            when {
+                b0 < 0x80 -> {
+                    i++
+                }
+
+                b0 in 0xC2..0xDF -> {
+                    if (i + 1 >= bytes.size) return true
+                    val b1 = bytes[i + 1].toInt() and 0xFF
+                    if (!isUtf8ContinuationByte(b1)) return false
+                    i += 2
+                }
+
+                b0 == 0xE0 -> {
+                    if (i + 2 >= bytes.size) return true
+                    val b1 = bytes[i + 1].toInt() and 0xFF
+                    val b2 = bytes[i + 2].toInt() and 0xFF
+                    if (b1 !in 0xA0..0xBF || !isUtf8ContinuationByte(b2)) return false
+                    i += 3
+                }
+
+                b0 in 0xE1..0xEC || b0 in 0xEE..0xEF -> {
+                    if (i + 2 >= bytes.size) return true
+                    val b1 = bytes[i + 1].toInt() and 0xFF
+                    val b2 = bytes[i + 2].toInt() and 0xFF
+                    if (!isUtf8ContinuationByte(b1) || !isUtf8ContinuationByte(b2)) return false
+                    i += 3
+                }
+
+                b0 == 0xED -> {
+                    if (i + 2 >= bytes.size) return true
+                    val b1 = bytes[i + 1].toInt() and 0xFF
+                    val b2 = bytes[i + 2].toInt() and 0xFF
+                    if (b1 !in 0x80..0x9F || !isUtf8ContinuationByte(b2)) return false
+                    i += 3
+                }
+
+                b0 == 0xF0 -> {
+                    if (i + 3 >= bytes.size) return true
+                    val b1 = bytes[i + 1].toInt() and 0xFF
+                    val b2 = bytes[i + 2].toInt() and 0xFF
+                    val b3 = bytes[i + 3].toInt() and 0xFF
+                    if (b1 !in 0x90..0xBF || !isUtf8ContinuationByte(b2) || !isUtf8ContinuationByte(b3)) {
+                        return false
+                    }
+                    i += 4
+                }
+
+                b0 in 0xF1..0xF3 -> {
+                    if (i + 3 >= bytes.size) return true
+                    val b1 = bytes[i + 1].toInt() and 0xFF
+                    val b2 = bytes[i + 2].toInt() and 0xFF
+                    val b3 = bytes[i + 3].toInt() and 0xFF
+                    if (!isUtf8ContinuationByte(b1) || !isUtf8ContinuationByte(b2) || !isUtf8ContinuationByte(b3)) {
+                        return false
+                    }
+                    i += 4
+                }
+
+                b0 == 0xF4 -> {
+                    if (i + 3 >= bytes.size) return true
+                    val b1 = bytes[i + 1].toInt() and 0xFF
+                    val b2 = bytes[i + 2].toInt() and 0xFF
+                    val b3 = bytes[i + 3].toInt() and 0xFF
+                    if (b1 !in 0x80..0x8F || !isUtf8ContinuationByte(b2) || !isUtf8ContinuationByte(b3)) {
+                        return false
+                    }
+                    i += 4
+                }
+
+                else -> return false
+            }
+        }
+        return true
+    }
+
+    private fun isUtf8ContinuationByte(value: Int): Boolean {
+        return (value and 0xC0) == 0x80
     }
 
     private suspend fun readSamples(source: DocumentSource, sampleBytes: Int): List<ByteArray> {
@@ -248,14 +315,14 @@ internal class EncodingDetector {
                 channel.position(offset.coerceAtLeast(0L))
 
                 val buffer = ByteArray(length)
-                var total = 0
-                while (total < length) {
-                    val read = channel.read(ByteBuffer.wrap(buffer, total, length - total))
+                val byteBuffer = ByteBuffer.wrap(buffer)
+                while (byteBuffer.hasRemaining()) {
+                    val read = channel.read(byteBuffer)
                     if (read <= 0) {
                         break
                     }
-                    total += read
                 }
+                val total = byteBuffer.position()
                 if (total == buffer.size) buffer else buffer.copyOf(total)
             }
         } finally {

@@ -55,7 +55,7 @@ internal class PdfOpener(
         try {
             source.openInputStream().use { input ->
                 FileOutputStream(temp).use { output ->
-                    input.copyTo(output)
+                    input.copyTo(output, bufferSize = 64 * 1024)
                     output.flush()
                     output.fd.sync()
                 }

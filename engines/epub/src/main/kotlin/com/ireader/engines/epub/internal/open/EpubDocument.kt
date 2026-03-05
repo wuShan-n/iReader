@@ -15,6 +15,7 @@ import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.SessionId
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.asset.Asset
 
@@ -40,6 +41,7 @@ internal class EpubDocument(
                 )
             )
         } catch (t: Throwable) {
+            if (t is CancellationException) throw t
             ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))
         }
     }
@@ -61,6 +63,7 @@ internal class EpubDocument(
                 )
             )
         } catch (t: Throwable) {
+            if (t is CancellationException) throw t
             ReaderResult.Err(t.toReaderError(preserveInternalMessage = false))
         }
     }

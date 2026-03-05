@@ -18,29 +18,19 @@ internal class EpubResourceProvider(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : BlockingResourceProvider {
 
-    override suspend fun openResource(path: String): ReaderResult<InputStream> {
-        return withContext(ioDispatcher) {
-            openResourceBlocking(path)
-        }
-    }
+    override suspend fun openResource(path: String): ReaderResult<InputStream> =
+        withContext(ioDispatcher) { openResourceBlocking(path) }
 
-    override suspend fun getMimeType(path: String): ReaderResult<String?> {
-        return withContext(ioDispatcher) {
-            getMimeTypeBlocking(path)
-        }
-    }
+    override suspend fun getMimeType(path: String): ReaderResult<String?> =
+        withContext(ioDispatcher) { getMimeTypeBlocking(path) }
 
     override fun openResourceBlocking(path: String): ReaderResult<InputStream> {
         return try {
             val href = parseHref(path)
-                ?: return ReaderResult.Err(
-                    ReaderError.CorruptOrInvalid("Invalid EPUB href: $path")
-                )
+                ?: return ReaderResult.Err(ReaderError.CorruptOrInvalid("Invalid EPUB href: $path"))
 
             val resource = publication.get(href)
-                ?: return ReaderResult.Err(
-                    ReaderError.NotFound("Resource not found: $path")
-                )
+                ?: return ReaderResult.Err(ReaderError.NotFound("Resource not found: $path"))
 
             ReaderResult.Ok(resource.asInputStream())
         } catch (t: Throwable) {

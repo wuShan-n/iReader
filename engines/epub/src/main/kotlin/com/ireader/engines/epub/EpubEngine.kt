@@ -12,31 +12,29 @@ import com.ireader.reader.api.provider.AnnotationStore
 import com.ireader.reader.model.BookFormat
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 class EpubEngine(
     context: Context,
     private val annotationStore: AnnotationStore? = null,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ReaderEngine {
 
     override val supportedFormats: Set<BookFormat> = setOf(BookFormat.EPUB)
 
     private val opener = EpubOpener(
-        context = context,
-        annotationStore = annotationStore
+        context = context.applicationContext,
+        annotationStore = annotationStore,
+        ioDispatcher = ioDispatcher
     )
 
     override suspend fun open(
         source: DocumentSource,
         options: OpenOptions
-    ): ReaderResult<ReaderDocument> = withContext(ioDispatcher) {
-        if (source.uri.toString().isBlank()) {
-            return@withContext ReaderResult.Err(
-                ReaderError.NotFound("EPUB source uri is empty")
-            )
+    ): ReaderResult<ReaderDocument> {
+        val uriString = source.uri.toString()
+        if (uriString.isBlank()) {
+            return ReaderResult.Err(ReaderError.NotFound("EPUB source uri is empty"))
         }
-
-        opener.open(source, options)
+        return opener.open(source, options)
     }
 }

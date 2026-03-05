@@ -69,26 +69,11 @@ internal class InMemoryPdfAnnotationProvider(
     }
 
     override suspend fun decorationsFor(query: AnnotationQuery): ReaderResult<List<Decoration>> {
-        val items = when (val q = query(query)) {
-            is ReaderResult.Ok -> q.value
-            is ReaderResult.Err -> return ReaderResult.Err(q.error)
+        val items = when (val result = query(query)) {
+            is ReaderResult.Ok -> result.value
+            is ReaderResult.Err -> return ReaderResult.Err(result.error)
         }
-        return ReaderResult.Ok(
-            items.mapNotNull { ann ->
-                when (val anchor = ann.anchor) {
-                    is AnnotationAnchor.FixedRects -> Decoration.Fixed(
-                        page = anchor.page,
-                        rects = anchor.rects,
-                        style = ann.style
-                    )
-
-                    is AnnotationAnchor.ReflowRange -> Decoration.Reflow(
-                        range = anchor.range,
-                        style = ann.style
-                    )
-                }
-            }
-        )
+        return ReaderResult.Ok(items.map { it.toDecoration() })
     }
 
     private fun updateState(next: List<Annotation>) {
@@ -98,13 +83,6 @@ internal class InMemoryPdfAnnotationProvider(
                 is AnnotationAnchor.FixedRects -> anchor.page.pageKey()
                 is AnnotationAnchor.ReflowRange -> anchor.range.start.pageKey()
             }
-        }
-    }
-
-    private fun Annotation.matchesPage(page: Locator): Boolean {
-        return when (val anchor = anchor) {
-            is AnnotationAnchor.FixedRects -> anchor.page.samePdfPage(page)
-            is AnnotationAnchor.ReflowRange -> anchor.range.start.samePdfPage(page)
         }
     }
 
@@ -151,21 +129,21 @@ internal class StoredPdfAnnotationProvider(
             is ReaderResult.Err -> return result
             is ReaderResult.Ok -> result.value
         }
-        return ReaderResult.Ok(
-            items.map { ann ->
-                when (val anchor = ann.anchor) {
-                    is AnnotationAnchor.FixedRects -> Decoration.Fixed(
-                        page = anchor.page,
-                        rects = anchor.rects,
-                        style = ann.style
-                    )
+        return ReaderResult.Ok(items.map { it.toDecoration() })
+    }
+}
 
-                    is AnnotationAnchor.ReflowRange -> Decoration.Reflow(
-                        range = anchor.range,
-                        style = ann.style
-                    )
-                }
-            }
+private fun Annotation.toDecoration(): Decoration {
+    return when (val anchor = anchor) {
+        is AnnotationAnchor.FixedRects -> Decoration.Fixed(
+            page = anchor.page,
+            rects = anchor.rects,
+            style = style
+        )
+
+        is AnnotationAnchor.ReflowRange -> Decoration.Reflow(
+            range = anchor.range,
+            style = style
         )
     }
 }

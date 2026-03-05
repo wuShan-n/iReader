@@ -1,7 +1,6 @@
 package com.ireader.engines.pdf.internal.render
 
 import android.graphics.Bitmap
-import com.ireader.engines.pdf.PdfEngineConfig
 import com.ireader.engines.pdf.internal.backend.PdfBackend
 import com.ireader.engines.pdf.internal.cache.TileCache
 import com.ireader.engines.pdf.internal.cache.TileCacheKey
@@ -19,9 +18,14 @@ internal class PdfTileProvider(
     private val backend: PdfBackend,
     private val cache: TileCache,
     private val inflight: TileInflight,
-    private val config: PdfEngineConfig,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val cacheGeneration: Long,
+    private val currentGeneration: () -> Long
 ) : TileProvider {
+
+    fun matches(pageIndex: Int, config: RenderConfig.FixedPage): Boolean {
+        return this.pageIndex == pageIndex && this.renderConfig == config
+    }
 
     override suspend fun renderTile(request: TileRequest): Bitmap {
         val scale = request.scale.coerceAtLeast(0.5f)
@@ -39,26 +43,36 @@ internal class PdfTileProvider(
             zoomBucketMilli = zoomBucketMilli(renderConfig.zoom)
         )
 
-        val cached = cache.get(key)
-        if (cached != null && !cached.isRecycled) return cached
-
-        val rendered = inflight.getOrAwait(key) {
-            val bitmap = Bitmap.createBitmap(scaledWidth, scaledHeight, Bitmap.Config.ARGB_8888)
-            val regionLeft = (request.leftPx * scale).roundToInt().coerceAtLeast(0)
-            val regionTop = (request.topPx * scale).roundToInt().coerceAtLeast(0)
-            backend.renderRegion(
-                pageIndex = pageIndex,
-                bitmap = bitmap,
-                regionLeftPx = regionLeft,
-                regionTopPx = regionTop,
-                regionWidthPx = scaledWidth,
-                regionHeightPx = scaledHeight,
-                quality = request.quality
-            )
-            bitmap
+        cache.get(key)?.let { cached ->
+            if (!cached.isRecycled) return cached
+            cache.remove(key)
         }
 
-        cache.put(key, rendered)
+        val rendered = inflight.getOrAwait(key, scope) {
+            val bitmap = Bitmap.createBitmap(scaledWidth, scaledHeight, Bitmap.Config.ARGB_8888)
+            try {
+                val regionLeft = (request.leftPx * scale).roundToInt().coerceAtLeast(0)
+                val regionTop = (request.topPx * scale).roundToInt().coerceAtLeast(0)
+                backend.renderRegion(
+                    pageIndex = pageIndex,
+                    bitmap = bitmap,
+                    regionLeftPx = regionLeft,
+                    regionTopPx = regionTop,
+                    regionWidthPx = scaledWidth,
+                    regionHeightPx = scaledHeight,
+                    quality = request.quality
+                )
+                bitmap
+            } catch (t: Throwable) {
+                runCatching { bitmap.recycle() }
+                throw t
+            }
+        }
+
+        if (currentGeneration() == cacheGeneration && !rendered.isRecycled) {
+            cache.put(key, rendered)
+        }
+
         return rendered
     }
 
@@ -66,4 +80,3 @@ internal class PdfTileProvider(
         scope.cancel()
     }
 }
-

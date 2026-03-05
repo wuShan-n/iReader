@@ -6,16 +6,29 @@ import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.Utf16LeFileWriter
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.provider.AnnotationProvider
+import com.ireader.reader.api.provider.AnnotationQuery
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.model.Locator
+import com.ireader.reader.model.LocatorRange
+import com.ireader.reader.model.annotation.Annotation
+import com.ireader.reader.model.annotation.AnnotationAnchor
+import com.ireader.reader.model.annotation.AnnotationDraft
+import com.ireader.reader.model.annotation.AnnotationId
+import com.ireader.reader.model.annotation.AnnotationType
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -108,6 +121,35 @@ class TxtControllerTest {
         }
     }
 
+    @Test
+    fun `render should skip decoration queries for empty annotations and refresh after revision`() = runBlocking {
+        val provider = CountingAnnotationProvider()
+        val fixture = createFixture(
+            text = sampleText(paragraphs = 60),
+            annotationProvider = provider
+        )
+        try {
+            fixture.controller.setLayoutConstraints(defaultConstraints())
+            fixture.controller.render(RenderPolicy.Default).requireOk()
+            assertEquals(0, provider.decorationQueryCount.get())
+
+            provider.emitOne(maxOffset = fixture.store.lengthChars, suffix = "1")
+            delay(80L)
+            fixture.controller.render(RenderPolicy.Default).requireOk()
+            assertEquals(1, provider.decorationQueryCount.get())
+
+            fixture.controller.render(RenderPolicy.Default).requireOk()
+            assertEquals(1, provider.decorationQueryCount.get())
+
+            provider.emitOne(maxOffset = fixture.store.lengthChars, suffix = "2")
+            delay(80L)
+            fixture.controller.render(RenderPolicy.Default).requireOk()
+            assertEquals(2, provider.decorationQueryCount.get())
+        } finally {
+            fixture.close()
+        }
+    }
+
     private fun sampleText(paragraphs: Int): String {
         return buildString {
             repeat(paragraphs) { index ->
@@ -138,7 +180,10 @@ class TxtControllerTest {
         )
     }
 
-    private suspend fun createFixture(text: String): ControllerFixture {
+    private suspend fun createFixture(
+        text: String,
+        annotationProvider: AnnotationProvider? = null
+    ): ControllerFixture {
         val dir = Files.createTempDirectory("txt_controller_test").toFile()
         val files = createBookFiles(dir)
         Utf16LeFileWriter(files.contentU16).use { writer ->
@@ -172,7 +217,7 @@ class TxtControllerTest {
             maxPageCache = 8,
             persistPagination = false,
             files = files,
-            annotationProvider = null,
+            annotationProvider = annotationProvider,
             ioDispatcher = Dispatchers.IO,
             defaultDispatcher = Dispatchers.Default
         )
@@ -206,13 +251,62 @@ class TxtControllerTest {
 
     private class ControllerFixture(
         val controller: TxtController,
-        private val store: Utf16TextStore,
+        val store: Utf16TextStore,
         private val rootDir: File
     ) {
         fun close() {
             controller.close()
             store.close()
             rootDir.deleteRecursively()
+        }
+    }
+
+    private class CountingAnnotationProvider : AnnotationProvider {
+        private val state = MutableStateFlow<List<Annotation>>(emptyList())
+        val decorationQueryCount = AtomicInteger(0)
+
+        override fun observeAll(): Flow<List<Annotation>> = state
+
+        override suspend fun listAll(): ReaderResult<List<Annotation>> = ReaderResult.Ok(state.value)
+
+        override suspend fun query(query: AnnotationQuery): ReaderResult<List<Annotation>> = ReaderResult.Ok(state.value)
+
+        override suspend fun create(draft: AnnotationDraft): ReaderResult<Annotation> {
+            val created = Annotation(
+                id = AnnotationId("created-${System.nanoTime()}"),
+                type = draft.type,
+                anchor = draft.anchor,
+                content = draft.content,
+                style = draft.style,
+                createdAtEpochMs = System.currentTimeMillis(),
+                extra = draft.extra
+            )
+            state.value = state.value + created
+            return ReaderResult.Ok(created)
+        }
+
+        override suspend fun update(annotation: Annotation): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+        override suspend fun delete(id: AnnotationId): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+        override suspend fun decorationsFor(query: AnnotationQuery): ReaderResult<List<Decoration>> {
+            decorationQueryCount.incrementAndGet()
+            return ReaderResult.Ok(emptyList())
+        }
+
+        fun emitOne(maxOffset: Long, suffix: String) {
+            val locator = com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec.locatorForOffset(
+                offset = 0L,
+                maxOffset = maxOffset
+            )
+            state.value = listOf(
+                Annotation(
+                    id = AnnotationId("anno-$suffix"),
+                    type = AnnotationType.HIGHLIGHT,
+                    anchor = AnnotationAnchor.ReflowRange(LocatorRange(start = locator, end = locator)),
+                    createdAtEpochMs = System.currentTimeMillis()
+                )
+            )
         }
     }
 }

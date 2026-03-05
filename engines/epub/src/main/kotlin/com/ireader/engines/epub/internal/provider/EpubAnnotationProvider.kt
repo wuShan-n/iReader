@@ -14,6 +14,8 @@ import com.ireader.reader.model.annotation.AnnotationAnchor
 import com.ireader.reader.model.annotation.AnnotationDraft
 import com.ireader.reader.model.annotation.AnnotationId
 import com.ireader.reader.model.annotation.AnnotationType
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
@@ -39,7 +41,10 @@ internal class EpubAnnotationProvider(
     private val observeJob: Job = scope.launch {
         store.observe(documentId)
             .distinctUntilChanged()
-            .catch { emit(emptyList()) }
+            .catch { e ->
+                if (e is CancellationException) throw e
+                emit(emptyList())
+            }
             .collectLatest { annotations ->
                 val next = annotations.associateNotNull { annotation ->
                     annotation.toReadiumDecorationOrNull()?.let { decoration ->
@@ -128,44 +133,64 @@ internal class EpubAnnotationProvider(
 
     private suspend fun applyIncrementalDecorations(next: Map<String, Decoration>) {
         val previous = renderedDecorations
-        val removedIds = previous.keys - next.keys
-        for (id in removedIds) {
-            decorationsHost.apply(groupFor(id), emptyList())
-        }
-        for ((id, decoration) in next) {
-            val previousDecoration = previous[id]
-            if (previousDecoration != decoration) {
-                decorationsHost.apply(groupFor(id), listOf(decoration))
+        if (previous == next) return
+
+        val updates = buildMap<String, List<Decoration>> {
+            val removedIds = previous.keys - next.keys
+            for (id in removedIds) {
+                put(groupFor(id), emptyList())
+            }
+            for ((id, decoration) in next) {
+                val previousDecoration = previous[id]
+                if (previousDecoration != decoration) {
+                    put(groupFor(id), listOf(decoration))
+                }
             }
         }
+
+        if (updates.isNotEmpty()) {
+            decorationsHost.applyAll(updates)
+        }
+
         renderedDecorations = next
     }
 
     private fun groupFor(annotationId: String): String = GROUP_ANNOTATION_PREFIX + annotationId
 
-    private fun rangeToReadiumLocatorOrNull(range: com.ireader.reader.model.LocatorRange): org.readium.r2.shared.publication.Locator? {
+    private fun rangeToReadiumLocatorOrNull(
+        range: com.ireader.reader.model.LocatorRange
+    ): org.readium.r2.shared.publication.Locator? {
         val start = range.start.toReadiumLocatorOrNull() ?: return null
         val end = range.end.toReadiumLocatorOrNull()
+
         val startFragments = start.locations.fragments.filter { it.isNotBlank() }
         val endFragments = end?.locations?.fragments?.filter { it.isNotBlank() }.orEmpty()
+
         val mergedFragments = when {
             startFragments.isEmpty() && endFragments.isEmpty() -> emptyList()
             startFragments.isEmpty() -> listOf(endFragments.first())
             endFragments.isEmpty() -> listOf(startFragments.first())
             else -> listOf(startFragments.first(), endFragments.last())
         }
-        if (mergedFragments.isEmpty()) {
-            return start
-        }
+
+        if (mergedFragments.isEmpty()) return start
+
         return range.start
             .withReadiumFragments(mergedFragments)
             .toReadiumLocatorOrNull()
     }
 
+    /**
+     * 以“原颜色 alpha”为基准做乘法，不会把已有 alpha 覆盖成 255。
+     */
     private fun applyOpacity(colorArgb: Int, opacity: Float?): Int {
         if (opacity == null) return colorArgb
-        val alpha = ((opacity.coerceIn(0f, 1f) * 255f).toInt() and 0xFF) shl 24
-        return (colorArgb and 0x00FFFFFF) or alpha
+
+        val clamped = opacity.coerceIn(0f, 1f)
+        val baseAlpha = (colorArgb ushr 24) and 0xFF
+        val newAlpha = (baseAlpha * clamped).roundToInt().coerceIn(0, 255)
+
+        return (colorArgb and 0x00FFFFFF) or (newAlpha shl 24)
     }
 }
 

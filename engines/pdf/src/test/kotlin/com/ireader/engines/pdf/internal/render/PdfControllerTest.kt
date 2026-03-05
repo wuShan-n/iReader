@@ -91,6 +91,47 @@ class PdfControllerTest {
         assertTrue(result is ReaderResult.Err)
     }
 
+    @Test
+    fun `render reuses tile provider when page and config are unchanged`() = runTest {
+        val controller = createController(pageCount = 3)
+        controller.setLayoutConstraints(defaultConstraints())
+
+        val first = controller.render().requireOk()
+        val second = controller.render().requireOk()
+
+        val firstProvider = (first.content as RenderContent.Tiles).tileProvider
+        val secondProvider = (second.content as RenderContent.Tiles).tileProvider
+        assertTrue(firstProvider === secondProvider)
+    }
+
+    @Test
+    fun `invalidate forces new tile provider`() = runTest {
+        val controller = createController(pageCount = 3)
+        controller.setLayoutConstraints(defaultConstraints())
+
+        val first = controller.render().requireOk()
+        controller.invalidate().requireOkValue()
+        val second = controller.render().requireOk()
+
+        val firstProvider = (first.content as RenderContent.Tiles).tileProvider
+        val secondProvider = (second.content as RenderContent.Tiles).tileProvider
+        assertTrue(firstProvider !== secondProvider)
+    }
+
+    @Test
+    fun `config change forces new tile provider`() = runTest {
+        val controller = createController(pageCount = 3)
+        controller.setLayoutConstraints(defaultConstraints())
+
+        val first = controller.render().requireOk()
+        controller.setConfig(RenderConfig.FixedPage(zoom = 1.2f)).requireOkValue()
+        val second = controller.render().requireOk()
+
+        val firstProvider = (first.content as RenderContent.Tiles).tileProvider
+        val secondProvider = (second.content as RenderContent.Tiles).tileProvider
+        assertTrue(firstProvider !== secondProvider)
+    }
+
     private fun createController(pageCount: Int = 5): PdfController {
         return PdfController(
             backend = FakeBackend(pageCount = pageCount),
@@ -149,6 +190,13 @@ class PdfControllerTest {
     private fun ReaderResult<RenderPage>.requireOk(): RenderPage {
         return when (this) {
             is ReaderResult.Ok -> value
+            is ReaderResult.Err -> error("Expected Ok but got Err: ${error.code}")
+        }
+    }
+
+    private fun ReaderResult<Unit>.requireOkValue() {
+        when (this) {
+            is ReaderResult.Ok -> Unit
             is ReaderResult.Err -> error("Expected Ok but got Err: ${error.code}")
         }
     }

@@ -21,6 +21,12 @@ internal object LinkDetector {
             return emptyList()
         }
         val source = text.toString()
+        val maybeUrl = source.indexOf("http", ignoreCase = true) >= 0 ||
+            source.indexOf("www.", ignoreCase = true) >= 0
+        val maybeEmail = source.indexOf('@') >= 0
+        if (!maybeUrl && !maybeEmail) {
+            return emptyList()
+        }
         val out = ArrayList<DocumentLink>(8)
         val dedupe = HashSet<String>()
 
@@ -66,25 +72,29 @@ internal object LinkDetector {
             )
         }
 
-        for (match in urlRegex.findAll(source)) {
-            if (out.size >= max) {
-                break
+        if (maybeUrl) {
+            for (match in urlRegex.findAll(source)) {
+                if (out.size >= max) {
+                    break
+                }
+                append(
+                    startInclusive = match.range.first,
+                    endExclusive = match.range.last + 1,
+                    isEmail = false
+                )
             }
-            append(
-                startInclusive = match.range.first,
-                endExclusive = match.range.last + 1,
-                isEmail = false
-            )
         }
-        for (match in emailRegex.findAll(source)) {
-            if (out.size >= max) {
-                break
+        if (maybeEmail) {
+            for (match in emailRegex.findAll(source)) {
+                if (out.size >= max) {
+                    break
+                }
+                append(
+                    startInclusive = match.range.first,
+                    endExclusive = match.range.last + 1,
+                    isEmail = true
+                )
             }
-            append(
-                startInclusive = match.range.first,
-                endExclusive = match.range.last + 1,
-                isEmail = true
-            )
         }
 
         return out

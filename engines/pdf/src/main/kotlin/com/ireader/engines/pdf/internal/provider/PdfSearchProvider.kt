@@ -1,13 +1,13 @@
 package com.ireader.engines.pdf.internal.provider
 
+import com.ireader.engines.pdf.internal.util.charIndexOrNull
+import com.ireader.engines.pdf.internal.util.endCharLocator
+import com.ireader.engines.pdf.internal.util.startCharLocator
+import com.ireader.engines.pdf.internal.util.toPdfPageIndexOrNull
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.provider.SearchProvider
 import com.ireader.reader.model.LocatorRange
-import com.ireader.engines.pdf.internal.util.endCharLocator
-import com.ireader.engines.pdf.internal.util.startCharLocator
-import com.ireader.engines.pdf.internal.util.toPdfPageIndexOrNull
-import java.util.Locale
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -19,28 +19,33 @@ internal class PdfSearchProvider(
 ) : SearchProvider {
 
     override fun search(query: String, options: SearchOptions): Flow<SearchHit> = flow {
-        val q = query.trim()
-        if (q.isEmpty()) return@flow
+        val needle = query.trim()
+        if (needle.isEmpty()) return@flow
 
         val ctx = currentCoroutineContext()
-        val startPage = options.startFrom?.toPdfPageIndexOrNull(pageCount) ?: 0
-        val needle = if (options.caseSensitive) q else q.lowercase(Locale.ROOT)
+        val startFrom = options.startFrom
+        val startPage = startFrom?.toPdfPageIndexOrNull(pageCount) ?: 0
+        val startChar = startFrom?.charIndexOrNull()?.coerceAtLeast(0) ?: 0
+        val ignoreCase = !options.caseSensitive
         var emitted = 0
 
         for (pageIndex in startPage until pageCount) {
             ctx.ensureActive()
+
             val pageText = textProvider.pageText(pageIndex).orEmpty()
             if (pageText.isEmpty()) continue
 
-            val haystack = if (options.caseSensitive) pageText else pageText.lowercase(Locale.ROOT)
-            var fromIndex = 0
+            var fromIndex = if (pageIndex == startPage) startChar.coerceAtMost(pageText.length) else 0
 
             while (true) {
                 ctx.ensureActive()
-                val idx = haystack.indexOf(needle, startIndex = fromIndex)
+
+                val idx = pageText.indexOf(needle, startIndex = fromIndex, ignoreCase = ignoreCase)
                 if (idx < 0) break
+
                 val end = idx + needle.length
-                if (options.wholeWord && !isWholeWord(haystack, idx, end)) {
+
+                if (options.wholeWord && !isWholeWord(pageText, idx, end)) {
                     fromIndex = end
                     continue
                 }
@@ -63,8 +68,10 @@ internal class PdfSearchProvider(
                         excerpt = excerpt
                     )
                 )
+
                 emitted++
                 if (emitted >= options.maxHits) return@flow
+
                 fromIndex = end
             }
         }

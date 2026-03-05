@@ -4,19 +4,19 @@ internal class KmpMatcher(
     pattern: CharArray,
     caseSensitive: Boolean
 ) {
-    private val normalizedPattern = if (caseSensitive) {
-        pattern
+    private val normalizedPattern: CharArray = if (caseSensitive) {
+        pattern.copyOf()
     } else {
         CharArray(pattern.size) { index -> pattern[index].lowercaseChar() }
     }
     private val lps = buildLps(normalizedPattern)
     private val ignoreCase = !caseSensitive
 
-    fun findAll(text: CharArray): List<Int> {
+    inline fun forEachMatch(text: CharArray, onMatch: (index: Int) -> Boolean) {
         if (normalizedPattern.isEmpty() || text.isEmpty()) {
-            return emptyList()
+            return
         }
-        val hits = ArrayList<Int>()
+
         var i = 0
         var j = 0
         while (i < text.size) {
@@ -26,7 +26,10 @@ internal class KmpMatcher(
                 i++
                 j++
                 if (j == normalizedPattern.size) {
-                    hits.add(i - j)
+                    val hitIndex = i - j
+                    if (!onMatch(hitIndex)) {
+                        return
+                    }
                     j = lps[j - 1]
                 }
             } else if (j != 0) {
@@ -34,6 +37,17 @@ internal class KmpMatcher(
             } else {
                 i++
             }
+        }
+    }
+
+    fun findAll(text: CharArray): List<Int> {
+        if (normalizedPattern.isEmpty() || text.isEmpty()) {
+            return emptyList()
+        }
+        val hits = ArrayList<Int>()
+        forEachMatch(text) { hitIndex ->
+            hits.add(hitIndex)
+            true
         }
         return hits
     }
@@ -61,4 +75,3 @@ internal class KmpMatcher(
         return out
     }
 }
-

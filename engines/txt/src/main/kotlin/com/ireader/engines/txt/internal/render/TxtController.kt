@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
@@ -137,11 +138,13 @@ internal class TxtController(
         documentKey = documentKey,
         paginationDir = files.paginationDir
     )
-    private val pageExtrasCache = LruCache<PageExtrasCacheKey, PageExtras>((maxPageCache * 3).coerceAtLeast(8))
+    private val pageLinksCache = LruCache<PageRangeKey, List<DocumentLink>>((maxPageCache * 3).coerceAtLeast(8))
+    private val pageDecorCache = LruCache<DecorKey, List<Decoration>>((maxPageCache * 3).coerceAtLeast(8))
 
     private var pageCompletionJob: Job? = null
     private var annotationObserverJob: Job? = null
     private var annotationRevision: Long = 0L
+    private var hasAnyAnnotations: Boolean = false
     private var restoredLocatorAnchors = false
 
     private val initialStart = initialOffset.coerceIn(0L, store.lengthChars)
@@ -185,7 +188,8 @@ internal class TxtController(
         return mutex.withLock {
             this.constraints = constraints
             sliceCache.clear()
-            pageExtrasCache.clear()
+            pageLinksCache.clear()
+            pageDecorCache.clear()
             reloadPaginationIndexIfNeededLocked()
             updateStateLocked()
             ReaderResult.Ok(Unit)
@@ -215,15 +219,20 @@ internal class TxtController(
                 }
             }
             sliceCache.clear()
-            pageExtrasCache.clear()
+            pageLinksCache.clear()
+            pageDecorCache.clear()
             reloadPaginationIndexIfNeededLocked()
             ReaderResult.Ok(Unit)
         }
     }
 
     override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> {
-        val renderResult = mutex.withLock {
-            renderLocked(policy)
+        val snapshotResult = mutex.withLock {
+            renderSnapshotLocked(policy)
+        }
+        val renderResult = when (snapshotResult) {
+            is ReaderResult.Err -> snapshotResult
+            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
         }
         if (renderResult is ReaderResult.Ok && policy.prefetchNeighbors > 0) {
             launchSafely("prefetch-neighbors") { prefetchNeighbors(policy.prefetchNeighbors) }
@@ -232,7 +241,7 @@ internal class TxtController(
     }
 
     override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> {
-        return mutex.withLock {
+        val snapshotResult = mutex.withLock {
             val constraintsLocal = constraints
                 ?: return@withLock ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
             val current = sliceCache.getOrBuild(
@@ -242,23 +251,27 @@ internal class TxtController(
                 allowCache = true
             )
             if (current.endOffset >= store.lengthChars) {
-                return@withLock buildPageResultLocked(
+                return@withLock prepareRenderSnapshotLocked(
                     slice = current,
                     renderTimeMs = 0L,
                     cacheHit = true
                 )
             }
             navigation.moveTo(current.endOffset, store.lengthChars)
-            renderLocked(policy)
+            renderSnapshotLocked(policy)
+        }
+        return when (snapshotResult) {
+            is ReaderResult.Err -> snapshotResult
+            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
         }
     }
 
     override suspend fun prev(policy: RenderPolicy): ReaderResult<RenderPage> {
-        return mutex.withLock {
+        val snapshotResult = mutex.withLock {
             val constraintsLocal = constraints
                 ?: return@withLock ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
             if (!navigation.canGoPrev()) {
-                return@withLock renderLocked(policy)
+                return@withLock renderSnapshotLocked(policy)
             }
             val target = navigation.findPreviousStart(
                 fromStart = navigation.currentStart,
@@ -273,7 +286,11 @@ internal class TxtController(
                 )
             }
             navigation.moveTo(target, store.lengthChars)
-            renderLocked(policy)
+            renderSnapshotLocked(policy)
+        }
+        return when (snapshotResult) {
+            is ReaderResult.Err -> snapshotResult
+            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
         }
     }
 
@@ -282,19 +299,27 @@ internal class TxtController(
             ?: return ReaderResult.Err(
                 ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
             )
-        return mutex.withLock {
+        val snapshotResult = mutex.withLock {
             navigation.moveTo(offset, store.lengthChars)
-            renderLocked(policy)
+            renderSnapshotLocked(policy)
+        }
+        return when (snapshotResult) {
+            is ReaderResult.Err -> snapshotResult
+            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
         }
     }
 
     override suspend fun goToProgress(percent: Double, policy: RenderPolicy): ReaderResult<RenderPage> {
         val clamped = percent.coerceIn(0.0, 1.0)
-        return mutex.withLock {
+        val snapshotResult = mutex.withLock {
             val target = paginationIndex.startForProgress(clamped)
                 ?: (store.lengthChars * clamped).toLong()
             navigation.moveTo(target, store.lengthChars)
-            renderLocked(policy)
+            renderSnapshotLocked(policy)
+        }
+        return when (snapshotResult) {
+            is ReaderResult.Err -> snapshotResult
+            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
         }
     }
 
@@ -359,7 +384,8 @@ internal class TxtController(
     override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
         return mutex.withLock {
             sliceCache.clear()
-            pageExtrasCache.clear()
+            pageLinksCache.clear()
+            pageDecorCache.clear()
             if (reason == InvalidateReason.CONFIG_CHANGED || reason == InvalidateReason.LAYOUT_CHANGED) {
                 paginationIndex.invalidateProfile()
                 pageCompletionJob?.cancel()
@@ -427,12 +453,13 @@ internal class TxtController(
                 }
                 paginator.setSoftBreakIndex(loaded)
                 sliceCache.clear()
-                pageExtrasCache.clear()
+                pageLinksCache.clear()
+                pageDecorCache.clear()
             }
         }
     }
 
-    private suspend fun renderLocked(policy: RenderPolicy): ReaderResult<RenderPage> {
+    private suspend fun renderSnapshotLocked(policy: RenderPolicy): ReaderResult<RenderSnapshot> {
         val constraintsLocal = constraints
             ?: return ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
 
@@ -456,23 +483,23 @@ internal class TxtController(
         }
         val slice = builtSlice ?: return ReaderResult.Err(ReaderError.Internal("Failed to paginate TXT page"))
 
-        val page = buildPageResultLocked(
+        val snapshot = prepareRenderSnapshotLocked(
             slice = slice,
             renderTimeMs = elapsed,
             cacheHit = cacheHit
         )
-        if (page is ReaderResult.Ok) {
+        if (snapshot is ReaderResult.Ok) {
             paginationIndex.record(slice.startOffset)
             maybeSchedulePageCompletionLocked()
         }
-        return page
+        return snapshot
     }
 
-    private suspend fun buildPageResultLocked(
+    private fun prepareRenderSnapshotLocked(
         slice: ReflowPageSlice,
         renderTimeMs: Long,
         cacheHit: Boolean
-    ): ReaderResult<RenderPage> {
+    ): ReaderResult<RenderSnapshot> {
         navigation.updateFromSlice(slice)
         updateStateLocked()
         val pageRange = TxtBlockLocatorCodec.rangeForOffsets(
@@ -480,25 +507,39 @@ internal class TxtController(
             endOffset = slice.endOffset,
             maxOffset = store.lengthChars
         )
-        val extras = pageExtrasFor(
-            startOffset = slice.startOffset,
-            endOffset = slice.endOffset,
-            text = slice.text,
-            range = pageRange
-        )
-
-        val page = RenderPage(
-            id = PageId("${slice.startOffset}-${slice.endOffset}"),
-            locator = navigation.locatorFor(store.lengthChars),
-            content = RenderContent.Text(
+        return ReaderResult.Ok(
+            RenderSnapshot(
+                id = PageId("${slice.startOffset}-${slice.endOffset}"),
+                locator = navigation.locatorFor(store.lengthChars),
                 text = slice.text,
-                mapping = TxtTextMapping(slice.startOffset, slice.endOffset)
+                startOffset = slice.startOffset,
+                endOffset = slice.endOffset,
+                range = pageRange,
+                renderTimeMs = renderTimeMs,
+                cacheHit = cacheHit
+            )
+        )
+    }
+
+    private suspend fun buildPageResult(snapshot: RenderSnapshot): ReaderResult<RenderPage> {
+        val extras = pageExtrasFor(
+            startOffset = snapshot.startOffset,
+            endOffset = snapshot.endOffset,
+            text = snapshot.text,
+            range = snapshot.range
+        )
+        val page = RenderPage(
+            id = snapshot.id,
+            locator = snapshot.locator,
+            content = RenderContent.Text(
+                text = snapshot.text,
+                mapping = TxtTextMapping(snapshot.startOffset, snapshot.endOffset)
             ),
             links = extras.links,
             decorations = extras.decorations,
             metrics = RenderMetrics(
-                renderTimeMs = renderTimeMs,
-                cacheHit = cacheHit
+                renderTimeMs = snapshot.renderTimeMs,
+                cacheHit = snapshot.cacheHit
             )
         )
         eventsMutable.tryEmit(ReaderEvent.Rendered(page.id, page.metrics))
@@ -512,29 +553,101 @@ internal class TxtController(
         text: CharSequence,
         range: LocatorRange
     ): PageExtras {
-        val key = PageExtrasCacheKey(
+        val links = linksFor(
             startOffset = startOffset,
             endOffset = endOffset,
-            annotationRevision = annotationRevision
+            text = text
         )
-        val cached = pageExtrasCache[key]
-        if (cached != null) {
-            return cached
-        }
-        val computed = PageExtras(
-            links = LinkDetector.detect(
-                text = text,
-                pageStartOffset = startOffset,
-                maxOffset = store.lengthChars
-            ),
-            decorations = annotationProvider
-                ?.decorationsFor(AnnotationQuery(range = range))
-                ?.getOrNull()
-                ?: emptyList()
+        val decorations = decorationsFor(
+            startOffset = startOffset,
+            endOffset = endOffset,
+            range = range
         )
-        pageExtrasCache[key] = computed
-        return computed
+        return PageExtras(links = links, decorations = decorations)
     }
+
+    private suspend fun linksFor(
+        startOffset: Long,
+        endOffset: Long,
+        text: CharSequence
+    ): List<DocumentLink> {
+        val key = PageRangeKey(startOffset = startOffset, endOffset = endOffset)
+        mutex.withLock {
+            pageLinksCache[key]?.let { return it }
+        }
+        val detected = LinkDetector.detect(
+            text = text,
+            pageStartOffset = startOffset,
+            maxOffset = store.lengthChars
+        )
+        return mutex.withLock {
+            pageLinksCache[key] ?: detected.also { pageLinksCache[key] = it }
+        }
+    }
+
+    private suspend fun decorationsFor(
+        startOffset: Long,
+        endOffset: Long,
+        range: LocatorRange
+    ): List<Decoration> {
+        val provider = annotationProvider ?: return emptyList()
+        val lookup = mutex.withLock {
+            if (!hasAnyAnnotations) {
+                return@withLock DecorLookup(
+                    key = null,
+                    revision = annotationRevision,
+                    cached = emptyList(),
+                    shouldQuery = false
+                )
+            }
+            val revision = annotationRevision
+            val key = DecorKey(
+                startOffset = startOffset,
+                endOffset = endOffset,
+                rev = revision
+            )
+            DecorLookup(
+                key = key,
+                revision = revision,
+                cached = pageDecorCache[key],
+                shouldQuery = true
+            )
+        }
+        lookup.cached?.let { return it }
+        if (!lookup.shouldQuery || lookup.key == null) {
+            return emptyList()
+        }
+
+        val queried = provider
+            .decorationsFor(AnnotationQuery(range = range))
+            .getOrNull()
+            ?: emptyList()
+        return mutex.withLock {
+            val latestRevision = annotationRevision
+            if (latestRevision != lookup.revision) {
+                val latestKey = DecorKey(
+                    startOffset = startOffset,
+                    endOffset = endOffset,
+                    rev = latestRevision
+                )
+                pageDecorCache[latestKey] ?: queried
+            } else {
+                pageDecorCache[lookup.key] = queried
+                queried
+            }
+        }
+    }
+
+    private data class RenderSnapshot(
+        val id: PageId,
+        val locator: Locator,
+        val text: CharSequence,
+        val startOffset: Long,
+        val endOffset: Long,
+        val range: LocatorRange,
+        val renderTimeMs: Long,
+        val cacheHit: Boolean
+    )
 
     private fun updateStateLocked() {
         val locatorExtras = paginationIndex.locatorExtras()
@@ -603,6 +716,7 @@ internal class TxtController(
                 break
             }
             remaining -= batchResult.steps
+            yield()
         }
         mutex.withLock {
             paginationIndex.saveIfDirty()
@@ -624,7 +738,7 @@ internal class TxtController(
                 start = cursor,
                 constraints = constraints,
                 config = currentConfig,
-                allowCache = true
+                allowCache = false
             )
             paginationIndex.record(slice.startOffset)
             if (slice.endOffset <= cursor) {
@@ -639,10 +753,11 @@ internal class TxtController(
     private fun observeAnnotationChangesIfNeeded() {
         val provider = annotationProvider ?: return
         annotationObserverJob = launchSafely("observe-annotations") {
-            provider.observeAll().collect {
+            provider.observeAll().collect { list ->
                 mutex.withLock {
                     annotationRevision++
-                    pageExtrasCache.clear()
+                    hasAnyAnnotations = list.isNotEmpty()
+                    pageDecorCache.clear()
                 }
             }
         }
@@ -657,10 +772,22 @@ internal class TxtController(
         val steps: Int
     )
 
-    private data class PageExtrasCacheKey(
+    private data class PageRangeKey(
+        val startOffset: Long,
+        val endOffset: Long
+    )
+
+    private data class DecorKey(
         val startOffset: Long,
         val endOffset: Long,
-        val annotationRevision: Long
+        val rev: Long
+    )
+
+    private data class DecorLookup(
+        val key: DecorKey?,
+        val revision: Long,
+        val cached: List<Decoration>?,
+        val shouldQuery: Boolean
     )
 
     private data class PageExtras(
@@ -670,7 +797,7 @@ internal class TxtController(
 
     private companion object {
         private const val TAG = "TxtController"
-        private const val PAGE_COMPLETION_BATCH_SIZE = 4
+        private const val PAGE_COMPLETION_BATCH_SIZE = 1
 
         private fun logInfo(tag: String, message: String) {
             runCatching { Log.i(tag, message) }

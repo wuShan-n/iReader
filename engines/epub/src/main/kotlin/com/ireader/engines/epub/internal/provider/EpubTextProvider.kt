@@ -6,6 +6,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,6 +41,7 @@ internal class EpubTextProvider(
 
                 val iterator = content.iterator()
                 val endPosition = end?.locations?.position
+
                 val maxLength = 8_192
                 val builder = StringBuilder()
 
@@ -53,16 +55,16 @@ internal class EpubTextProvider(
                     val text = (element as? Content.TextualElement)?.text
                         ?.trim()
                         .orEmpty()
+
                     if (text.isEmpty()) continue
 
-                    if (builder.isNotEmpty()) {
-                        builder.append('\n')
-                    }
+                    if (builder.isNotEmpty()) builder.append('\n')
                     builder.append(text)
                 }
 
                 ReaderResult.Ok(builder.toString())
             } catch (t: Throwable) {
+                if (t is CancellationException) throw t
                 ReaderResult.Err(ReaderError.Io(cause = t))
             }
         }
@@ -106,6 +108,7 @@ internal class EpubTextProvider(
 
                 ReaderResult.Ok(builder.toString().take(max))
             } catch (t: Throwable) {
+                if (t is CancellationException) throw t
                 ReaderResult.Err(ReaderError.Io(cause = t))
             }
         }

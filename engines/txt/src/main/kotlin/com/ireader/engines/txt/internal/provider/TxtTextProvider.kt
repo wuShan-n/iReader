@@ -51,7 +51,8 @@ internal class TxtTextProvider(
                     ?: return@withContext ReaderResult.Err(
                         ReaderError.Internal("Invalid TXT locator: $locator")
                     )
-                val half = (maxChars / 2).coerceAtLeast(16)
+                val capped = maxChars.coerceIn(32, MAX_AROUND_CHARS)
+                val half = (capped / 2).coerceAtLeast(16)
                 ReaderResult.Ok(store.readAround(offset, before = half, after = half))
             } catch (ce: CancellationException) {
                 throw ce
@@ -67,5 +68,6 @@ internal class TxtTextProvider(
 
     private companion object {
         private const val MAX_EXTRACT_CHARS = 200_000
+        private const val MAX_AROUND_CHARS = 200_000
     }
 }

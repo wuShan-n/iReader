@@ -3,6 +3,7 @@ package com.ireader.engines.epub.internal.render
 import com.ireader.reader.api.render.TextAlignMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.RenderConfig
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -63,6 +64,18 @@ class EpubPreferencesMapperTest {
     fun `known chinese font names should map to serif family`() {
         val prefs = RenderConfig.ReflowText(fontFamilyName = "思源宋体").toEpubPreferences()
         assertEquals(FontFamily.SERIF, prefs.fontFamily)
+    }
+
+    @Test
+    fun `font mapping should be locale-agnostic`() {
+        val original = Locale.getDefault()
+        Locale.setDefault(Locale.forLanguageTag("tr-TR"))
+        try {
+            val prefs = RenderConfig.ReflowText(fontFamilyName = "SERIF").toEpubPreferences()
+            assertEquals(FontFamily.SERIF, prefs.fontFamily)
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 
     @Test

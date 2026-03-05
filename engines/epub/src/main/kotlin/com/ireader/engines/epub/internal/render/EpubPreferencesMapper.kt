@@ -3,6 +3,7 @@ package com.ireader.engines.epub.internal.render
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.toTypographySpec
+import java.util.Locale
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.FontFamily
@@ -13,10 +14,12 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
     when (this) {
         is RenderConfig.ReflowText -> {
             val typography = toTypographySpec()
+
             val baseSp = 16f
             val fontScale = (typography.fontSizeSp / baseSp)
                 .toDouble()
                 .coerceIn(0.5, 4.0)
+
             val advanced = !respectPublisherStyles
             val textAlign = if (advanced) {
                 when (typography.textAlign) {
@@ -47,10 +50,9 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
     }
 
 private fun String.toReadiumFontFamilyOrNull(): FontFamily? {
-    val key = lowercase().trim()
-    if (key.isBlank() || key == "系统字体") {
-        return null
-    }
+    val key = lowercase(Locale.ROOT).trim()
+    if (key.isBlank() || key == "系统字体") return null
+
     return when (key) {
         "serif" -> FontFamily.SERIF
         "sans-serif", "sans" -> FontFamily.SANS_SERIF

@@ -19,10 +19,15 @@ internal class PdfCacheFileStore(
     private fun sha256Hex(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256")
             .digest(input.toByteArray(StandardCharsets.UTF_8))
-        return buildString(bytes.size * 2) {
-            bytes.forEach { value ->
-                append("%02x".format(value))
-            }
+
+        val hex = "0123456789abcdef"
+        val out = CharArray(bytes.size * 2)
+        var i = 0
+        for (b in bytes) {
+            val value = b.toInt() and 0xFF
+            out[i++] = hex[value ushr 4]
+            out[i++] = hex[value and 0x0F]
         }
+        return String(out)
     }
 }

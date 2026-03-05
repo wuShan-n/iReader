@@ -35,6 +35,8 @@ internal object SoftBreakIndexBuilder {
     private const val BLOCK_NEWLINES = 4096
     private const val MAX_TITLE_CHARS = 80
     private const val CHUNK_CHARS = 128 * 1024
+    private const val ENSURE_ACTIVE_MASK = 0xFFF
+    private const val TYPICAL_UPDATE_INTERVAL = 256
 
     private val detector = ChapterDetector()
 
@@ -197,16 +199,33 @@ internal object SoftBreakIndexBuilder {
                         }
                     }
 
+                    var cachedTypicalLineLength = 72
+                    var cachedContext = SoftBreakClassifierContext(
+                        typicalLineLength = cachedTypicalLineLength,
+                        hardWrapLikely = meta.hardWrapLikely,
+                        rules = ruleConfig
+                    )
+                    var typicalUpdateCountdown = 0
+
                     fun isSoftBreak(line0: SoftBreakLineInfo, line1: SoftBreakLineInfo): Boolean {
-                        val context = SoftBreakClassifierContext(
-                            typicalLineLength = estimateTypicalLineLength(),
-                            hardWrapLikely = meta.hardWrapLikely,
-                            rules = ruleConfig
-                        )
+                        if (typicalUpdateCountdown <= 0) {
+                            val typical = estimateTypicalLineLength()
+                            if (typical != cachedTypicalLineLength) {
+                                cachedTypicalLineLength = typical
+                                cachedContext = SoftBreakClassifierContext(
+                                    typicalLineLength = cachedTypicalLineLength,
+                                    hardWrapLikely = meta.hardWrapLikely,
+                                    rules = ruleConfig
+                                )
+                            }
+                            typicalUpdateCountdown = TYPICAL_UPDATE_INTERVAL
+                        } else {
+                            typicalUpdateCountdown--
+                        }
                         return SoftBreakClassifier.classify(
                             line0 = line0,
                             line1 = line1,
-                            context = context
+                            context = cachedContext
                         ).isSoft
                     }
 
@@ -230,8 +249,13 @@ internal object SoftBreakIndexBuilder {
                             if (chunk.isEmpty()) {
                                 break
                             }
-                            for (c in chunk) {
-                                coroutineContext.ensureActive()
+                            val baseOffset = globalOffset
+                            for (i in chunk.indices) {
+                                if ((i and ENSURE_ACTIVE_MASK) == 0) {
+                                    coroutineContext.ensureActive()
+                                }
+                                val c = chunk[i]
+                                val offset = baseOffset + i.toLong()
                                 if (c == '\n') {
                                     val currentLine = finishLine()
                                     val oldPending = pending
@@ -241,7 +265,7 @@ internal object SoftBreakIndexBuilder {
                                             isSoft = isSoftBreak(oldPending.line0, currentLine)
                                         )
                                     }
-                                    pending = Pending(newlineOffset = globalOffset, line0 = currentLine)
+                                    pending = Pending(newlineOffset = offset, line0 = currentLine)
                                 } else {
                                     lineLength++
                                     if (!seenNonSpace) {
@@ -261,8 +285,8 @@ internal object SoftBreakIndexBuilder {
                                         lineTitle.append(c)
                                     }
                                 }
-                                globalOffset++
                             }
+                            globalOffset += chunk.size.toLong()
                         }
                     }
 

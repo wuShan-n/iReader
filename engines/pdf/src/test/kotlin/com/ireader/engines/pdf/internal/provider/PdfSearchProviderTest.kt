@@ -91,6 +91,29 @@ class PdfSearchProviderTest {
     }
 
     @Test
+    fun `search startFrom charIndex starts from offset`() = runTest {
+        val backend = FakeBackend(
+            pages = listOf("alpha one alpha")
+        )
+        val textProvider = PdfTextProvider(backend = backend, pageCount = 1)
+        val provider = PdfSearchProvider(pageCount = 1, textProvider = textProvider)
+
+        val hits = provider.search(
+            query = "alpha",
+            options = SearchOptions(
+                startFrom = Locator(
+                    scheme = LocatorSchemes.PDF_PAGE,
+                    value = "0",
+                    extras = mapOf("charIndex" to "6")
+                )
+            )
+        ).toList()
+
+        assertEquals(1, hits.size)
+        assertEquals("10", hits.first().range.start.extras["charIndex"])
+    }
+
+    @Test
     fun `blank query returns no hits`() = runTest {
         val backend = FakeBackend(
             pages = listOf("alpha beta")

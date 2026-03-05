@@ -3,6 +3,8 @@
 package com.ireader.engines.txt.internal.provider
 
 import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.common.io.prepareTempFile
+import com.ireader.engines.common.io.replaceFileAtomically
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
@@ -57,7 +59,11 @@ internal class TxtOutlineProvider(
         if (!file.exists()) {
             return null
         }
-        val json = JSONObject(file.readText())
+        val json = runCatching {
+            JSONObject(file.readText())
+        }.getOrElse {
+            return null
+        }
         if (json.optInt("version", -1) != 1) {
             return null
         }
@@ -99,47 +105,58 @@ internal class TxtOutlineProvider(
             put("sampleHash", meta.sampleHash)
             put("items", items)
         }
-        files.outlineJson.writeText(root.toString())
+        val temp = java.io.File(files.bookDir, "outline.json.tmp")
+        prepareTempFile(temp)
+        temp.writeText(root.toString())
+        replaceFileAtomically(tempFile = temp, targetFile = files.outlineJson)
     }
 
     private suspend fun detectOutline(): List<OutlineNode> {
         val out = ArrayList<OutlineNode>(64)
         val seen = HashSet<String>()
         val chunkChars = 64_000
-        var carry = ""
+        val lineBuffer = StringBuilder(256)
         var cursor = 0L
 
+        fun emitLineIfChapter(startOffset: Long) {
+            val line = lineBuffer.toString().trim()
+            lineBuffer.setLength(0)
+            if (!detector.isChapterTitle(line) || !seen.add(line)) {
+                return
+            }
+            out.add(
+                OutlineNode(
+                    title = line,
+                    locator = TxtBlockLocatorCodec.locatorForOffset(startOffset, store.lengthChars)
+                )
+            )
+        }
+
+        var currentLineStart = 0L
         while (cursor < store.lengthChars) {
             coroutineContext.ensureActive()
             val readCount = min(chunkChars.toLong(), store.lengthChars - cursor).toInt()
-            val chunk = store.readString(cursor, readCount)
+            val chunk = store.readChars(cursor, readCount)
             if (chunk.isEmpty()) {
                 break
             }
-            val merged = carry + chunk
-            var lineStart = 0
-            while (true) {
-                val newline = merged.indexOf('\n', lineStart)
-                if (newline < 0) {
-                    break
-                }
-                val line = merged.substring(lineStart, newline).trim()
-                if (detector.isChapterTitle(line) && seen.add(line)) {
-                    val offset = (cursor - carry.length + lineStart).coerceAtLeast(0)
-                    out.add(
-                        OutlineNode(
-                            title = line,
-                            locator = TxtBlockLocatorCodec.locatorForOffset(offset, store.lengthChars)
-                        )
-                    )
+            for (i in chunk.indices) {
+                val c = chunk[i]
+                if (c == '\n') {
+                    emitLineIfChapter(currentLineStart)
                     if (out.size >= MAX_OUTLINE_ITEMS) {
                         return out
                     }
+                    currentLineStart = cursor + i.toLong() + 1L
+                } else {
+                    lineBuffer.append(c)
                 }
-                lineStart = newline + 1
             }
-            carry = merged.substring(lineStart)
             cursor += readCount.toLong()
+        }
+
+        if (lineBuffer.isNotEmpty()) {
+            emitLineIfChapter(currentLineStart)
         }
         return out
     }

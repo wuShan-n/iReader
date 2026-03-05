@@ -20,4 +20,6 @@ dependencies {
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("org.robolectric:robolectric:4.16")
 }

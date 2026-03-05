@@ -12,6 +12,7 @@ import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorExtraKeys
 import com.ireader.reader.model.LocatorRange
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.CoroutineDispatcher
@@ -93,13 +94,18 @@ internal class TxtSelectionManager(
             val cappedLength = textLength.coerceAtMost(maxSelectedChars)
             store.readString(startOffset, cappedLength).takeIf { it.isNotBlank() }
         }
+        val progression = if (store.lengthChars == 0L) {
+            0.0
+        } else {
+            startOffset.toDouble() / store.lengthChars.toDouble()
+        }.coerceIn(0.0, 1.0)
         return SelectionProvider.Selection(
             locator = startLocator,
             start = startLocator,
             end = endLocator,
             selectedText = selectedText,
             extras = mapOf(
-                LocatorExtraKeys.PROGRESSION to startLocator.extras[LocatorExtraKeys.PROGRESSION].orEmpty(),
+                LocatorExtraKeys.PROGRESSION to String.format(Locale.US, "%.6f", progression),
                 "selectionStartOffset" to startOffset.toString(),
                 "selectionEndOffset" to endOffset.toString()
             ).filterValues { it.isNotBlank() }

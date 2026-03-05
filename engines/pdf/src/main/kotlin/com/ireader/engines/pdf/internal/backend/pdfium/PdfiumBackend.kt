@@ -31,8 +31,7 @@ import kotlin.math.min
 
 internal class PdfiumBackend private constructor(
     private val descriptor: ParcelFileDescriptor,
-    private val document: PdfDocumentKt,
-    private val ioDispatcher: CoroutineDispatcher
+    private val document: PdfDocumentKt
 ) : PdfBackend {
 
     override val capabilities: PdfBackendCapabilities = PdfBackendCapabilities(
@@ -136,7 +135,8 @@ internal class PdfiumBackend private constructor(
                 if (charCount <= 0) {
                     ""
                 } else {
-                    textPage.textPageGetText(0, charCount).orEmpty().replace("\u0000", "")
+                    val raw = textPage.textPageGetText(0, charCount).orEmpty()
+                    if (raw.indexOf('\u0000') >= 0) raw.replace("\u0000", "") else raw
                 }
             }
         }
@@ -239,8 +239,7 @@ internal class PdfiumBackend private constructor(
             val document = core.newDocument(descriptor, password)
             return PdfiumBackend(
                 descriptor = descriptor,
-                document = document,
-                ioDispatcher = ioDispatcher
+                document = document
             )
         }
     }

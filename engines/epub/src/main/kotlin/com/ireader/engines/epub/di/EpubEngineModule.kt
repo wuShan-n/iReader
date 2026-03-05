@@ -22,11 +22,8 @@ object EpubEngineModule {
     fun provideEpubEngine(
         @ApplicationContext context: Context,
         annotationStore: AnnotationStore
-    ): ReaderEngine {
-        return EpubEngine(
-            context = context,
-            annotationStore = annotationStore
-        )
-    }
+    ): ReaderEngine = EpubEngine(
+        context = context.applicationContext,
+        annotationStore = annotationStore
+    )
 }
-

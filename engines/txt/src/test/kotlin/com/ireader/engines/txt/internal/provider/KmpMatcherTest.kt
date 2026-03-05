@@ -18,5 +18,17 @@ class KmpMatcherTest {
         val hits = matcher.findAll("hello world WORLD".toCharArray())
         assertEquals(listOf(6, 12), hits)
     }
-}
 
+    @Test
+    fun `forEachMatch supports early stop`() {
+        val matcher = KmpMatcher("aba".toCharArray(), caseSensitive = true)
+        val hits = mutableListOf<Int>()
+
+        matcher.forEachMatch("ababa".toCharArray()) { index ->
+            hits += index
+            false
+        }
+
+        assertEquals(listOf(0), hits)
+    }
+}

@@ -20,10 +20,16 @@ internal class TxtPageEndAdjuster(
         if (safeMeasuredEnd <= 0) {
             return safeMeasuredEnd
         }
-        val decision = findBoundaryLineStart(raw, safeMeasuredEnd)
-            ?: return safeMeasuredEnd
+
+        val debug = isDebugLoggingEnabled()
+        val decision = findBoundaryLineStartNearEnd(
+            raw = raw,
+            measuredEnd = safeMeasuredEnd,
+            debug = debug
+        ) ?: return safeMeasuredEnd
+
         val adjusted = decision.chapterStart.coerceAtLeast(1)
-        if (isDebugLoggingEnabled()) {
+        if (debug) {
             val rewindChars = safeMeasuredEnd - adjusted
             logDebug(
                 TAG,
@@ -35,29 +41,41 @@ internal class TxtPageEndAdjuster(
         return adjusted
     }
 
-    private fun findBoundaryLineStart(raw: String, measuredEnd: Int): ChapterBoundaryDecision? {
-        var lineStart = 0
+    private fun findBoundaryLineStartNearEnd(
+        raw: String,
+        measuredEnd: Int,
+        debug: Boolean
+    ): ChapterBoundaryDecision? {
+        val scanStart = (measuredEnd - MAX_CHAPTER_REWIND_CHARS).coerceAtLeast(0)
+        val alignedStart = if (scanStart == 0) {
+            0
+        } else {
+            val prevBreak = raw.lastIndexOf('\n', startIndex = scanStart - 1)
+            if (prevBreak < 0) 0 else prevBreak + 1
+        }
+
+        var lineStart = alignedStart
         var candidate: ChapterBoundaryDecision? = null
         while (lineStart < measuredEnd) {
-            val lineEnd = raw.indexOf('\n', lineStart)
-                .takeIf { it >= 0 && it < measuredEnd }
-                ?: measuredEnd
-            val line = raw.substring(lineStart, lineEnd).trim()
-            val prelude = previousLine(raw, lineStart).trim()
-            if (
-                lineStart > 0 &&
-                detector.isChapterBoundaryTitle(line) &&
-                hasStrongPrelude(raw, lineStart, prelude)
-            ) {
-                val rewindChars = measuredEnd - lineStart
-                if (rewindChars in 1..MAX_CHAPTER_REWIND_CHARS) {
-                    candidate = ChapterBoundaryDecision(
-                        chapterStart = lineStart,
-                        titlePreview = line.take(MAX_DEBUG_PREVIEW),
-                        preludePreview = prelude.take(MAX_DEBUG_PREVIEW)
-                    )
+            val lineEnd = raw.indexOf('\n', lineStart).let { idx ->
+                if (idx < 0 || idx > measuredEnd) measuredEnd else idx
+            }
+
+            val rewindChars = measuredEnd - lineStart
+            if (rewindChars in 1..MAX_CHAPTER_REWIND_CHARS && lineStart > 0) {
+                val line = raw.substring(lineStart, lineEnd).trim()
+                if (line.isNotEmpty() && detector.isChapterBoundaryTitle(line)) {
+                    val preludeInfo = strongPreludeInfo(raw, lineStart, debug)
+                    if (preludeInfo != null) {
+                        candidate = ChapterBoundaryDecision(
+                            chapterStart = lineStart,
+                            titlePreview = if (debug) line.take(MAX_DEBUG_PREVIEW) else "",
+                            preludePreview = preludeInfo.preview
+                        )
+                    }
                 }
             }
+
             if (lineEnd >= measuredEnd) {
                 break
             }
@@ -66,27 +84,38 @@ internal class TxtPageEndAdjuster(
         return candidate
     }
 
-    private fun hasStrongPrelude(raw: String, lineStart: Int, previousLine: String): Boolean {
+    private fun strongPreludeInfo(raw: String, lineStart: Int, debug: Boolean): PreludeInfo? {
         val beforeNewline = lineStart - 1
         if (beforeNewline !in raw.indices || raw[beforeNewline] != '\n') {
-            return false
+            return null
         }
-        if (previousLine.isEmpty()) {
-            return true
+
+        var i = beforeNewline - 1
+        val previousBreak = if (i >= 0) raw.lastIndexOf('\n', startIndex = i) else -1
+        val previousStart = previousBreak + 1
+
+        while (i >= previousStart && raw[i].isWhitespace()) {
+            i--
         }
-        val last = previousLine.lastOrNull() ?: return false
-        return strongEndPunctuation.contains(last)
+        if (i < previousStart) {
+            return PreludeInfo(preview = "")
+        }
+
+        val last = raw[i]
+        if (!strongEndPunctuation.contains(last)) {
+            return null
+        }
+        if (!debug) {
+            return PreludeInfo(preview = "")
+        }
+
+        val preview = raw.substring(previousStart, beforeNewline).trim().take(MAX_DEBUG_PREVIEW)
+        return PreludeInfo(preview = preview)
     }
 
-    private fun previousLine(raw: String, lineStart: Int): String {
-        val beforeNewline = lineStart - 1
-        if (beforeNewline !in raw.indices || raw[beforeNewline] != '\n') {
-            return ""
-        }
-        val previousBreak = raw.lastIndexOf('\n', startIndex = beforeNewline - 1)
-        val previousStart = previousBreak + 1
-        return raw.substring(previousStart, beforeNewline)
-    }
+    private data class PreludeInfo(
+        val preview: String
+    )
 
     private data class ChapterBoundaryDecision(
         val chapterStart: Int,
@@ -100,8 +129,7 @@ internal class TxtPageEndAdjuster(
         private const val MAX_CHAPTER_REWIND_CHARS = 240
 
         private fun isDebugLoggingEnabled(): Boolean {
-            return runCatching { Log.isLoggable(TAG, Log.DEBUG) }
-                .getOrDefault(false)
+            return runCatching { Log.isLoggable(TAG, Log.DEBUG) }.getOrDefault(false)
         }
 
         private fun logDebug(tag: String, message: String) {

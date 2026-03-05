@@ -1,11 +1,13 @@
 package com.ireader.engines.epub.internal.provider
 
+import com.ireader.engines.epub.internal.locator.ReadiumLocatorExtras
 import com.ireader.engines.epub.internal.locator.toAppLocator
 import com.ireader.engines.epub.internal.locator.withReadiumFragments
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.model.NormalizedRect
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,6 +23,7 @@ internal class EpubSelectionProvider(
             try {
                 val navigator = navigatorProvider() ?: return@withContext ReaderResult.Ok(null)
                 val selection = navigator.currentSelection() ?: return@withContext ReaderResult.Ok(null)
+
                 val readiumLocator = selection.locator
                 val locator = readiumLocator.toAppLocator()
 
@@ -36,19 +39,13 @@ internal class EpubSelectionProvider(
                 } else {
                     null
                 }
+
                 val text = readiumLocator.text.highlight?.takeIf { it.isNotBlank() }
                 val rects = listOfNotNull(bounds)
+
                 val fragments = readiumLocator.locations.fragments.filter { it.isNotBlank() }
-                val startLocator = if (fragments.isEmpty()) {
-                    locator
-                } else {
-                    locator.withReadiumFragments(listOf(fragments.first()))
-                }
-                val endLocator = if (fragments.isEmpty()) {
-                    locator
-                } else {
-                    locator.withReadiumFragments(listOf(fragments.last()))
-                }
+                val startLocator = if (fragments.isEmpty()) locator else locator.withReadiumFragments(listOf(fragments.first()))
+                val endLocator = if (fragments.isEmpty()) locator else locator.withReadiumFragments(listOf(fragments.last()))
 
                 ReaderResult.Ok(
                     SelectionProvider.Selection(
@@ -59,13 +56,14 @@ internal class EpubSelectionProvider(
                         selectedText = text,
                         rects = rects,
                         extras = buildMap {
-                            fragments.firstOrNull()?.let { put("fragment", it) }
-                            fragments.firstOrNull()?.let { put("startFragment", it) }
-                            fragments.lastOrNull()?.let { put("endFragment", it) }
+                            fragments.firstOrNull()?.let { put(ReadiumLocatorExtras.FRAGMENT, it) }
+                            fragments.firstOrNull()?.let { put(ReadiumLocatorExtras.START_FRAGMENT, it) }
+                            fragments.lastOrNull()?.let { put(ReadiumLocatorExtras.END_FRAGMENT, it) }
                         }
                     )
                 )
             } catch (t: Throwable) {
+                if (t is CancellationException) throw t
                 ReaderResult.Err(ReaderError.Internal(cause = t))
             }
         }
@@ -77,6 +75,7 @@ internal class EpubSelectionProvider(
                 navigatorProvider()?.clearSelection()
                 ReaderResult.Ok(Unit)
             } catch (t: Throwable) {
+                if (t is CancellationException) throw t
                 ReaderResult.Err(ReaderError.Internal(cause = t))
             }
         }

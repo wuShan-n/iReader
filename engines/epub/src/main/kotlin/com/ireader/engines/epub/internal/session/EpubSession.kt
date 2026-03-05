@@ -85,12 +85,14 @@ private fun buildParts(
     annotationStore: AnnotationStore?
 ): SessionParts {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     val controller = EpubController(
         publication = publication,
         sessionTag = sessionId.value,
         initialLocator = initialLocator,
         initialConfig = initialConfig
     )
+
     val annotations = annotationStore?.let { store ->
         EpubAnnotationProvider(
             documentId = documentId,
@@ -99,6 +101,7 @@ private fun buildParts(
             scope = scope
         )
     }
+
     return SessionParts(
         scope = scope,
         controller = controller,

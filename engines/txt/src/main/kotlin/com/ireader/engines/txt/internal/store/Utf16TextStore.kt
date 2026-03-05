@@ -22,6 +22,7 @@ internal class Utf16TextStore(
         if (count <= 0 || lengthChars <= 0L) {
             return CharArray(0)
         }
+
         val alignedStart = alignStart(start.coerceIn(0L, lengthChars))
         val available = (lengthChars - alignedStart).coerceAtLeast(0L)
         if (available == 0L) {
@@ -34,25 +35,27 @@ internal class Utf16TextStore(
             return CharArray(0)
         }
 
-        val bytes = ByteBuffer.allocate(requestedChars * 2).order(ByteOrder.LITTLE_ENDIAN)
-        var read = 0L
-        val positionBytes = alignedStart * 2L
+        val bytesToRead = requestedChars * 2
+        val bytes = acquireReadBuffer(bytesToRead)
+        var positionBytes = alignedStart * 2L
+
         while (bytes.hasRemaining()) {
-            val readNow = channel.read(bytes, positionBytes + read)
+            val readNow = channel.read(bytes, positionBytes)
             if (readNow <= 0) {
                 break
             }
-            read += readNow
+            positionBytes += readNow.toLong()
         }
         bytes.flip()
 
         val charCount = bytes.remaining() / 2
-        val out = CharArray(charCount)
-        var i = 0
-        while (i < charCount) {
-            out[i] = bytes.char
-            i++
+        if (charCount <= 0) {
+            return CharArray(0)
         }
+        bytes.limit(charCount * 2)
+
+        val out = CharArray(charCount)
+        bytes.asCharBuffer().get(out, 0, charCount)
         return out
     }
 
@@ -95,6 +98,7 @@ internal class Utf16TextStore(
         if (requested <= 0 || end <= 0L || end >= lengthChars) {
             return requested
         }
+
         val last = readSingle(end - 1L)
         val next = readSingle(end)
         if (last != null && next != null &&
@@ -110,12 +114,41 @@ internal class Utf16TextStore(
         if (index < 0L || index >= lengthChars) {
             return null
         }
-        val bytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN)
+
+        val bytes = checkNotNull(singleCharBufferTL.get())
+        bytes.clear()
         val read = channel.read(bytes, index * 2L)
         if (read != 2) {
             return null
         }
         bytes.flip()
         return bytes.char
+    }
+
+    private fun acquireReadBuffer(requiredBytes: Int): ByteBuffer {
+        var buffer = checkNotNull(readBufferTL.get())
+        if (requiredBytes > buffer.capacity() && requiredBytes <= MAX_TL_READ_BUFFER_BYTES) {
+            buffer = ByteBuffer.allocateDirect(requiredBytes).order(ByteOrder.LITTLE_ENDIAN)
+            readBufferTL.set(buffer)
+        }
+        if (requiredBytes > buffer.capacity()) {
+            return ByteBuffer.allocate(requiredBytes).order(ByteOrder.LITTLE_ENDIAN)
+        }
+        buffer.clear()
+        buffer.limit(requiredBytes)
+        return buffer
+    }
+
+    private companion object {
+        private const val DEFAULT_TL_READ_BUFFER_BYTES = 256 * 1024
+        private const val MAX_TL_READ_BUFFER_BYTES = 1024 * 1024
+
+        private val readBufferTL: ThreadLocal<ByteBuffer> = ThreadLocal.withInitial {
+            ByteBuffer.allocateDirect(DEFAULT_TL_READ_BUFFER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        }
+
+        private val singleCharBufferTL: ThreadLocal<ByteBuffer> = ThreadLocal.withInitial {
+            ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN)
+        }
     }
 }

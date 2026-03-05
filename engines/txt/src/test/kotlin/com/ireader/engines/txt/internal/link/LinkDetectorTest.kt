@@ -34,4 +34,14 @@ class LinkDetectorTest {
             assertEquals(LocatorSchemes.TXT_OFFSET, range.end.scheme)
         }
     }
+
+    @Test
+    fun detect_shouldReturnEmptyWhenTextHasNoUrlHints() {
+        val links = LinkDetector.detect(
+            text = "This is a plain paragraph without links or mail addresses.",
+            pageStartOffset = 0L,
+            maxOffset = 500L
+        )
+        assertTrue(links.isEmpty())
+    }
 }
