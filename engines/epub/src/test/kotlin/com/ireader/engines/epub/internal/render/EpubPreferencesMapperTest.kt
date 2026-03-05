@@ -2,6 +2,11 @@ package com.ireader.engines.epub.internal.render
 
 import com.ireader.reader.api.render.TextAlignMode
 import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.READER_APPEARANCE_BG_ARGB_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_THEME_DARK
+import com.ireader.reader.api.render.READER_APPEARANCE_THEME_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_THEME_LIGHT
 import com.ireader.reader.api.render.RenderConfig
 import java.util.Locale
 import org.junit.Assert.assertEquals
@@ -9,11 +14,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.navigator.preferences.FontFamily
+import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.navigator.preferences.TextAlign as ReadiumTextAlign
+import org.robolectric.RobolectricTestRunner
 
 @OptIn(ExperimentalReadiumApi::class)
+@RunWith(RobolectricTestRunner::class)
 class EpubPreferencesMapperTest {
 
     @Test
@@ -95,5 +104,39 @@ class EpubPreferencesMapperTest {
         assertNull(prefs.paragraphSpacing)
         assertNull(prefs.textAlign)
         assertNull(prefs.hyphens)
+    }
+
+    @Test
+    fun `reflow appearance extras should map to readium theme and colors`() {
+        val background = 0xFFF3E7CA.toInt()
+        val text = 0xFF2D2A26.toInt()
+        val prefs = RenderConfig.ReflowText(
+            extra = mapOf(
+                READER_APPEARANCE_BG_ARGB_EXTRA_KEY to background.toString(),
+                READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY to text.toString(),
+                READER_APPEARANCE_THEME_EXTRA_KEY to READER_APPEARANCE_THEME_LIGHT
+            )
+        ).toEpubPreferences()
+
+        assertEquals(background, prefs.backgroundColor?.int)
+        assertEquals(text, prefs.textColor?.int)
+        assertEquals(Theme.LIGHT, prefs.theme)
+    }
+
+    @Test
+    fun `fixed appearance extras should map to readium theme and colors`() {
+        val background = 0xFF131313.toInt()
+        val text = 0xFFBEB9B0.toInt()
+        val prefs = RenderConfig.FixedPage(
+            extra = mapOf(
+                READER_APPEARANCE_BG_ARGB_EXTRA_KEY to background.toString(),
+                READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY to text.toString(),
+                READER_APPEARANCE_THEME_EXTRA_KEY to READER_APPEARANCE_THEME_DARK
+            )
+        ).toEpubPreferences()
+
+        assertEquals(background, prefs.backgroundColor?.int)
+        assertEquals(text, prefs.textColor?.int)
+        assertEquals(Theme.DARK, prefs.theme)
     }
 }

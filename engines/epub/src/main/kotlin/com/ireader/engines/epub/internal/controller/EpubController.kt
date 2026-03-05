@@ -48,6 +48,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.input.InputListener
+import org.readium.r2.navigator.input.TapEvent
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.locateProgression
 
@@ -101,6 +103,11 @@ internal class EpubController(
     private var layoutConstraints: LayoutConstraints? = null
 
     private var locatorCollectionJob: Job? = null
+    private val backgroundTapListener = object : InputListener {
+        override fun onTap(event: TapEvent): Boolean {
+            return emitBackgroundTap(event)
+        }
+    }
 
     override suspend fun bindSurface(surface: com.ireader.reader.api.render.RenderSurface): ReaderResult<Unit> {
         val fragmentSurface = surface as? FragmentRenderSurface
@@ -133,6 +140,8 @@ internal class EpubController(
                     this@EpubController.surface = fragmentSurface
                     fragmentRef.set(fragment)
 
+                    fragment.removeInputListener(backgroundTapListener)
+                    fragment.addInputListener(backgroundTapListener)
                     decorationsHost.bind(fragment)
                     applyConfig(fragment, _state.value.config)
                     collectCurrentLocator(fragment)
@@ -184,6 +193,7 @@ internal class EpubController(
                     surface = null
 
                     val fragment = fragmentRef.getAndSet(null)
+                    fragment?.removeInputListener(backgroundTapListener)
                     if (fragmentSurface != null) {
                         removeNavigatorFragment(
                             fm = fragmentSurface.fragmentManager,
@@ -336,6 +346,7 @@ internal class EpubController(
         val currentSurface = surface
         val fragment = fragmentRef.getAndSet(null)
         surface = null
+        fragment?.removeInputListener(backgroundTapListener)
 
         if (currentSurface != null) {
             mainHandler.post {
@@ -456,6 +467,47 @@ internal class EpubController(
             decorations = emptyList(),
             metrics = null
         )
+    }
+
+    private fun emitBackgroundTap(event: TapEvent): Boolean {
+        val viewport = resolveTapViewport() ?: return false
+        val maxX = viewport.first.toFloat().coerceAtLeast(1f)
+        val maxY = viewport.second.toFloat().coerceAtLeast(1f)
+        _events.tryEmit(
+            ReaderEvent.BackgroundTap(
+                xPx = event.point.x.coerceIn(0f, maxX),
+                yPx = event.point.y.coerceIn(0f, maxY),
+                viewportWidthPx = viewport.first,
+                viewportHeightPx = viewport.second
+            )
+        )
+        return true
+    }
+
+    private fun resolveTapViewport(): Pair<Int, Int>? {
+        layoutConstraints?.let { constraints ->
+            val width = constraints.viewportWidthPx
+            val height = constraints.viewportHeightPx
+            if (width > 0 && height > 0) {
+                return width to height
+            }
+        }
+
+        val fragment = fragmentRef.get() ?: return null
+        val publicationView = runCatching { fragment.publicationView }.getOrNull()
+        val publicationWidth = publicationView?.width ?: 0
+        val publicationHeight = publicationView?.height ?: 0
+        if (publicationWidth > 0 && publicationHeight > 0) {
+            return publicationWidth to publicationHeight
+        }
+
+        val rootWidth = fragment.view?.width ?: 0
+        val rootHeight = fragment.view?.height ?: 0
+        if (rootWidth > 0 && rootHeight > 0) {
+            return rootWidth to rootHeight
+        }
+
+        return null
     }
 
     private suspend fun awaitLocatorChange(previousLocatorValue: String): Boolean {

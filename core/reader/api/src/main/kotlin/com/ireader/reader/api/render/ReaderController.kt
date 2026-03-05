@@ -9,6 +9,12 @@ import java.io.Closeable
 sealed interface ReaderEvent {
     data class PageChanged(val locator: Locator) : ReaderEvent
     data class Rendered(val pageId: PageId, val metrics: RenderMetrics?) : ReaderEvent
+    data class BackgroundTap(
+        val xPx: Float,
+        val yPx: Float,
+        val viewportWidthPx: Int,
+        val viewportHeightPx: Int
+    ) : ReaderEvent
     data class Error(val throwable: Throwable) : ReaderEvent
 }
 

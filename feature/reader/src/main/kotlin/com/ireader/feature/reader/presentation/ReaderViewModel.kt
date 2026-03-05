@@ -52,7 +52,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -443,9 +442,26 @@ class ReaderViewModel @Inject constructor(
 
         val eventJob = viewModelScope.launch {
             sessionHandle.controller.events
-                .filterIsInstance<ReaderEvent.Error>()
-                .collect {
-                    ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("Render error")))
+                .collect { event ->
+                    when (event) {
+                        is ReaderEvent.BackgroundTap -> {
+                            handleTap(
+                                ReaderIntent.HandleTap(
+                                    xPx = event.xPx,
+                                    yPx = event.yPx,
+                                    viewportWidthPx = event.viewportWidthPx,
+                                    viewportHeightPx = event.viewportHeightPx
+                                )
+                            )
+                        }
+
+                        is ReaderEvent.Error -> {
+                            ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("Render error")))
+                        }
+
+                        is ReaderEvent.PageChanged,
+                        is ReaderEvent.Rendered -> Unit
+                    }
                 }
         }
 

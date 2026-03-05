@@ -12,4 +12,5 @@ dependencies {
     implementation(project(":engines:engine-common"))
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.16")
 }

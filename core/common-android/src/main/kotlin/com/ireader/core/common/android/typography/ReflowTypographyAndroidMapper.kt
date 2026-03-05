@@ -1,9 +1,15 @@
 package com.ireader.core.common.android.typography
 
+import android.graphics.text.LineBreakConfig
 import android.text.Layout
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.TextAlignMode
+
+data class AndroidLineBreakConfig(
+    val lineBreakStyle: Int,
+    val lineBreakWordStyle: Int
+)
 
 fun TextAlignMode.toAndroidLayoutAlignment(): Layout.Alignment {
     return when (this) {
@@ -30,6 +36,18 @@ fun BreakStrategyMode.effectiveForInterCharacterScript(
         BreakStrategyMode.BALANCED -> BreakStrategyMode.SIMPLE
         else -> this
     }
+}
+
+fun resolveAndroidLineBreakConfig(
+    preferInterCharacter: Boolean
+): AndroidLineBreakConfig? {
+    if (!preferInterCharacter) {
+        return null
+    }
+    return AndroidLineBreakConfig(
+        lineBreakStyle = LineBreakConfig.LINE_BREAK_STYLE_NONE,
+        lineBreakWordStyle = LineBreakConfig.LINE_BREAK_WORD_STYLE_NONE
+    )
 }
 
 fun HyphenationMode.toAndroidHyphenationFrequency(): Int {

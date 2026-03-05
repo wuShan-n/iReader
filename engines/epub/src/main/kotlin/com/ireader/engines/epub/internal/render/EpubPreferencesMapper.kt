@@ -1,18 +1,26 @@
 package com.ireader.engines.epub.internal.render
 
 import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.READER_APPEARANCE_BG_ARGB_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_THEME_DARK
+import com.ireader.reader.api.render.READER_APPEARANCE_THEME_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_THEME_LIGHT
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.toTypographySpec
 import java.util.Locale
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.preferences.Color
 import org.readium.r2.navigator.preferences.FontFamily
+import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.navigator.preferences.TextAlign as ReadiumTextAlign
 
 @OptIn(ExperimentalReadiumApi::class)
 internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
     when (this) {
         is RenderConfig.ReflowText -> {
+            val appearance = resolveAppearance(extra)
             val typography = toTypographySpec()
 
             val baseSp = 16f
@@ -31,6 +39,7 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
             }
 
             EpubPreferences(
+                backgroundColor = appearance.backgroundColor,
                 fontSize = fontScale,
                 scroll = false,
                 pageMargins = (typography.pagePaddingDp / 16f).toDouble().coerceIn(0.0, 4.0),
@@ -40,13 +49,22 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
                 paragraphIndent = if (advanced) typography.paragraphIndentEm.toDouble().coerceIn(0.0, 3.0) else null,
                 textAlign = textAlign,
                 hyphens = if (advanced) typography.hyphenationMode != HyphenationMode.NONE else null,
+                textColor = appearance.textColor,
+                theme = appearance.theme,
                 // Readium does not expose a direct equivalent for includeFontPadding/pageInsetMode.
                 // Keep those settings as explicit no-op on EPUB to avoid implicit behavior drift.
                 fontFamily = typography.fontFamilyName?.toReadiumFontFamilyOrNull()
             )
         }
 
-        is RenderConfig.FixedPage -> EpubPreferences()
+        is RenderConfig.FixedPage -> {
+            val appearance = resolveAppearance(extra)
+            EpubPreferences(
+                backgroundColor = appearance.backgroundColor,
+                textColor = appearance.textColor,
+                theme = appearance.theme
+            )
+        }
     }
 
 private fun String.toReadiumFontFamilyOrNull(): FontFamily? {
@@ -62,4 +80,29 @@ private fun String.toReadiumFontFamilyOrNull(): FontFamily? {
         "思源宋体", "方正新楷体", "霞鹜文楷" -> FontFamily.SERIF
         else -> FontFamily(key)
     }
+}
+
+private data class EpubAppearance(
+    val backgroundColor: Color?,
+    val textColor: Color?,
+    val theme: Theme?
+)
+
+private fun resolveAppearance(extra: Map<String, String>): EpubAppearance {
+    val backgroundColor = extra[READER_APPEARANCE_BG_ARGB_EXTRA_KEY]
+        ?.toIntOrNull()
+        ?.let(::Color)
+    val textColor = extra[READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY]
+        ?.toIntOrNull()
+        ?.let(::Color)
+    val theme = when (extra[READER_APPEARANCE_THEME_EXTRA_KEY]?.lowercase(Locale.ROOT)) {
+        READER_APPEARANCE_THEME_LIGHT -> Theme.LIGHT
+        READER_APPEARANCE_THEME_DARK -> Theme.DARK
+        else -> null
+    }
+    return EpubAppearance(
+        backgroundColor = backgroundColor,
+        textColor = textColor,
+        theme = theme
+    )
 }

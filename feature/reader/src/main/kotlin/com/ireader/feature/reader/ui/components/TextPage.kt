@@ -1,6 +1,7 @@
 package com.ireader.feature.reader.ui.components
 
 import android.graphics.Typeface
+import android.os.Build
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ireader.core.common.android.typography.prefersInterCharacterJustify
 import com.ireader.core.common.android.typography.effectiveForInterCharacterScript
+import com.ireader.core.common.android.typography.resolveAndroidLineBreakConfig
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
@@ -60,6 +62,9 @@ fun TextPage(
     }
     val effectiveBreakStrategy = remember(typography.breakStrategy, preferInterCharacterJustify) {
         typography.breakStrategy.effectiveForInterCharacterScript(preferInterCharacterJustify)
+    }
+    val lineBreakConfig = remember(preferInterCharacterJustify) {
+        resolveAndroidLineBreakConfig(preferInterCharacter = preferInterCharacterJustify)
     }
     val typeface = remember(typography.fontFamilyName) {
         val familyName = typography.fontFamilyName
@@ -103,6 +108,11 @@ fun TextPage(
             if (textView.includeFontPadding != typography.includeFontPadding) {
                 textView.includeFontPadding = typography.includeFontPadding
             }
+            runCatching {
+                if (!textView.isFallbackLineSpacing) {
+                    textView.setFallbackLineSpacing(true)
+                }
+            }
             if (
                 textView.paddingLeft != horizontalPaddingPx ||
                 textView.paddingTop != verticalPaddingPx ||
@@ -131,6 +141,16 @@ fun TextPage(
             val breakStrategy = effectiveBreakStrategy.toAndroidBreakStrategy()
             if (textView.breakStrategy != breakStrategy) {
                 textView.breakStrategy = breakStrategy
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                lineBreakConfig?.let { config ->
+                    if (textView.lineBreakStyle != config.lineBreakStyle) {
+                        textView.lineBreakStyle = config.lineBreakStyle
+                    }
+                    if (textView.lineBreakWordStyle != config.lineBreakWordStyle) {
+                        textView.lineBreakWordStyle = config.lineBreakWordStyle
+                    }
+                }
             }
             val hyphenation = typography.hyphenationMode.toAndroidHyphenationFrequency()
             if (textView.hyphenationFrequency != hyphenation) {

@@ -54,6 +54,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
@@ -61,6 +62,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -140,6 +143,8 @@ fun ReaderScaffold(
     val batteryPercent = rememberBatteryPercent()
     val density = LocalDensity.current
     val readingViewportSize = remember { mutableStateOf(IntSize.Zero) }
+    val footerHeightPx = remember { mutableIntStateOf(0) }
+    val readingBottomInsetDp = with(density) { footerHeightPx.intValue.toDp() }
 
     LaunchedEffect(readingViewportSize.value, density.density, density.fontScale) {
         val size = readingViewportSize.value
@@ -160,7 +165,8 @@ fun ReaderScaffold(
     ApplyReaderSystemBars(
         prefs = prefs,
         chromeVisible = state.chromeVisible,
-        isReadingLayer = state.layerState == com.ireader.feature.reader.presentation.ReaderLayerState.Reading
+        isReadingLayer = state.layerState == com.ireader.feature.reader.presentation.ReaderLayerState.Reading,
+        readerBackgroundColor = bgColor
     )
 
     Scaffold(
@@ -177,7 +183,7 @@ fun ReaderScaffold(
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical))
-                    .padding(top = 8.dp, bottom = 32.dp)
+                    .padding(top = 8.dp, bottom = readingBottomInsetDp)
                     .onSizeChanged { readingViewportSize.value = it }
             ) {
                 PageRenderer(
@@ -240,7 +246,13 @@ fun ReaderScaffold(
             }
 
             ReaderFooter(
-                modifier = Modifier.align(Alignment.BottomCenter),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .onSizeChanged { size ->
+                        if (footerHeightPx.intValue != size.height) {
+                            footerHeightPx.intValue = size.height
+                        }
+                    },
                 progression = state.renderState?.progression?.percent?.toFloat()?.coerceIn(0f, 1f) ?: 0f,
                 showProgress = prefs.showReadingProgress,
                 currentTimeText = clock,
@@ -1392,16 +1404,38 @@ private fun ApplyReaderBrightness(prefs: ReaderDisplayPrefs) {
 private fun ApplyReaderSystemBars(
     prefs: ReaderDisplayPrefs,
     chromeVisible: Boolean,
-    isReadingLayer: Boolean
+    isReadingLayer: Boolean,
+    readerBackgroundColor: Color
 ) {
     val context = LocalContext.current
-    DisposableEffect(context, prefs.fullScreenMode, chromeVisible, isReadingLayer) {
+    val readerBackgroundArgb = readerBackgroundColor.toArgb()
+    val useLightSystemBarIcons = readerBackgroundColor.luminance() > 0.5f
+    DisposableEffect(
+        context,
+        prefs.fullScreenMode,
+        chromeVisible,
+        isReadingLayer,
+        readerBackgroundArgb,
+        useLightSystemBarIcons
+    ) {
         val activity = context.findActivity()
         val window = activity?.window
+        val originalStatusBarColor = window?.statusBarColor
+        val originalNavigationBarColor = window?.navigationBarColor
+        var originalLightStatusBars = false
+        var originalLightNavigationBars = false
         if (window != null) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
             val controller = WindowInsetsControllerCompat(window, window.decorView)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            originalLightStatusBars = controller.isAppearanceLightStatusBars
+            originalLightNavigationBars = controller.isAppearanceLightNavigationBars
+
+            window.statusBarColor = readerBackgroundArgb
+            window.navigationBarColor = readerBackgroundArgb
+            controller.isAppearanceLightStatusBars = useLightSystemBarIcons
+            controller.isAppearanceLightNavigationBars = useLightSystemBarIcons
+
             val immersive = prefs.fullScreenMode && isReadingLayer && !chromeVisible
             if (immersive) {
                 controller.hide(WindowInsetsCompat.Type.statusBars())
@@ -1414,8 +1448,12 @@ private fun ApplyReaderSystemBars(
         onDispose {
             val disposeWindow = context.findActivity()?.window ?: return@onDispose
             WindowCompat.setDecorFitsSystemWindows(disposeWindow, true)
-            WindowInsetsControllerCompat(disposeWindow, disposeWindow.decorView)
-                .show(WindowInsetsCompat.Type.systemBars())
+            val disposeController = WindowInsetsControllerCompat(disposeWindow, disposeWindow.decorView)
+            disposeController.isAppearanceLightStatusBars = originalLightStatusBars
+            disposeController.isAppearanceLightNavigationBars = originalLightNavigationBars
+            originalStatusBarColor?.let { disposeWindow.statusBarColor = it }
+            originalNavigationBarColor?.let { disposeWindow.navigationBarColor = it }
+            disposeController.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 }

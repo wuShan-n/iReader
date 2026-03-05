@@ -20,6 +20,10 @@ import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.api.render.InvalidateReason
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.NavigationAvailability
+import com.ireader.reader.api.render.READER_APPEARANCE_BG_ARGB_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_THEME_EXTRA_KEY
+import com.ireader.reader.api.render.READER_APPEARANCE_THEME_LIGHT
 import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
@@ -117,7 +121,10 @@ class OpenReaderSessionTest {
         assertTrue(result is ReaderResult.Ok)
         assertEquals(1, store.fixedGetCount)
         assertEquals(0, store.reflowGetCount)
-        assertEquals(fixedConfig, runtime.lastResolvedConfig)
+        val resolvedConfig = runtime.lastResolvedConfig as RenderConfig.FixedPage
+        assertEquals(fixedConfig.copy(extra = resolvedConfig.extra), resolvedConfig)
+        val resolvedExtra = resolvedConfig.extra
+        assertDefaultAppearanceExtras(resolvedExtra)
     }
 
     @Test
@@ -139,7 +146,10 @@ class OpenReaderSessionTest {
         assertTrue(result is ReaderResult.Ok)
         assertEquals(0, store.fixedGetCount)
         assertEquals(1, store.reflowGetCount)
-        assertEquals(reflowConfig, runtime.lastResolvedConfig)
+        val resolvedConfig = runtime.lastResolvedConfig as RenderConfig.ReflowText
+        assertEquals(reflowConfig.copy(extra = resolvedConfig.extra), resolvedConfig)
+        val resolvedExtra = resolvedConfig.extra
+        assertDefaultAppearanceExtras(resolvedExtra)
     }
 
     private fun fixedCapabilities() = DocumentCapabilities(
@@ -161,14 +171,15 @@ class OpenReaderSessionTest {
 
 private class FakeReaderSettingsStore(
     private val reflow: RenderConfig.ReflowText = RenderConfig.ReflowText(),
-    private val fixed: RenderConfig.FixedPage = RenderConfig.FixedPage()
+    private val fixed: RenderConfig.FixedPage = RenderConfig.FixedPage(),
+    private val display: ReaderDisplayPrefs = ReaderDisplayPrefs()
 ) : ReaderSettingsStore {
     var reflowGetCount = 0
     var fixedGetCount = 0
 
     override val reflowConfig: Flow<RenderConfig.ReflowText> = flowOf(reflow)
     override val fixedConfig: Flow<RenderConfig.FixedPage> = flowOf(fixed)
-    override val displayPrefs: Flow<ReaderDisplayPrefs> = flowOf(ReaderDisplayPrefs())
+    override val displayPrefs: Flow<ReaderDisplayPrefs> = flowOf(display)
 
     override suspend fun getReflowConfig(): RenderConfig.ReflowText {
         reflowGetCount++
@@ -180,13 +191,19 @@ private class FakeReaderSettingsStore(
         return fixed
     }
 
-    override suspend fun getDisplayPrefs(): ReaderDisplayPrefs = ReaderDisplayPrefs()
+    override suspend fun getDisplayPrefs(): ReaderDisplayPrefs = display
 
     override suspend fun setReflowConfig(config: RenderConfig.ReflowText) = Unit
 
     override suspend fun setFixedConfig(config: RenderConfig.FixedPage) = Unit
 
     override suspend fun setDisplayPrefs(prefs: ReaderDisplayPrefs) = Unit
+}
+
+private fun assertDefaultAppearanceExtras(extra: Map<String, String>) {
+    assertEquals(0xFFFDF9F3.toInt().toString(), extra[READER_APPEARANCE_BG_ARGB_EXTRA_KEY])
+    assertEquals(0xFF2D2A26.toInt().toString(), extra[READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY])
+    assertEquals(READER_APPEARANCE_THEME_LIGHT, extra[READER_APPEARANCE_THEME_EXTRA_KEY])
 }
 
 private class FakeRuntime(

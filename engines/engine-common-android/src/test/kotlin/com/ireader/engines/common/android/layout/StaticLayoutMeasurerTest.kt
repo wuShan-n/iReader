@@ -1,6 +1,8 @@
 package com.ireader.engines.common.android.layout
 
+import android.graphics.text.LineBreakConfig
 import android.text.Layout
+import com.ireader.core.common.android.typography.resolveAndroidLineBreakConfig
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
@@ -43,5 +45,13 @@ class StaticLayoutMeasurerTest {
             Layout.JUSTIFICATION_MODE_INTER_CHARACTER,
             TextAlignMode.JUSTIFY.toAndroidJustificationMode(preferInterCharacter = true)
         )
+    }
+
+    @Test
+    fun `line break config should disable phrase line breaking for cjk`() {
+        val config = checkNotNull(resolveAndroidLineBreakConfig(preferInterCharacter = true))
+        assertEquals(LineBreakConfig.LINE_BREAK_STYLE_NONE, config.lineBreakStyle)
+        assertEquals(LineBreakConfig.LINE_BREAK_WORD_STYLE_NONE, config.lineBreakWordStyle)
+        assertEquals(null, resolveAndroidLineBreakConfig(preferInterCharacter = false))
     }
 }

@@ -34,6 +34,11 @@ enum class PageTurnMode(val storageValue: String) {
 
 const val PAGE_TURN_EXTRA_KEY: String = "page_turn"
 const val PAGE_TURN_STYLE_EXTRA_KEY: String = "page_turn_style"
+const val READER_APPEARANCE_BG_ARGB_EXTRA_KEY: String = "reader_appearance_bg_argb"
+const val READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY: String = "reader_appearance_text_argb"
+const val READER_APPEARANCE_THEME_EXTRA_KEY: String = "reader_appearance_theme"
+const val READER_APPEARANCE_THEME_LIGHT: String = "light"
+const val READER_APPEARANCE_THEME_DARK: String = "dark"
 
 sealed interface RenderConfig {
 

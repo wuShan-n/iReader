@@ -2,8 +2,11 @@
 
 package com.ireader.engines.common.android.layout
 
+import android.graphics.text.LineBreakConfig
+import android.os.Build
 import android.text.StaticLayout
 import android.text.TextPaint
+import com.ireader.core.common.android.typography.resolveAndroidLineBreakConfig
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
@@ -46,11 +49,30 @@ object StaticLayoutMeasurer {
             .setBreakStrategy(breakStrategy.toAndroidBreakStrategy())
 
         runCatching {
+            StaticLayout.Builder::class.java
+                .getMethod("setUseLineSpacingFromFallbacks", Boolean::class.javaPrimitiveType)
+                .invoke(builder, true)
+        }
+
+        runCatching {
             builder.setJustificationMode(
                 textAlign.toAndroidJustificationMode(
                     preferInterCharacter = preferInterCharacterJustify
                 )
             )
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            resolveAndroidLineBreakConfig(preferInterCharacterJustify)?.let { config ->
+                runCatching {
+                    builder.setLineBreakConfig(
+                        LineBreakConfig.Builder()
+                            .setLineBreakStyle(config.lineBreakStyle)
+                            .setLineBreakWordStyle(config.lineBreakWordStyle)
+                            .build()
+                    )
+                }
+            }
         }
 
         val layout = builder.build()
