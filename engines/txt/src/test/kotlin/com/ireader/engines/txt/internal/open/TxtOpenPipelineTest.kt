@@ -155,7 +155,26 @@ class TxtOpenPipelineTest {
             val meta = readSingleMeta(cacheDir)
 
             assertTrue(meta.getBoolean("hardWrapLikely"))
-            assertEquals(2, meta.getInt("version"))
+            assertEquals(5, meta.getInt("version"))
+            cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `open should mark short stable wrapped text as hard wrap likely`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_short_wrap_detect").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/short-wrap.txt"),
+                payload = shortStableWrappedText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            val meta = readSingleMeta(cacheDir)
+
+            assertTrue(meta.getBoolean("hardWrapLikely"))
+            assertEquals(5, meta.getInt("version"))
             cacheDir.deleteRecursively()
         }
     }
@@ -182,7 +201,7 @@ class TxtOpenPipelineTest {
             engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
             val rebuiltMeta = readSingleMeta(cacheDir)
 
-            assertEquals(2, rebuiltMeta.getInt("version"))
+            assertEquals(5, rebuiltMeta.getInt("version"))
             assertTrue(rebuiltMeta.getLong("createdAtEpochMs") > firstCreatedAt)
             cacheDir.deleteRecursively()
         }
@@ -204,6 +223,22 @@ class TxtOpenPipelineTest {
                 append(idx + 1)
                 append("行用于检测硬换行概率并保持行宽稳定")
                 if (idx < 179) {
+                    append('\n')
+                }
+            }
+        }
+    }
+
+    private fun shortStableWrappedText(): String {
+        return buildString {
+            repeat(220) { idx ->
+                append("道人提笔画符第")
+                append((idx % 9) + 1)
+                append("行续写")
+                if (idx % 3 == 0) {
+                    append("。")
+                }
+                if (idx < 219) {
                     append('\n')
                 }
             }

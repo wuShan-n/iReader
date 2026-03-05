@@ -7,7 +7,7 @@ import com.ireader.reader.api.render.RenderConfig
 
 object ReflowPaginationProfile {
 
-    private const val PROFILE_SCHEMA_VERSION = 7
+    private const val PROFILE_SCHEMA_VERSION = 8
 
     fun keyFor(
         documentKey: String,

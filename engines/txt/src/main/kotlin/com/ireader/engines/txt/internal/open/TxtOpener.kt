@@ -38,7 +38,7 @@ internal class TxtOpener(
 ) {
 
     private val encodingDetector = EncodingDetector()
-    private val schemaVersion = 2
+    private val schemaVersion = 5
 
     suspend fun open(source: DocumentSource, options: OpenOptions): ReaderResult<TxtOpenResult> {
         return withContext(ioDispatcher) {
@@ -368,11 +368,19 @@ internal class TxtOpener(
             val blankRatio = if (totalLines == 0L) 0.0 else blankLines.toDouble() / totalLines.toDouble()
             val endPunctRatio = if (totalLines == 0L) 0.0 else sentenceEndLines.toDouble() / totalLines.toDouble()
 
-            val likely = median in HARD_WRAP_MEDIAN_MIN..HARD_WRAP_MEDIAN_MAX &&
+            val likelyByClassic = median in HARD_WRAP_MEDIAN_MIN..HARD_WRAP_MEDIAN_MAX &&
                 std <= HARD_WRAP_STD_MAX &&
                 blankRatio <= HARD_WRAP_BLANK_RATIO_MAX &&
                 endPunctRatio <= HARD_WRAP_END_PUNCT_RATIO_MAX &&
                 coefficientOfVariation <= HARD_WRAP_COEFFICIENT_OF_VARIATION_MAX
+
+            val likelyByShortStableWrap = median in SHORT_WRAP_MEDIAN_MIN..SHORT_WRAP_MEDIAN_MAX &&
+                std <= SHORT_WRAP_STD_MAX &&
+                blankRatio <= SHORT_WRAP_BLANK_RATIO_MAX &&
+                endPunctRatio <= SHORT_WRAP_END_PUNCT_RATIO_MAX &&
+                coefficientOfVariation <= SHORT_WRAP_COEFFICIENT_OF_VARIATION_MAX
+
+            val likely = likelyByClassic || likelyByShortStableWrap
 
             return LineStatsSnapshot(hardWrapLikely = likely)
         }
@@ -387,5 +395,12 @@ internal class TxtOpener(
         private const val HARD_WRAP_BLANK_RATIO_MAX = 0.22
         private const val HARD_WRAP_END_PUNCT_RATIO_MAX = 0.72
         private const val HARD_WRAP_COEFFICIENT_OF_VARIATION_MAX = 0.42
+
+        private const val SHORT_WRAP_MEDIAN_MIN = 10
+        private const val SHORT_WRAP_MEDIAN_MAX = 17
+        private const val SHORT_WRAP_STD_MAX = 7.5
+        private const val SHORT_WRAP_BLANK_RATIO_MAX = 0.12
+        private const val SHORT_WRAP_END_PUNCT_RATIO_MAX = 0.88
+        private const val SHORT_WRAP_COEFFICIENT_OF_VARIATION_MAX = 0.28
     }
 }

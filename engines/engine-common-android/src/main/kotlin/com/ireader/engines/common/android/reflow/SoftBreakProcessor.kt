@@ -9,6 +9,15 @@ import kotlin.math.max
 
 object SoftBreakProcessor {
 
+    fun renderRawPreservingBreaks(
+        rawText: String,
+        paragraphSpacingPx: Int,
+        paragraphIndentPx: Int,
+        startsAtParagraphBoundary: Boolean
+    ): CharSequence {
+        return rawText
+    }
+
     fun process(
         rawText: String,
         hardWrapLikely: Boolean,

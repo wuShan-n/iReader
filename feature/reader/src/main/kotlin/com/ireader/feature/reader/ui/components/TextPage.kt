@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ireader.core.common.android.typography.prefersInterCharacterJustify
+import com.ireader.core.common.android.typography.effectiveForInterCharacterScript
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
@@ -77,6 +78,8 @@ fun TextPage(
             textView.setTextColor(textColor.toArgb())
             textView.setBackgroundColor(backgroundColor.toArgb())
             val preferInterCharacterJustify = content.text.prefersInterCharacterJustify()
+            val effectiveBreakStrategy = typography.breakStrategy
+                .effectiveForInterCharacterScript(preferInterCharacterJustify)
             val familyName = typography.fontFamilyName
             textView.typeface = if (familyName.isNullOrBlank()) {
                 Typeface.DEFAULT
@@ -88,7 +91,7 @@ fun TextPage(
                 links = links,
                 decorations = decorations
             )
-            textView.breakStrategy = typography.breakStrategy.toAndroidBreakStrategy()
+            textView.breakStrategy = effectiveBreakStrategy.toAndroidBreakStrategy()
             textView.hyphenationFrequency = typography.hyphenationMode.toAndroidHyphenationFrequency()
             runCatching {
                 textView.justificationMode = typography.textAlign.toAndroidJustificationMode(

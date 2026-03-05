@@ -114,8 +114,13 @@ internal class TxtController(
     dispatcher = defaultDispatcher
 ) {
 
+    private val softBreakEnabled: Boolean = meta.hardWrapLikely
     private var softBreakProfile: SoftBreakTuningProfile = resolveSoftBreakProfile(initialConfig)
-    private var softBreakIndex: SoftBreakIndex? = openSoftBreakIndex(softBreakProfile)
+    private var softBreakIndex: SoftBreakIndex? = if (softBreakEnabled) {
+        openSoftBreakIndex(softBreakProfile)
+    } else {
+        null
+    }
     private val paginator = ReflowPaginator(
         source = TxtTextSource(store),
         hardWrapLikely = meta.hardWrapLikely,
@@ -146,7 +151,12 @@ internal class TxtController(
     private var currentConfig: RenderConfig.ReflowText = initialConfig
 
     init {
-        if (softBreakIndex == null) {
+        if (!softBreakEnabled) {
+            logInfo(
+                TAG,
+                "soft-break disabled for non-hard-wrap document; using raw newline rendering"
+            )
+        } else if (softBreakIndex == null) {
             logInfo(
                 TAG,
                 "soft-break index unavailable at open; using runtime classifier until build completes " +
@@ -191,7 +201,7 @@ internal class TxtController(
             stateMutable.value = stateMutable.value.copy(config = sanitized)
             val newProfile = resolveSoftBreakProfile(sanitized)
             val profileChanged = newProfile != softBreakProfile
-            if (profileChanged) {
+            if (softBreakEnabled && profileChanged) {
                 softBreakProfile = newProfile
                 runCatching { softBreakIndex?.close() }
                 softBreakIndex = openSoftBreakIndex(newProfile)
@@ -382,6 +392,9 @@ internal class TxtController(
     }
 
     private fun buildSoftBreakIndexAsync(profile: SoftBreakTuningProfile) {
+        if (!softBreakEnabled) {
+            return
+        }
         launchSafely("soft-break-index") {
             SoftBreakIndexBuilder.buildIfNeeded(
                 files = files,

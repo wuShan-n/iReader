@@ -5,6 +5,7 @@ package com.ireader.engines.common.android.reflow
 import android.text.SpannableStringBuilder
 import android.util.Log
 import com.ireader.core.common.android.typography.prefersInterCharacterJustify
+import com.ireader.core.common.android.typography.effectiveForInterCharacterScript
 import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
 import com.ireader.engines.common.android.layout.TextPaintFactory
 import com.ireader.reader.api.render.LayoutConstraints
@@ -62,7 +63,11 @@ class ReflowPaginator(
             .coerceAtLeast(0)
         val softBreakProfile = SoftBreakTuningProfile.fromStorageValue(config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY])
         val softBreakRules = SoftBreakRuleConfig.forProfile(softBreakProfile)
-        val usingSoftBreakIndex = softBreakIndex != null
+        val softBreakSource = when {
+            !hardWrapLikely -> "raw"
+            softBreakIndex != null -> "index"
+            else -> "runtime"
+        }
 
         var windowChars = initialWindowChars(config, constraints)
         var measuredEnd = 0
@@ -79,16 +84,23 @@ class ReflowPaginator(
                 return ReflowPageSlice(start, start, "")
             }
 
-            val display = if (softBreakIndex != null) {
-                applySoftBreakIndex(
+            val display = when {
+                !hardWrapLikely -> SoftBreakProcessor.renderRawPreservingBreaks(
+                    rawText = raw,
+                    paragraphSpacingPx = paragraphSpacingPx,
+                    paragraphIndentPx = paragraphIndentPx,
+                    startsAtParagraphBoundary = startsAtParagraphBoundary
+                )
+
+                softBreakIndex != null -> applySoftBreakIndex(
                     start = start,
                     raw = raw,
                     paragraphSpacingPx = paragraphSpacingPx,
                     paragraphIndentPx = paragraphIndentPx,
                     startsAtParagraphBoundary = startsAtParagraphBoundary
                 )
-            } else {
-                SoftBreakProcessor.process(
+
+                else -> SoftBreakProcessor.process(
                     rawText = raw,
                     hardWrapLikely = hardWrapLikely,
                     paragraphSpacingPx = paragraphSpacingPx,
@@ -99,6 +111,8 @@ class ReflowPaginator(
             }
             measuredText = display
             val preferInterCharacterJustify = raw.prefersInterCharacterJustify()
+            val effectiveBreakStrategy = typography.breakStrategy
+                .effectiveForInterCharacterScript(preferInterCharacterJustify)
 
             val measure = StaticLayoutMeasurer.measure(
                 text = display,
@@ -107,7 +121,7 @@ class ReflowPaginator(
                 heightPx = height,
                 lineHeightMult = typography.lineHeightMult,
                 textAlign = typography.textAlign,
-                breakStrategy = typography.breakStrategy,
+                breakStrategy = effectiveBreakStrategy,
                 hyphenationMode = typography.hyphenationMode,
                 includeFontPadding = typography.includeFontPadding,
                 preferInterCharacterJustify = preferInterCharacterJustify
@@ -148,7 +162,7 @@ class ReflowPaginator(
             )
             logDebug(
                 TAG,
-                "pageAt start=$start end=$end source=${if (usingSoftBreakIndex) "index" else "runtime"} " +
+                "pageAt start=$start end=$end source=$softBreakSource " +
                     "hardWrapLikely=$hardWrapLikely softBreakProfile=${softBreakProfile.storageValue} " +
                     "newlineSoft=${newlineStats.softBreaks} newlineHard=${newlineStats.hardBreaks} " +
                     "measuredEnd=$measuredEndBeforeAdjust adjustedEnd=$measuredEnd " +

@@ -20,6 +20,18 @@ fun BreakStrategyMode.toAndroidBreakStrategy(): Int {
     }
 }
 
+fun BreakStrategyMode.effectiveForInterCharacterScript(
+    preferInterCharacter: Boolean
+): BreakStrategyMode {
+    if (!preferInterCharacter) {
+        return this
+    }
+    return when (this) {
+        BreakStrategyMode.BALANCED -> BreakStrategyMode.SIMPLE
+        else -> this
+    }
+}
+
 fun HyphenationMode.toAndroidHyphenationFrequency(): Int {
     return when (this) {
         HyphenationMode.NONE -> Layout.HYPHENATION_FREQUENCY_NONE
