@@ -6,6 +6,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.LeadingMarginSpan
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 object SoftBreakProcessor {
 
@@ -15,7 +16,7 @@ object SoftBreakProcessor {
         paragraphIndentPx: Int,
         startsAtParagraphBoundary: Boolean
     ): CharSequence {
-        return rawText
+        return normalizeLineEndings(rawText)
     }
 
     fun process(
@@ -26,8 +27,9 @@ object SoftBreakProcessor {
         startsAtParagraphBoundary: Boolean,
         ruleConfig: SoftBreakRuleConfig = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED)
     ): CharSequence {
+        val normalizedInput = normalizeLineEndings(rawText)
         val normalized = normalizeSoftBreaks(
-            text = rawText,
+            text = normalizedInput,
             hardWrapLikely = hardWrapLikely,
             ruleConfig = ruleConfig
         )
@@ -293,22 +295,33 @@ object SoftBreakProcessor {
         hardWrapLikely: Boolean,
         ruleConfig: SoftBreakRuleConfig
     ): Int {
-        var count = 0
-        var sum = 0L
-        lines.forEach { line ->
-            if (line.length > 0) {
-                count++
-                sum += line.length.toLong()
-            }
-        }
-        if (count == 0) {
+        val lengths = lines.asSequence()
+            .map { it.length }
+            .filter { it > 0 }
+            .toList()
+        if (lengths.isEmpty()) {
             return 72
         }
+        val sorted = lengths.sorted()
+        val trimCount = (sorted.size * 0.1f).roundToInt()
+            .coerceAtMost((sorted.size - 1) / 2)
+        val window = sorted.subList(trimCount, sorted.size - trimCount)
+        val median = window[window.size / 2]
+        val mean = window.average()
+        val weightedTypical = ((median * 0.6) + (mean * 0.4)).roundToInt()
+
         val minTypical = if (hardWrapLikely) {
             ruleConfig.minTypicalHardWrap
         } else {
             ruleConfig.minTypicalNormal
         }
-        return (sum / count).toInt().coerceIn(minTypical, ruleConfig.maxTypical)
+        return weightedTypical.coerceIn(minTypical, ruleConfig.maxTypical)
+    }
+
+    private fun normalizeLineEndings(text: String): String {
+        if (text.indexOf('\r') < 0) {
+            return text
+        }
+        return text.replace("\r\n", "\n").replace('\r', '\n')
     }
 }

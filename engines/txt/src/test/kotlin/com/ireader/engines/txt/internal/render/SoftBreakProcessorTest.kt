@@ -101,6 +101,19 @@ class SoftBreakProcessorTest {
     }
 
     @Test
+    fun `crlf should be normalized before processing`() {
+        val output = SoftBreakProcessor.process(
+            rawText = "第一行\r\n第二行",
+            hardWrapLikely = false,
+            paragraphSpacingPx = 0,
+            paragraphIndentPx = 0,
+            startsAtParagraphBoundary = true
+        )
+
+        assertEquals("第一行\n第二行", output.toString())
+    }
+
+    @Test
     fun `should keep soft breaks when hardWrapLikely is false`() {
         val raw = buildString {
             repeat(30) { index ->

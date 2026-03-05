@@ -73,6 +73,26 @@ class TxtControllerTest {
     }
 
     @Test
+    fun `render with allowCache false should not populate page cache`() = runBlocking {
+        val fixture = createFixture(text = sampleText(paragraphs = 80))
+        try {
+            fixture.controller.setLayoutConstraints(defaultConstraints())
+
+            val noCache = fixture.controller.render(
+                RenderPolicy(allowCache = false, prefetchNeighbors = 0)
+            ).requireOk()
+            val firstCachedAttempt = fixture.controller.render(
+                RenderPolicy(allowCache = true, prefetchNeighbors = 0)
+            ).requireOk()
+
+            assertFalse(noCache.metrics?.cacheHit ?: true)
+            assertFalse(firstCachedAttempt.metrics?.cacheHit ?: true)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `next then prev should return to original page`() = runBlocking {
         val fixture = createFixture(text = sampleText(paragraphs = 140))
         try {

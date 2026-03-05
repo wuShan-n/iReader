@@ -7,6 +7,7 @@
 
 package com.ireader.engines.txt.internal.render
 
+import android.os.Trace
 import android.util.Log
 import com.ireader.engines.common.android.controller.BaseCoroutineReaderController
 import com.ireader.engines.common.android.reflow.ReflowPageSlice
@@ -388,6 +389,7 @@ internal class TxtController(
             pageDecorCache.clear()
             if (reason == InvalidateReason.CONFIG_CHANGED || reason == InvalidateReason.LAYOUT_CHANGED) {
                 paginationIndex.invalidateProfile()
+                sliceCache.bindProfile(profileKey = null)
                 pageCompletionJob?.cancel()
             }
             ReaderResult.Ok(Unit)
@@ -395,9 +397,9 @@ internal class TxtController(
     }
 
     override fun onClose() {
+        pageCompletionJob?.cancel()
         runCatching { paginationIndex.saveIfDirty() }
             .onFailure { logWarn(TAG, "TXT controller failed to save pagination index", it) }
-        pageCompletionJob?.cancel()
         annotationObserverJob?.cancel()
         runCatching { softBreakIndex?.close() }
             .onFailure { logWarn(TAG, "TXT controller failed to close soft-break index", it) }
@@ -460,6 +462,8 @@ internal class TxtController(
     }
 
     private suspend fun renderSnapshotLocked(policy: RenderPolicy): ReaderResult<RenderSnapshot> {
+        Trace.beginSection("TxtController#renderSnapshot")
+        try {
         val constraintsLocal = constraints
             ?: return ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
 
@@ -493,6 +497,9 @@ internal class TxtController(
             maybeSchedulePageCompletionLocked()
         }
         return snapshot
+        } finally {
+            Trace.endSection()
+        }
     }
 
     private fun prepareRenderSnapshotLocked(
@@ -667,6 +674,7 @@ internal class TxtController(
             constraints = constraints,
             profileConfig = currentConfig
         )
+        sliceCache.bindProfile(paginationIndex.activeProfileKey())
         if (!restoredLocatorAnchors) {
             paginationIndex.mergeLocatorAnchors(initialLocator?.extras.orEmpty())
             restoredLocatorAnchors = true
@@ -696,6 +704,8 @@ internal class TxtController(
         maxPages: Int,
         batchSize: Int
     ) {
+        Trace.beginSection("TxtController#completePageMap")
+        try {
         if (maxPages <= 0 || store.lengthChars <= 0L) {
             return
         }
@@ -720,6 +730,9 @@ internal class TxtController(
         }
         mutex.withLock {
             paginationIndex.saveIfDirty()
+        }
+        } finally {
+            Trace.endSection()
         }
     }
 

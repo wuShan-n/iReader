@@ -5,6 +5,7 @@ import java.security.MessageDigest
 object Hashing {
 
     fun sha1Hex(input: String): String = digestHex("SHA-1", input.toByteArray(Charsets.UTF_8))
+    fun sha1Hex(bytes: ByteArray): String = digestHex("SHA-1", bytes)
 
     fun sha256Hex(input: String): String = digestHex("SHA-256", input.toByteArray(Charsets.UTF_8))
 

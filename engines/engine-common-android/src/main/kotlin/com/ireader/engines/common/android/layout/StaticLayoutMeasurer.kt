@@ -14,6 +14,7 @@ import com.ireader.core.common.android.typography.toAndroidLayoutAlignment
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.TextAlignMode
+import java.lang.reflect.Method
 
 data class MeasureResult(
     val endChar: Int,
@@ -35,6 +36,14 @@ object StaticLayoutMeasurer {
         includeFontPadding: Boolean,
         preferInterCharacterJustify: Boolean
     ): MeasureResult {
+        if (text.isEmpty() || widthPx <= 0 || heightPx <= 0) {
+            return MeasureResult(
+                endChar = 0,
+                lineCount = 0,
+                lastVisibleLine = -1
+            )
+        }
+
         val builder = StaticLayout.Builder.obtain(
             text,
             0,
@@ -48,10 +57,8 @@ object StaticLayoutMeasurer {
             .setHyphenationFrequency(hyphenationMode.toAndroidHyphenationFrequency())
             .setBreakStrategy(breakStrategy.toAndroidBreakStrategy())
 
-        runCatching {
-            StaticLayout.Builder::class.java
-                .getMethod("setUseLineSpacingFromFallbacks", Boolean::class.javaPrimitiveType)
-                .invoke(builder, true)
+        setUseLineSpacingFromFallbacksMethod?.let { method ->
+            runCatching { method.invoke(builder, true) }
         }
 
         runCatching {
@@ -86,25 +93,38 @@ object StaticLayoutMeasurer {
         }
 
         val contentHeight = heightPx.coerceAtLeast(1)
-        var lastVisibleLine = -1
-        var line = 0
-        while (line < layout.lineCount) {
-            if (layout.getLineBottom(line) <= contentHeight) {
-                lastVisibleLine = line
-                line++
-            } else {
-                break
-            }
-        }
-        if (lastVisibleLine < 0) {
-            lastVisibleLine = 0
-        }
+        val lastVisibleLine = findLastVisibleLine(layout, contentHeight)
         val end = layout.getLineEnd(lastVisibleLine).coerceAtLeast(0).coerceAtMost(text.length)
         return MeasureResult(
             endChar = end,
             lineCount = lastVisibleLine + 1,
             lastVisibleLine = lastVisibleLine
         )
+    }
+
+    private fun findLastVisibleLine(layout: StaticLayout, contentHeight: Int): Int {
+        var low = 0
+        var high = layout.lineCount - 1
+        var answer = -1
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            if (layout.getLineBottom(mid) <= contentHeight) {
+                answer = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return answer.coerceAtLeast(0)
+    }
+
+    private val setUseLineSpacingFromFallbacksMethod: Method? by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        runCatching {
+            StaticLayout.Builder::class.java.getMethod(
+                "setUseLineSpacingFromFallbacks",
+                Boolean::class.javaPrimitiveType
+            )
+        }.getOrNull()
     }
 
 }

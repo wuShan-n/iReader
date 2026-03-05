@@ -10,6 +10,15 @@ class ReflowPageSliceCache(
     private val maxOffsetProvider: () -> Long
 ) {
     private val pageCache = LruCache<Long, ReflowPageSlice>(maxPageCache)
+    private var activeProfileKey: String? = null
+
+    fun bindProfile(profileKey: String?) {
+        if (activeProfileKey == profileKey) {
+            return
+        }
+        activeProfileKey = profileKey
+        clear()
+    }
 
     fun clear() {
         pageCache.clear()
@@ -37,7 +46,9 @@ class ReflowPageSliceCache(
             config = config,
             constraints = constraints
         )
-        pageCache[normalizedStart] = computed
+        if (allowCache) {
+            pageCache[normalizedStart] = computed
+        }
         return computed
     }
 
@@ -46,4 +57,3 @@ class ReflowPageSliceCache(
         return coerceIn(0L, maxOffset)
     }
 }
-

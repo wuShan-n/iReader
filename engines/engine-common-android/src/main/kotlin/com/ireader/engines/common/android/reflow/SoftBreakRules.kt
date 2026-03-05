@@ -1,5 +1,7 @@
 package com.ireader.engines.common.android.reflow
 
+import java.util.Locale
+
 const val SOFT_BREAK_PROFILE_EXTRA_KEY: String = "txt.soft_break_profile"
 
 enum class SoftBreakTuningProfile(val storageValue: String) {
@@ -11,7 +13,7 @@ enum class SoftBreakTuningProfile(val storageValue: String) {
         private val BY_STORAGE = entries.associateBy { it.storageValue }
 
         fun fromStorageValue(raw: String?): SoftBreakTuningProfile {
-            val key = raw?.trim()?.lowercase()
+            val key = raw?.trim()?.lowercase(Locale.US)
             return if (key.isNullOrEmpty()) {
                 BALANCED
             } else {

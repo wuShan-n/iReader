@@ -4,6 +4,7 @@ package com.ireader.engines.common.android.reflow
 
 import android.text.SpannableStringBuilder
 import android.util.Log
+import android.os.Trace
 import com.ireader.core.common.android.typography.prefersInterCharacterJustify
 import com.ireader.core.common.android.typography.effectiveForInterCharacterScript
 import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
@@ -44,6 +45,20 @@ class ReflowPaginator(
         config: RenderConfig.ReflowText,
         constraints: LayoutConstraints
     ): ReflowPageSlice {
+        Trace.beginSection("ReflowPaginator#pageAt")
+        try {
+            return pageAtInternal(startOffset = startOffset, config = config, constraints = constraints)
+        } finally {
+            Trace.endSection()
+        }
+    }
+
+    private suspend fun pageAtInternal(
+        startOffset: Long,
+        config: RenderConfig.ReflowText,
+        constraints: LayoutConstraints
+    ): ReflowPageSlice {
+        val startedNs = System.nanoTime()
         if (source.lengthChars <= 0L) {
             return ReflowPageSlice(0L, 0L, "")
         }
@@ -69,7 +84,10 @@ class ReflowPaginator(
             else -> "runtime"
         }
 
-        var windowChars = initialWindowChars(config, constraints)
+        val initialWindow = initialWindowChars(config, constraints)
+        val softWindowCap = (initialWindow * SOFT_WINDOW_CAP_MULTIPLIER)
+            .coerceIn(initialWindow, MAX_WINDOW_CHARS)
+        var windowChars = initialWindow
         var measuredEnd = 0
         var measuredText: CharSequence = ""
         var rawLength = 0
@@ -130,10 +148,10 @@ class ReflowPaginator(
 
             val consumedAllWindow = measuredEnd >= rawLength
             val reachedDocumentEnd = start + rawLength >= source.lengthChars
-            if (!consumedAllWindow || reachedDocumentEnd || windowChars >= MAX_WINDOW_CHARS) {
+            if (!consumedAllWindow || reachedDocumentEnd || windowChars >= softWindowCap) {
                 break
             }
-            windowChars = (windowChars * 2).coerceAtMost(MAX_WINDOW_CHARS)
+            windowChars = (windowChars * 2).coerceAtMost(softWindowCap)
         }
 
         val measuredEndBeforeAdjust = measuredEnd
@@ -162,11 +180,13 @@ class ReflowPaginator(
             )
             logDebug(
                 TAG,
-                "pageAt start=$start end=$end source=$softBreakSource " +
+                    "pageAt start=$start end=$end source=$softBreakSource " +
                     "hardWrapLikely=$hardWrapLikely softBreakProfile=${softBreakProfile.storageValue} " +
                     "newlineSoft=${newlineStats.softBreaks} newlineHard=${newlineStats.hardBreaks} " +
+                    "windowInitial=$initialWindow windowFinal=$windowChars softCap=$softWindowCap " +
                     "measuredEnd=$measuredEndBeforeAdjust adjustedEnd=$measuredEnd " +
-                    "rewind=${measuredEndBeforeAdjust - measuredEnd}"
+                    "rewind=${measuredEndBeforeAdjust - measuredEnd} " +
+                    "durationMs=${(System.nanoTime() - startedNs) / 1_000_000L}"
             )
         }
 
@@ -258,6 +278,7 @@ class ReflowPaginator(
     companion object {
         private const val TAG = "ReflowPaginator"
         private const val MAX_WINDOW_CHARS = 96_000
+        private const val SOFT_WINDOW_CAP_MULTIPLIER = 3
         private const val MIN_TAIL_CHARS_FOR_REWIND = 14
         private const val MIN_SENTENCE_TAIL_CHARS_FOR_REWIND = 12
         private const val MIN_PARAGRAPH_CHARS_FOR_REWIND = 24

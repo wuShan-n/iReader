@@ -74,6 +74,10 @@ class PdfEngine internal constructor(
     }
 
     private fun buildDocumentId(source: DocumentSource): DocumentId {
-        return SourceDocumentIds.fromSourceSha1(prefix = "pdf", source = source)
+        return SourceDocumentIds.fromSourceSha256(
+            prefix = "pdf",
+            source = source,
+            length = 40
+        )
     }
 }

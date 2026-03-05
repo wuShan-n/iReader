@@ -4,6 +4,8 @@ import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderState
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.channels.BufferOverflow
 
 abstract class BaseCoroutineReaderController(
     initialState: RenderState,
@@ -25,11 +28,19 @@ abstract class BaseCoroutineReaderController(
 ) : ReaderController {
 
     protected val mutex: Mutex = Mutex()
-    protected val scope: CoroutineScope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val coroutineErrorHandler = CoroutineExceptionHandler { _, throwable ->
+        onCoroutineError("uncaught", throwable)
+    }
+    protected val scope: CoroutineScope = CoroutineScope(
+        SupervisorJob() + dispatcher + coroutineErrorHandler
+    )
 
     private val closed = AtomicBoolean(false)
 
-    protected val eventsMutable = MutableSharedFlow<ReaderEvent>(extraBufferCapacity = 32)
+    protected val eventsMutable = MutableSharedFlow<ReaderEvent>(
+        extraBufferCapacity = 32,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     override val events: Flow<ReaderEvent> = eventsMutable.asSharedFlow()
 
     protected val stateMutable = MutableStateFlow(initialState)
@@ -39,7 +50,7 @@ abstract class BaseCoroutineReaderController(
         name: String,
         block: suspend CoroutineScope.() -> Unit
     ): Job {
-        return scope.launch {
+        return scope.launch(CoroutineName(name)) {
             try {
                 block()
             } catch (ce: CancellationException) {

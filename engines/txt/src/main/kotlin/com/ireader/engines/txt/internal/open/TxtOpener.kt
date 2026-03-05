@@ -12,8 +12,8 @@ package com.ireader.engines.txt.internal.open
 
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
+import com.ireader.engines.common.android.id.SourceDocumentIds
 import com.ireader.engines.common.hash.Hashing
-import com.ireader.engines.common.id.DocumentIds
 import com.ireader.engines.txt.internal.encoding.EncodingDetector
 import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.replaceFileAtomically
@@ -406,16 +406,11 @@ internal class TxtOpener(
     }
 
     private fun computeDocumentId(source: DocumentSource, sampleHash: String): DocumentId {
-        val raw = buildString {
-            append(source.uri.toString())
-            append('|')
-            append(source.sizeBytes ?: -1L)
-            append('|')
-            append(source.displayName.orEmpty())
-            append('|')
-            append(sampleHash)
-        }
-        return DocumentIds.fromSha256(raw = raw, length = 40)
+        return SourceDocumentIds.fromSourceSha256(
+            source = source,
+            length = 40,
+            extraParts = listOf(sampleHash)
+        )
     }
 
     private data class LineStatsSnapshot(

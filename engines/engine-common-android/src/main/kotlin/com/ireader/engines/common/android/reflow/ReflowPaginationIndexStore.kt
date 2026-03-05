@@ -18,14 +18,23 @@ class ReflowPaginationIndexStore(
     private var pageStarts = sortedSetOf<Long>()
     private var dirty = false
 
+    @Synchronized
     fun hasActiveProfile(): Boolean {
         return enabled && !profileKey.isNullOrBlank()
     }
 
+    @Synchronized
+    fun activeProfileKey(): String? {
+        return profileKey?.takeIf { enabled && it.isNotBlank() }
+    }
+
+    @Synchronized
     fun knownPageCount(): Int = pageStarts.size
 
+    @Synchronized
     fun lastKnownStart(): Long? = pageStarts.lastOrNull()
 
+    @Synchronized
     fun startForProgress(percent: Double): Long? {
         if (pageStarts.size < 8) return null
         val index = ((pageStarts.size - 1) * percent.coerceIn(0.0, 1.0))
@@ -34,6 +43,7 @@ class ReflowPaginationIndexStore(
         return pageStarts.elementAt(index)
     }
 
+    @Synchronized
     fun locatorExtras(maxAnchors: Int = 96): Map<String, String> {
         if (!hasActiveProfile()) return emptyMap()
         val profile = profileKey ?: return emptyMap()
@@ -47,6 +57,7 @@ class ReflowPaginationIndexStore(
         )
     }
 
+    @Synchronized
     fun mergeLocatorAnchors(locatorExtras: Map<String, String>) {
         if (!hasActiveProfile()) return
         val profile = locatorExtras[LocatorExtraKeys.REFLOW_PAGE_PROFILE] ?: return
@@ -67,6 +78,7 @@ class ReflowPaginationIndexStore(
         }
     }
 
+    @Synchronized
     fun reloadIfNeeded(
         constraints: LayoutConstraints?,
         profileConfig: RenderConfig.ReflowText
@@ -90,6 +102,7 @@ class ReflowPaginationIndexStore(
         dirty = false
     }
 
+    @Synchronized
     fun record(start: Long) {
         if (!hasActiveProfile()) {
             return
@@ -102,6 +115,7 @@ class ReflowPaginationIndexStore(
         }
     }
 
+    @Synchronized
     fun saveIfDirty() {
         if (!hasActiveProfile() || !dirty) {
             return
@@ -113,6 +127,7 @@ class ReflowPaginationIndexStore(
         dirty = false
     }
 
+    @Synchronized
     fun invalidateProfile() {
         profileKey = null
         pageStarts.clear()

@@ -83,9 +83,10 @@ internal class EpubOpener(
                 )
             }
 
-            val docId: DocumentId = SourceDocumentIds.fromSourceSha1(
+            val docId: DocumentId = SourceDocumentIds.fromSourceSha256(
                 prefix = "epub",
-                source = source
+                source = source,
+                length = 40
             )
 
             val fixedLayout = publication.isFixedLayoutPublication()

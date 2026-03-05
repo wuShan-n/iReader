@@ -374,7 +374,7 @@ internal class PdfController(
     private fun schedulePrefetch(count: Int) {
         if (count <= 0) return
         prefetchJob?.cancel()
-        prefetchJob = scope.launch {
+        prefetchJob = launchSafely("pdf-prefetch") {
             prefetchNeighbors(count)
         }
     }

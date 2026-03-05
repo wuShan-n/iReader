@@ -19,4 +19,16 @@ class DocumentIdsTest {
         val second = DocumentIds.fromSha256(raw = "raw-b", length = 40)
         assertNotEquals(first, second)
     }
+
+    @Test
+    fun `sha256 byte and string overload should be consistent`() {
+        val raw = "raw-a"
+        val fromString = DocumentIds.fromSha256(raw = raw, length = 40, prefix = "txt")
+        val fromBytes = DocumentIds.fromSha256(
+            rawBytes = raw.toByteArray(Charsets.UTF_8),
+            length = 40,
+            prefix = "txt"
+        )
+        assertEquals(fromString, fromBytes)
+    }
 }

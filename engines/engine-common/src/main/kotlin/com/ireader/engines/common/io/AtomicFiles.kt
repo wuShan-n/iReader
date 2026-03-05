@@ -16,15 +16,61 @@ fun replaceFileAtomically(
     rename: (File, File) -> Boolean = { src, dst -> src.renameTo(dst) }
 ) {
     targetFile.parentFile?.mkdirs()
-    if (targetFile.exists() && !targetFile.delete()) {
-        throw IOException("Failed to delete target file: ${targetFile.absolutePath}")
+    val backupFile = File(
+        targetFile.parentFile ?: targetFile.absoluteFile.parentFile,
+        "${targetFile.name}.bak"
+    )
+
+    if (backupFile.exists() && !backupFile.delete()) {
+        throw IOException("Failed to clear backup file: ${backupFile.absolutePath}")
     }
-    if (rename(tempFile, targetFile)) {
-        return
+
+    var movedTargetToBackup = false
+    if (targetFile.exists()) {
+        movedTargetToBackup = moveReplacing(src = targetFile, dst = backupFile, rename = rename)
     }
-    tempFile.copyTo(targetFile, overwrite = true)
-    if (tempFile.exists() && !tempFile.delete()) {
-        tempFile.deleteOnExit()
+
+    try {
+        if (moveReplacing(src = tempFile, dst = targetFile, rename = rename)) {
+            cleanupFile(backupFile)
+            return
+        }
+        throw IOException("Failed to replace target file atomically: ${targetFile.absolutePath}")
+    } catch (error: Throwable) {
+        if (movedTargetToBackup) {
+            runCatching {
+                if (targetFile.exists() && !targetFile.delete()) {
+                    targetFile.deleteOnExit()
+                }
+                moveReplacing(src = backupFile, dst = targetFile, rename = rename)
+            }
+        }
+        throw error
+    } finally {
+        cleanupFile(tempFile)
     }
 }
 
+private fun moveReplacing(
+    src: File,
+    dst: File,
+    rename: (File, File) -> Boolean
+): Boolean {
+    if (rename(src, dst)) {
+        return true
+    }
+    if (!src.exists()) {
+        return false
+    }
+    src.copyTo(dst, overwrite = true)
+    if (src.exists() && !src.delete()) {
+        src.deleteOnExit()
+    }
+    return true
+}
+
+private fun cleanupFile(file: File) {
+    if (file.exists() && !file.delete()) {
+        file.deleteOnExit()
+    }
+}

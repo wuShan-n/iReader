@@ -30,4 +30,22 @@ class ReaderErrorMappingTest {
         assertTrue(error is ReaderError.Internal)
         assertEquals("Internal error", error.message)
     }
+
+    @Test
+    fun `default mapping should not preserve internal message`() {
+        val error = IllegalStateException("sensitive stack detail").toReaderError()
+        assertTrue(error is ReaderError.Internal)
+        assertEquals("Internal error", error.message)
+    }
+
+    @Test
+    fun `invalid password should be detected from cause chain`() {
+        val error = IllegalStateException(
+            "open failed",
+            IllegalArgumentException("document is encrypted")
+        ).toReaderError(
+            invalidPasswordKeywords = setOf("password", "encrypted")
+        )
+        assertTrue(error is ReaderError.InvalidPassword)
+    }
 }
