@@ -19,5 +19,8 @@ internal class ReaderUiReducer(
     fun emit(effect: ReaderEffect) {
         effectStore.tryEmit(effect)
     }
-}
 
+    suspend fun emitGuaranteed(effect: ReaderEffect) {
+        effectStore.emit(effect)
+    }
+}

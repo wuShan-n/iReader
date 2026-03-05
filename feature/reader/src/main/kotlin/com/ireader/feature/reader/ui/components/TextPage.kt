@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -47,6 +48,29 @@ fun TextPage(
     val density = LocalDensity.current
     val horizontalPaddingPx = with(density) { typography.pagePaddingDp.dp.roundToPx() }
     val verticalPaddingPx = horizontalPaddingPx
+    val displayText = remember(content.text, content.mapping, links, decorations) {
+        buildDisplayText(
+            content = content,
+            links = links,
+            decorations = decorations
+        )
+    }
+    val preferInterCharacterJustify = remember(content.text) {
+        content.text.prefersInterCharacterJustify()
+    }
+    val effectiveBreakStrategy = remember(typography.breakStrategy, preferInterCharacterJustify) {
+        typography.breakStrategy.effectiveForInterCharacterScript(preferInterCharacterJustify)
+    }
+    val typeface = remember(typography.fontFamilyName) {
+        val familyName = typography.fontFamilyName
+        if (familyName.isNullOrBlank()) {
+            Typeface.DEFAULT
+        } else {
+            Typeface.create(familyName, Typeface.NORMAL)
+        }
+    }
+    val textColorArgb = remember(textColor) { textColor.toArgb() }
+    val backgroundColorArgb = remember(backgroundColor) { backgroundColor.toArgb() }
 
     AndroidView(
         modifier = modifier.fillMaxSize(),
@@ -60,46 +84,66 @@ fun TextPage(
                 isClickable = false
                 overScrollMode = View.OVER_SCROLL_NEVER
                 gravity = Gravity.TOP or Gravity.START
+                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
                 onTextViewBound(this)
             }
         },
         update = { textView ->
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, typography.fontSizeSp)
-            textView.setLineSpacing(0f, typography.lineHeightMult)
-            textView.includeFontPadding = typography.includeFontPadding
-            textView.setPadding(
-                horizontalPaddingPx,
-                verticalPaddingPx,
-                horizontalPaddingPx,
-                verticalPaddingPx
+            val expectedTextSizePx = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP,
+                typography.fontSizeSp,
+                textView.resources.displayMetrics
             )
-            textView.textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-            textView.gravity = Gravity.TOP or Gravity.START
-            textView.setTextColor(textColor.toArgb())
-            textView.setBackgroundColor(backgroundColor.toArgb())
-            val preferInterCharacterJustify = content.text.prefersInterCharacterJustify()
-            val effectiveBreakStrategy = typography.breakStrategy
-                .effectiveForInterCharacterScript(preferInterCharacterJustify)
-            val familyName = typography.fontFamilyName
-            textView.typeface = if (familyName.isNullOrBlank()) {
-                Typeface.DEFAULT
-            } else {
-                Typeface.create(familyName, Typeface.NORMAL)
+            if (kotlin.math.abs(textView.textSize - expectedTextSizePx) > 0.5f) {
+                textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, typography.fontSizeSp)
             }
-            textView.text = buildDisplayText(
-                content = content,
-                links = links,
-                decorations = decorations
-            )
-            textView.breakStrategy = effectiveBreakStrategy.toAndroidBreakStrategy()
-            textView.hyphenationFrequency = typography.hyphenationMode.toAndroidHyphenationFrequency()
-            runCatching {
-                textView.justificationMode = typography.textAlign.toAndroidJustificationMode(
-                    preferInterCharacter = preferInterCharacterJustify
+            if (textView.lineSpacingExtra != 0f || textView.lineSpacingMultiplier != typography.lineHeightMult) {
+                textView.setLineSpacing(0f, typography.lineHeightMult)
+            }
+            if (textView.includeFontPadding != typography.includeFontPadding) {
+                textView.includeFontPadding = typography.includeFontPadding
+            }
+            if (
+                textView.paddingLeft != horizontalPaddingPx ||
+                textView.paddingTop != verticalPaddingPx ||
+                textView.paddingRight != horizontalPaddingPx ||
+                textView.paddingBottom != verticalPaddingPx
+            ) {
+                textView.setPadding(
+                    horizontalPaddingPx,
+                    verticalPaddingPx,
+                    horizontalPaddingPx,
+                    verticalPaddingPx
                 )
             }
-            onTextViewBound(textView)
-            textView.requestLayout()
+            if (textView.currentTextColor != textColorArgb) {
+                textView.setTextColor(textColorArgb)
+            }
+            if ((textView.background as? android.graphics.drawable.ColorDrawable)?.color != backgroundColorArgb) {
+                textView.setBackgroundColor(backgroundColorArgb)
+            }
+            if (textView.typeface !== typeface) {
+                textView.typeface = typeface
+            }
+            if (textView.text !== displayText) {
+                textView.text = displayText
+            }
+            val breakStrategy = effectiveBreakStrategy.toAndroidBreakStrategy()
+            if (textView.breakStrategy != breakStrategy) {
+                textView.breakStrategy = breakStrategy
+            }
+            val hyphenation = typography.hyphenationMode.toAndroidHyphenationFrequency()
+            if (textView.hyphenationFrequency != hyphenation) {
+                textView.hyphenationFrequency = hyphenation
+            }
+            runCatching {
+                val expectedJustification = typography.textAlign.toAndroidJustificationMode(
+                    preferInterCharacter = preferInterCharacterJustify
+                )
+                if (textView.justificationMode != expectedJustification) {
+                    textView.justificationMode = expectedJustification
+                }
+            }
         }
     )
 }

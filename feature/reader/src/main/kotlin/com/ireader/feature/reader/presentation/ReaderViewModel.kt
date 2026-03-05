@@ -2,6 +2,7 @@ package com.ireader.feature.reader.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ireader.core.data.book.BookRecord
 import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.book.IndexState
 import com.ireader.core.data.book.LocatorCodec
@@ -9,6 +10,7 @@ import com.ireader.core.data.book.ProgressRepo
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.core.datastore.reader.ReaderSettingsStore
 import com.ireader.core.files.source.BookSourceResolver
+import com.ireader.core.files.source.DocumentSource
 import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
 import com.ireader.feature.reader.domain.usecase.OpenReaderSession
 import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
@@ -21,13 +23,14 @@ import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.InvalidateReason
 import com.ireader.reader.api.render.PageTurnMode
+import com.ireader.reader.api.render.PageId
 import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.model.LinkTarget
+import com.ireader.reader.model.Locator
 import com.ireader.reader.model.OutlineNode
 import com.ireader.reader.runtime.ReaderSessionHandle
 import com.ireader.reader.runtime.flow.asReaderResult
@@ -39,7 +42,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -50,6 +55,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -79,10 +86,12 @@ class ReaderViewModel @Inject constructor(
     private val gestureInterpreter = ReaderGestureInterpreter()
     private val interactionTracker: ReaderInteractionTracker = ReaderInteractionTracker.None
 
-    private val intents = Channel<ReaderIntent>(capacity = Channel.UNLIMITED)
+    private val intents = Channel<ReaderIntent>(capacity = Channel.BUFFERED)
     private var currentStartArgs: StartArgs? = null
     private var searchJob: Job? = null
+    private var finalRenderJob: Job? = null
     private var pendingUndoTurn: PendingUndoTurn? = null
+    private var appliedLayoutConstraints: LayoutConstraints? = null
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
@@ -107,7 +116,16 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun dispatch(intent: ReaderIntent) {
-        intents.trySend(intent)
+        val sent = intents.trySend(intent)
+        if (sent.isSuccess) return
+        if (shouldDropWhenQueueBusy(intent)) return
+        viewModelScope.launch {
+            intents.send(intent)
+        }
+    }
+
+    private fun shouldDropWhenQueueBusy(intent: ReaderIntent): Boolean {
+        return intent is ReaderIntent.LayoutChanged || intent is ReaderIntent.SearchQueryChanged
     }
 
     fun openLocator(encoded: String) {
@@ -135,7 +153,7 @@ class ReaderViewModel @Inject constructor(
 
             ReaderIntent.CancelPassword -> {
                 ui.update { it.copy(passwordPrompt = null) }
-                ui.emit(ReaderEffect.Back)
+                ui.emitGuaranteed(ReaderEffect.Back)
             }
 
             is ReaderIntent.LayoutChanged -> applyLayout(intent.constraints)
@@ -150,7 +168,7 @@ class ReaderViewModel @Inject constructor(
             ReaderIntent.OpenAnnotations -> {
                 val bookId = ui.state.value.bookId
                 if (bookId > 0L) {
-                    ui.emit(ReaderEffect.OpenAnnotations(bookId))
+                    ui.emitGuaranteed(ReaderEffect.OpenAnnotations(bookId))
                 }
             }
 
@@ -179,7 +197,7 @@ class ReaderViewModel @Inject constructor(
             is ReaderIntent.OpenSettingsSub -> openSubSheet(intent.sheet)
             ReaderIntent.OpenReaderMore -> openSheet(ReaderSheet.ReaderMore)
             ReaderIntent.OpenFullSettings -> openFullSettings()
-            ReaderIntent.ShareBook -> ui.emit(ReaderEffect.ShareText(buildShareText(ui.state.value)))
+            ReaderIntent.ShareBook -> ui.emitGuaranteed(ReaderEffect.ShareText(buildShareText(ui.state.value)))
             ReaderIntent.CreateAnnotation -> createAnnotation()
             ReaderIntent.ToggleNightMode -> updateDisplayPrefs { prefs ->
                 prefs.copy(nightMode = !prefs.nightMode)
@@ -257,6 +275,7 @@ class ReaderViewModel @Inject constructor(
         searchJob?.cancel()
         searchJob = null
         pendingUndoTurn = null
+        appliedLayoutConstraints = null
 
         ui.update {
             it.copy(
@@ -279,51 +298,67 @@ class ReaderViewModel @Inject constructor(
             )
         }
 
-        val book = bookRepo.getRecordById(args.bookId)
-        if (book == null) {
-            ui.update {
-                it.copy(
-                    isOpening = false,
-                    error = ReaderUiError(
-                        message = UiText.Dynamic("Book not found"),
-                        actionLabel = UiText.Dynamic("Back"),
-                        action = ReaderErrorAction.Back
-                    )
-                )
+        val preparation = withContext(Dispatchers.IO) {
+            val book = bookRepo.getRecordById(args.bookId) ?: return@withContext OpenPreparation.BookNotFound
+            val source = sourceResolver.resolve(book)
+            if (source == null) {
+                bookRepo.setIndexState(book.bookId, IndexState.MISSING, "File not found")
+                return@withContext OpenPreparation.MissingSource
             }
-            return
+            val routeLocator = args.locatorArg?.let(locatorCodec::decode)
+            val historyLocator = runCatching {
+                progressRepo.getByBookId(book.bookId)?.locatorJson?.let(locatorCodec::decode)
+            }.getOrNull()
+            OpenPreparation.Ready(
+                book = book,
+                source = source,
+                initialLocator = routeLocator ?: historyLocator
+            )
         }
 
-        val source = sourceResolver.resolve(book)
-        if (source == null) {
-            bookRepo.setIndexState(book.bookId, IndexState.MISSING, "File not found")
-            ui.update {
-                it.copy(
-                    isOpening = false,
-                    error = ReaderUiError(
-                        message = UiText.Dynamic("The book file is missing"),
-                        actionLabel = UiText.Dynamic("Back"),
-                        action = ReaderErrorAction.Back
+        when (preparation) {
+            OpenPreparation.BookNotFound -> {
+                ui.update {
+                    it.copy(
+                        isOpening = false,
+                        error = ReaderUiError(
+                            message = UiText.Dynamic("Book not found"),
+                            actionLabel = UiText.Dynamic("Back"),
+                            action = ReaderErrorAction.Back
+                        )
                     )
-                )
+                }
+                return
             }
-            return
+
+            OpenPreparation.MissingSource -> {
+                ui.update {
+                    it.copy(
+                        isOpening = false,
+                        error = ReaderUiError(
+                            message = UiText.Dynamic("The book file is missing"),
+                            actionLabel = UiText.Dynamic("Back"),
+                            action = ReaderErrorAction.Back
+                        )
+                    )
+                }
+                return
+            }
+
+            is OpenPreparation.Ready -> Unit
         }
 
-        val routeLocator = args.locatorArg?.let(locatorCodec::decode)
-        val historyLocator = runCatching {
-            progressRepo.getByBookId(book.bookId)?.locatorJson?.let(locatorCodec::decode)
-        }.getOrNull()
-        val initialLocator = routeLocator ?: historyLocator
+        val ready = preparation
+        val book = ready.book
 
         when (
             val result = openReaderSession(
-                source = source,
+                source = ready.source,
                 options = OpenOptions(
                     hintFormat = book.format,
                     password = password
                 ),
-                initialLocator = initialLocator
+                initialLocator = ready.initialLocator
             )
         ) {
             is ReaderResult.Err -> {
@@ -332,7 +367,9 @@ class ReaderViewModel @Inject constructor(
 
             is ReaderResult.Ok -> {
                 session.attach(bookId = book.bookId, handle = result.value)
-                bookRepo.touchLastOpened(book.bookId)
+                withContext(Dispatchers.IO) {
+                    bookRepo.touchLastOpened(book.bookId)
+                }
 
                 ui.update {
                     it.copy(
@@ -416,7 +453,16 @@ class ReaderViewModel @Inject constructor(
             observeEffectiveConfig(sessionHandle.document.capabilities)
                 .distinctUntilChanged()
                 .collect { config ->
-                    when (sessionHandle.controller.setConfig(config)) {
+                    if (sessionHandle.controller.state.value.config == config) {
+                        ui.update {
+                            it.copy(
+                                currentConfig = config,
+                                pageTurnMode = resolvePageTurnMode(config)
+                            )
+                        }
+                        return@collect
+                    }
+                    when (render.withNavigationLock { sessionHandle.controller.setConfig(config) }) {
                         is ReaderResult.Ok -> {
                             ui.update {
                                 it.copy(
@@ -445,8 +491,12 @@ class ReaderViewModel @Inject constructor(
     private suspend fun applyLayout(constraints: LayoutConstraints) {
         render.updateLayout(constraints)
         val sessionHandle = session.currentHandle() ?: return
-        when (val result = sessionHandle.controller.setLayoutConstraints(constraints)) {
-            is ReaderResult.Ok -> render.requestRender(RenderRequest.LAYOUT)
+        if (appliedLayoutConstraints == constraints) return
+        when (val result = render.withNavigationLock { sessionHandle.controller.setLayoutConstraints(constraints) }) {
+            is ReaderResult.Ok -> {
+                appliedLayoutConstraints = constraints
+                render.requestRender(RenderRequest.LAYOUT)
+            }
             is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
         }
     }
@@ -473,7 +523,17 @@ class ReaderViewModel @Inject constructor(
             return
         }
 
-        when (val result = sessionHandle.controller.setConfig(config)) {
+        if (sessionHandle.controller.state.value.config == config) {
+            ui.update {
+                it.copy(
+                    currentConfig = config,
+                    pageTurnMode = resolvePageTurnMode(config)
+                )
+            }
+            return
+        }
+
+        when (val result = render.withNavigationLock { sessionHandle.controller.setConfig(config) }) {
             is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
             is ReaderResult.Ok -> {
                 ui.update {
@@ -490,18 +550,24 @@ class ReaderViewModel @Inject constructor(
     private suspend fun renderCurrentPageImmediate() {
         val sessionHandle = session.currentHandle() ?: return
         if (render.currentLayout() == null) return
-        val controller = sessionHandle.controller
-        val twoPass = sessionHandle.document.capabilities.fixedLayout
-
-        if (!twoPass) {
-            applyRenderResult(controller.render())
-            return
+        cancelFinalRender()
+        val fixedLayout = sessionHandle.document.capabilities.fixedLayout
+        val result = render.withNavigationLock {
+            if (fixedLayout) {
+                sessionHandle.controller.render(RenderPolicy(quality = RenderPolicy.Quality.DRAFT))
+            } else {
+                sessionHandle.controller.render()
+            }
         }
-
-        renderWithFinalPass(
-            controller = controller,
-            draft = controller.render(RenderPolicy(quality = RenderPolicy.Quality.DRAFT))
-        )
+        when (result) {
+            is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
+            is ReaderResult.Ok -> {
+                replacePage(result.value, direction = null)
+                if (fixedLayout) {
+                    launchFinalRender(sessionHandle = sessionHandle, expectedPageId = result.value.id)
+                }
+            }
+        }
     }
 
     private suspend fun navigate(
@@ -509,72 +575,71 @@ class ReaderViewModel @Inject constructor(
         block: suspend (ReaderController, RenderPolicy) -> ReaderResult<RenderPage>
     ): Boolean {
         val sessionHandle = session.currentHandle() ?: return false
-        var success = false
-        render.withNavigationLock {
-            val fixed = sessionHandle.document.capabilities.fixedLayout
-            val actionPolicy = if (fixed) {
-                RenderPolicy(quality = RenderPolicy.Quality.DRAFT)
-            } else {
-                RenderPolicy.Default
-            }
-
-            when (val result = block(sessionHandle.controller, actionPolicy)) {
-                is ReaderResult.Err -> {
-                    ui.update { it.copy(error = errorMapper.map(result.error)) }
-                    success = false
-                }
-                is ReaderResult.Ok -> if (fixed) {
-                    renderWithFinalPass(
-                        controller = sessionHandle.controller,
-                        draft = result,
-                        direction = direction
-                    )
-                    success = true
-                } else {
-                    applyRenderResult(result, direction = direction)
-                    success = true
-                }
-            }
-
+        cancelFinalRender()
+        val fixedLayout = sessionHandle.document.capabilities.fixedLayout
+        val actionPolicy = if (fixedLayout) {
+            RenderPolicy(quality = RenderPolicy.Quality.DRAFT)
+        } else {
+            RenderPolicy.Default
         }
-        return success
-    }
-
-    private fun applyRenderResult(
-        result: ReaderResult<RenderPage>,
-        direction: PageTurnDirection? = null
-    ) {
-        when (result) {
-            is ReaderResult.Ok -> replacePage(result.value, direction)
-            is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
-        }
-    }
-
-    private suspend fun renderWithFinalPass(
-        controller: ReaderController,
-        draft: ReaderResult<RenderPage>,
-        direction: PageTurnDirection? = null
-    ) {
-        when (draft) {
-            is ReaderResult.Ok -> replacePage(draft.value, direction)
+        return when (val result = render.withNavigationLock { block(sessionHandle.controller, actionPolicy) }) {
             is ReaderResult.Err -> {
-                ui.update { it.copy(error = errorMapper.map(draft.error), isRenderingFinal = false) }
-                return
+                ui.update { it.copy(error = errorMapper.map(result.error)) }
+                false
+            }
+
+            is ReaderResult.Ok -> {
+                replacePage(result.value, direction)
+                if (fixedLayout) {
+                    launchFinalRender(sessionHandle = sessionHandle, expectedPageId = result.value.id)
+                }
+                true
             }
         }
+    }
 
-        ui.update { it.copy(isRenderingFinal = true) }
-        when (val final = controller.render(RenderPolicy(quality = RenderPolicy.Quality.FINAL))) {
-            is ReaderResult.Ok -> {
-                replacePage(final.value, direction = null)
-                ui.update { it.copy(isRenderingFinal = false) }
-            }
+    private fun cancelFinalRender() {
+        finalRenderJob?.cancel()
+        finalRenderJob = null
+        ui.update { it.copy(isRenderingFinal = false) }
+    }
 
-            is ReaderResult.Err -> ui.update {
-                it.copy(
-                    error = errorMapper.map(final.error),
-                    isRenderingFinal = false
-                )
+    private fun launchFinalRender(
+        sessionHandle: ReaderSessionHandle,
+        expectedPageId: PageId
+    ) {
+        cancelFinalRender()
+        finalRenderJob = viewModelScope.launch {
+            val runningJob = coroutineContext[Job]
+            ui.update { it.copy(isRenderingFinal = true) }
+            try {
+                delay(FINAL_RENDER_DEBOUNCE_MS)
+                if (session.currentHandle() !== sessionHandle) return@launch
+                val finalResult = render.withNavigationLock {
+                    sessionHandle.controller.render(RenderPolicy(quality = RenderPolicy.Quality.FINAL))
+                }
+                when (finalResult) {
+                    is ReaderResult.Ok -> {
+                        val activeHandle = session.currentHandle()
+                        val activePageId = ui.state.value.page?.id
+                        if (activeHandle === sessionHandle && activePageId == expectedPageId) {
+                            replacePage(finalResult.value, direction = null)
+                        }
+                    }
+
+                    is ReaderResult.Err -> {
+                        if (session.currentHandle() === sessionHandle && ui.state.value.page?.id == expectedPageId) {
+                            ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("Final render failed")))
+                        }
+                    }
+                }
+            } catch (ce: CancellationException) {
+                throw ce
+            } finally {
+                if (finalRenderJob === runningJob) {
+                    finalRenderJob = null
+                    ui.update { it.copy(isRenderingFinal = false) }
+                }
             }
         }
     }
@@ -696,7 +761,7 @@ class ReaderViewModel @Inject constructor(
             is LinkTarget.External -> {
                 val decision = ExternalLinkPolicy.evaluate(target.url)
                 if (decision is ExternalLinkPolicy.Decision.Allow) {
-                    ui.emit(ReaderEffect.OpenExternalUrl(decision.url))
+                    ui.emitGuaranteed(ReaderEffect.OpenExternalUrl(decision.url))
                 } else {
                     ui.emit(
                         ReaderEffect.Snackbar(
@@ -862,7 +927,8 @@ class ReaderViewModel @Inject constructor(
         searchJob?.cancel()
         searchJob = null
         pendingUndoTurn = null
-        releasePageContent(ui.state.value.page)
+        cancelFinalRender()
+        appliedLayoutConstraints = null
         ui.update { it.copy(page = null, isRenderingFinal = false) }
         session.closeCurrent { bookId, locator, progression ->
             saveReadingProgress(
@@ -921,14 +987,14 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private fun handleBackPressed() {
+    private suspend fun handleBackPressed() {
         val current = ui.state.value
         when (val layer = current.layerState) {
             ReaderLayerState.Reading -> {
                 if (!current.chromeVisible) {
                     ui.update { it.copy(chromeVisible = true) }
                 } else {
-                    ui.emit(ReaderEffect.Back)
+                    ui.emitGuaranteed(ReaderEffect.Back)
                 }
             }
 
@@ -1083,9 +1149,13 @@ class ReaderViewModel @Inject constructor(
 
     override fun onCleared() {
         render.cancel()
-        releasePageContent(ui.state.value.page)
+        cancelFinalRender()
         cleanupScope.launch {
-            closeSession()
+            try {
+                closeSession()
+            } finally {
+                cleanupScope.cancel()
+            }
         }
         super.onCleared()
     }
@@ -1094,10 +1164,6 @@ class ReaderViewModel @Inject constructor(
         nextPage: RenderPage,
         direction: PageTurnDirection?
     ) {
-        val previous = ui.state.value.page
-        if (previous != null && previous !== nextPage) {
-            releasePageContent(previous)
-        }
         ui.update { current ->
             val turnDirection = direction
             val shouldAnimate = turnDirection != null && current.page?.id != nextPage.id
@@ -1113,20 +1179,14 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private fun releasePageContent(page: RenderPage?) {
-        when (val content = page?.content) {
-            is RenderContent.BitmapPage -> {
-                if (!content.bitmap.isRecycled) {
-                    content.bitmap.recycle()
-                }
-            }
-
-            is RenderContent.Tiles -> {
-                runCatching { content.tileProvider.close() }
-            }
-
-            else -> Unit
-        }
+    private sealed interface OpenPreparation {
+        data object BookNotFound : OpenPreparation
+        data object MissingSource : OpenPreparation
+        data class Ready(
+            val book: BookRecord,
+            val source: DocumentSource,
+            val initialLocator: Locator?
+        ) : OpenPreparation
     }
 
     private data class StartArgs(
@@ -1145,6 +1205,7 @@ class ReaderViewModel @Inject constructor(
     )
 
     private companion object {
+        const val FINAL_RENDER_DEBOUNCE_MS = 120L
         const val UNDO_WINDOW_MS = 800L
     }
 }

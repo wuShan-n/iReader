@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +66,15 @@ fun PageRenderer(
             Text("No page")
         }
         return
+    }
+
+    DisposableEffect(page.id.value, page.content) {
+        onDispose {
+            val bitmap = (page.content as? RenderContent.BitmapPage)?.bitmap ?: return@onDispose
+            if (!bitmap.isRecycled) {
+                runCatching { bitmap.recycle() }
+            }
+        }
     }
 
     val content = page.content

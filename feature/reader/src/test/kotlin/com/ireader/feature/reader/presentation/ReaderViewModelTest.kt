@@ -29,8 +29,11 @@ import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.Locator
 import com.ireader.reader.runtime.BookProbeResult
 import com.ireader.reader.runtime.ReaderRuntime
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,6 +43,7 @@ import org.junit.Rule
 import org.junit.Test
 import java.lang.reflect.Proxy
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ReaderViewModelTest {
 
     @get:Rule
@@ -51,7 +55,7 @@ class ReaderViewModelTest {
 
         vm.dispatch(ReaderIntent.Start(bookId = 42L, locatorArg = null))
 
-        val state = vm.state.value
+        val state = vm.state.first { it.error != null }
         val error = state.error
         assertFalse(state.isOpening)
         assertNotNull(error)
@@ -68,6 +72,7 @@ class ReaderViewModelTest {
         val config = RenderConfig.ReflowText(fontSizeSp = 22f)
 
         vm.dispatch(ReaderIntent.UpdateConfig(config = config, persist = true))
+        advanceUntilIdle()
 
         assertEquals(config, settings.lastReflow)
         assertEquals(config, vm.state.value.currentConfig)
@@ -78,6 +83,7 @@ class ReaderViewModelTest {
         val vm = newViewModel(bookById = emptyMap())
 
         vm.dispatch(ReaderIntent.OpenMenu)
+        advanceUntilIdle()
 
         assertEquals(ReaderLayerState.Dock(ReaderDockTab.Menu), vm.state.value.layerState)
         assertEquals(ReaderSheet.None, vm.state.value.sheet)
@@ -90,6 +96,7 @@ class ReaderViewModelTest {
 
         vm.dispatch(ReaderIntent.ToggleDockTab(ReaderDockTab.Menu))
         vm.dispatch(ReaderIntent.ToggleDockTab(ReaderDockTab.Menu))
+        advanceUntilIdle()
 
         assertEquals(ReaderLayerState.Reading, vm.state.value.layerState)
         assertEquals(null, vm.state.value.activeDockTab)
@@ -100,6 +107,7 @@ class ReaderViewModelTest {
         val vm = newViewModel(bookById = emptyMap())
 
         vm.dispatch(ReaderIntent.SetMenuTab(ReaderMenuTab.Notes))
+        advanceUntilIdle()
 
         assertEquals(ReaderMenuTab.Notes, vm.state.value.activeMenuTab)
     }
@@ -110,9 +118,11 @@ class ReaderViewModelTest {
 
         vm.dispatch(ReaderIntent.OpenFullSettings)
         vm.dispatch(ReaderIntent.BackPressed)
+        advanceUntilIdle()
         assertEquals(ReaderLayerState.Dock(ReaderDockTab.Settings), vm.state.value.layerState)
 
         vm.dispatch(ReaderIntent.BackPressed)
+        advanceUntilIdle()
         assertEquals(ReaderLayerState.Reading, vm.state.value.layerState)
     }
 
@@ -129,6 +139,7 @@ class ReaderViewModelTest {
                 viewportHeightPx = 1920
             )
         )
+        advanceUntilIdle()
 
         assertEquals(ReaderLayerState.Reading, vm.state.value.layerState)
     }
@@ -146,6 +157,7 @@ class ReaderViewModelTest {
                 viewportHeightPx = 1920
             )
         )
+        advanceUntilIdle()
 
         assertTrue(vm.state.value.chromeVisible)
 
@@ -157,6 +169,7 @@ class ReaderViewModelTest {
                 viewportHeightPx = 1920
             )
         )
+        advanceUntilIdle()
 
         assertFalse(vm.state.value.chromeVisible)
     }
@@ -170,6 +183,7 @@ class ReaderViewModelTest {
         )
 
         vm.dispatch(ReaderIntent.SetVolumeKeyPaging(false))
+        advanceUntilIdle()
 
         assertEquals(false, settings.lastDisplayPrefs?.volumeKeyPagingEnabled)
     }
