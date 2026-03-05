@@ -21,7 +21,6 @@ fun RenderConfig.ReflowText.sanitized(): RenderConfig.ReflowText {
         fontSizeSp = fontSizeSp.finiteOr(defaults.fontSizeSp).coerceIn(8f, 72f),
         lineHeightMult = lineHeightMult.finiteOr(defaults.lineHeightMult).coerceIn(1.0f, 3.0f),
         paragraphSpacingDp = paragraphSpacingDp.finiteOr(defaults.paragraphSpacingDp).coerceIn(0f, 64f),
-        paragraphIndentEm = paragraphIndentEm.finiteOr(defaults.paragraphIndentEm).coerceIn(0f, 6f),
         pagePaddingDp = pagePaddingDp.finiteOr(defaults.pagePaddingDp).coerceIn(0f, 64f)
     )
 }
@@ -43,4 +42,3 @@ private fun Int.finiteRotationDegrees(): Int {
     val raw = this % 360
     return if (raw < 0) raw + 360 else raw
 }
-

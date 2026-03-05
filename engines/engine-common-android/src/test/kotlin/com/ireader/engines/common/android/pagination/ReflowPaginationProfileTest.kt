@@ -4,7 +4,6 @@ import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.api.render.TextAlignMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
@@ -31,11 +30,6 @@ class ReflowPaginationProfileTest {
         val base = RenderConfig.ReflowText()
         val baseKey = ReflowPaginationProfile.keyFor("doc-a", constraints, base)
 
-        val alignKey = ReflowPaginationProfile.keyFor(
-            "doc-a",
-            constraints,
-            base.copy(textAlign = TextAlignMode.START)
-        )
         val breakStrategyKey = ReflowPaginationProfile.keyFor(
             "doc-a",
             constraints,
@@ -46,16 +40,9 @@ class ReflowPaginationProfileTest {
             constraints,
             base.copy(hyphenationMode = HyphenationMode.NONE)
         )
-        val indentKey = ReflowPaginationProfile.keyFor(
-            "doc-a",
-            constraints,
-            base.copy(paragraphIndentEm = 2.4f)
-        )
 
-        assertNotEquals(baseKey, alignKey)
         assertNotEquals(baseKey, breakStrategyKey)
         assertNotEquals(baseKey, hyphenationKey)
-        assertNotEquals(baseKey, indentKey)
     }
 
     @Test
@@ -82,8 +69,6 @@ class ReflowPaginationProfileTest {
             append(base.pagePaddingDp)
             append('|')
             append(base.fontFamilyName.orEmpty())
-            append('|')
-            append(base.textAlign)
             append('|')
             append(base.breakStrategy)
             append('|')

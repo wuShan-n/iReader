@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,7 +60,6 @@ import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.reader.api.render.PageInsetMode
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.api.render.TextAlignMode
 import com.ireader.feature.reader.presentation.PageTurnStyle
 import com.ireader.feature.reader.presentation.pageTurnStyle
 import com.ireader.feature.reader.presentation.withPageTurnStyle
@@ -249,9 +250,7 @@ private fun SpacingPanel(
         RenderConfig.ReflowText(
             lineHeightMult = 1.85f,
             paragraphSpacingDp = 10f,
-            paragraphIndentEm = 2.0f,
             pagePaddingDp = 20f,
-            textAlign = TextAlignMode.JUSTIFY,
             breakStrategy = BreakStrategyMode.BALANCED,
             hyphenationMode = HyphenationMode.NORMAL,
             includeFontPadding = false,
@@ -262,23 +261,20 @@ private fun SpacingPanel(
         val label: String,
         val lineHeight: Float,
         val paragraph: Float,
-        val indent: Float,
         val padding: Float
     )
     val spacingPresets = remember {
         listOf(
-            SpacingPreset(label = "紧凑", lineHeight = 1.45f, paragraph = 4f, indent = 1.6f, padding = 14f),
-            SpacingPreset(label = "默认", lineHeight = 1.85f, paragraph = 10f, indent = 2.0f, padding = 20f),
-            SpacingPreset(label = "宽松", lineHeight = 2.1f, paragraph = 14f, indent = 2.2f, padding = 24f)
+            SpacingPreset(label = "紧凑", lineHeight = 1.45f, paragraph = 4f, padding = 14f),
+            SpacingPreset(label = "默认", lineHeight = 1.85f, paragraph = 10f, padding = 20f),
+            SpacingPreset(label = "宽松", lineHeight = 2.1f, paragraph = 14f, padding = 24f)
         )
     }
     var persist by remember { mutableStateOf(true) }
     var livePreview by remember { mutableStateOf(true) }
     var lineHeight by remember(current.lineHeightMult) { mutableFloatStateOf(current.lineHeightMult) }
     var paragraph by remember(current.paragraphSpacingDp) { mutableFloatStateOf(current.paragraphSpacingDp) }
-    var paragraphIndent by remember(current.paragraphIndentEm) { mutableFloatStateOf(current.paragraphIndentEm) }
     var padding by remember(current.pagePaddingDp) { mutableFloatStateOf(current.pagePaddingDp) }
-    var textAlign by remember(current.textAlign) { mutableStateOf(current.textAlign) }
     var breakStrategy by remember(current.breakStrategy) { mutableStateOf(current.breakStrategy) }
     var hyphenationMode by remember(current.hyphenationMode) { mutableStateOf(current.hyphenationMode) }
     var includeFontPadding by remember(current.includeFontPadding) { mutableStateOf(current.includeFontPadding) }
@@ -291,9 +287,7 @@ private fun SpacingPanel(
         return current.copy(
             lineHeightMult = lineHeight,
             paragraphSpacingDp = paragraph,
-            paragraphIndentEm = paragraphIndent,
             pagePaddingDp = padding,
-            textAlign = textAlign,
             breakStrategy = breakStrategy,
             hyphenationMode = hyphenationMode,
             includeFontPadding = includeFontPadding,
@@ -310,9 +304,7 @@ private fun SpacingPanel(
     fun resetToDefaults() {
         lineHeight = defaults.lineHeightMult
         paragraph = defaults.paragraphSpacingDp
-        paragraphIndent = defaults.paragraphIndentEm
         padding = defaults.pagePaddingDp
-        textAlign = defaults.textAlign
         breakStrategy = defaults.breakStrategy
         hyphenationMode = defaults.hyphenationMode
         includeFontPadding = defaults.includeFontPadding
@@ -324,7 +316,6 @@ private fun SpacingPanel(
     fun applyPreset(preset: SpacingPreset) {
         lineHeight = preset.lineHeight
         paragraph = preset.paragraph
-        paragraphIndent = preset.indent
         padding = preset.padding
         previewIfEnabled()
     }
@@ -332,13 +323,14 @@ private fun SpacingPanel(
     fun isPresetSelected(preset: SpacingPreset): Boolean {
         return abs(lineHeight - preset.lineHeight) < 0.02f &&
             abs(paragraph - preset.paragraph) < 0.5f &&
-            abs(paragraphIndent - preset.indent) < 0.05f &&
             abs(padding - preset.padding) < 0.5f
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .fillMaxHeight(0.78f)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 10.dp)
             .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -369,7 +361,7 @@ private fun SpacingPanel(
             Column(modifier = Modifier.weight(1f)) {
                 Text("尊重出版方样式（EPUB）", color = textColor)
                 Text(
-                    "开启后，行距/段距/对齐/缩进等可能不生效",
+                    "开启后，行距/段距等可能不生效",
                     color = subColor,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -390,17 +382,6 @@ private fun SpacingPanel(
             textColor = textColor,
             onChange = {
                 lineHeight = it
-                previewIfEnabled()
-            }
-        )
-        SettingSliderRow(
-            label = "首行缩进",
-            valueLabel = "${"%.1f".format(paragraphIndent)}em",
-            value = paragraphIndent,
-            range = 0f..3.2f,
-            textColor = textColor,
-            onChange = {
-                paragraphIndent = it
                 previewIfEnabled()
             }
         )
@@ -426,28 +407,6 @@ private fun SpacingPanel(
                 previewIfEnabled()
             }
         )
-
-        Text("对齐方式", color = textColor)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChoiceButton(
-                label = "左对齐",
-                selected = textAlign == TextAlignMode.START,
-                isNightMode = isNightMode,
-                onClick = {
-                    textAlign = TextAlignMode.START
-                    previewIfEnabled()
-                }
-            )
-            ChoiceButton(
-                label = "两端对齐",
-                selected = textAlign == TextAlignMode.JUSTIFY,
-                isNightMode = isNightMode,
-                onClick = {
-                    textAlign = TextAlignMode.JUSTIFY
-                    previewIfEnabled()
-                }
-            )
-        }
 
         Text("断行策略", color = textColor)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

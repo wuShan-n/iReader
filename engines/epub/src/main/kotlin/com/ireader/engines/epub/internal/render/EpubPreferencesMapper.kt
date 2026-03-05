@@ -29,14 +29,6 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
                 .coerceIn(0.5, 4.0)
 
             val advanced = !respectPublisherStyles
-            val textAlign = if (advanced) {
-                when (typography.textAlign) {
-                    com.ireader.reader.api.render.TextAlignMode.START -> ReadiumTextAlign.START
-                    com.ireader.reader.api.render.TextAlignMode.JUSTIFY -> ReadiumTextAlign.JUSTIFY
-                }
-            } else {
-                null
-            }
 
             EpubPreferences(
                 backgroundColor = appearance.backgroundColor,
@@ -46,8 +38,8 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
                 publisherStyles = respectPublisherStyles,
                 lineHeight = if (advanced) typography.lineHeightMult.toDouble().coerceIn(1.0, 2.0) else null,
                 paragraphSpacing = if (advanced) (typography.paragraphSpacingDp / 16f).toDouble().coerceIn(0.0, 2.0) else null,
-                paragraphIndent = if (advanced) typography.paragraphIndentEm.toDouble().coerceIn(0.0, 3.0) else null,
-                textAlign = textAlign,
+                paragraphIndent = if (advanced) 0.0 else null,
+                textAlign = if (advanced) ReadiumTextAlign.JUSTIFY else null,
                 hyphens = if (advanced) typography.hyphenationMode != HyphenationMode.NONE else null,
                 textColor = appearance.textColor,
                 theme = appearance.theme,

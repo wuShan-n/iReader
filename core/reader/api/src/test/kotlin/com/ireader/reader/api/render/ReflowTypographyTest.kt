@@ -26,27 +26,16 @@ class ReflowTypographyTest {
     }
 
     @Test
-    fun `negative indent should be clamped to zero`() {
-        val config = RenderConfig.ReflowText(paragraphIndentEm = -2f)
-
-        assertEquals(0f, config.effectiveParagraphIndentEm(), 0f)
-    }
-
-    @Test
     fun `typography spec should use effective values`() {
         val config = RenderConfig.ReflowText(
             paragraphSpacingDp = 2f,
-            paragraphIndentEm = -1f,
             pagePaddingDp = 10f,
-            pageInsetMode = PageInsetMode.COMPACT,
-            textAlign = TextAlignMode.START
+            pageInsetMode = PageInsetMode.COMPACT
         )
 
         val spec = config.toTypographySpec()
 
         assertEquals(7.5f, spec.pagePaddingDp, 0f)
         assertEquals(1.6f, spec.paragraphSpacingDp, 0.0001f)
-        assertEquals(0f, spec.paragraphIndentEm, 0f)
-        assertEquals(TextAlignMode.START, spec.textAlign)
     }
 }

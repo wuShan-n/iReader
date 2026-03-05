@@ -4,10 +4,8 @@ data class ReflowTypographySpec(
     val fontSizeSp: Float,
     val lineHeightMult: Float,
     val paragraphSpacingDp: Float,
-    val paragraphIndentEm: Float,
     val pagePaddingDp: Float,
     val fontFamilyName: String?,
-    val textAlign: TextAlignMode,
     val breakStrategy: BreakStrategyMode,
     val hyphenationMode: HyphenationMode,
     val includeFontPadding: Boolean
@@ -18,10 +16,8 @@ fun RenderConfig.ReflowText.toTypographySpec(): ReflowTypographySpec {
         fontSizeSp = fontSizeSp,
         lineHeightMult = lineHeightMult,
         paragraphSpacingDp = effectiveParagraphSpacingDp(),
-        paragraphIndentEm = effectiveParagraphIndentEm(),
         pagePaddingDp = effectivePagePaddingDp(),
         fontFamilyName = fontFamilyName,
-        textAlign = textAlign,
         breakStrategy = breakStrategy,
         hyphenationMode = hyphenationMode,
         includeFontPadding = includeFontPadding

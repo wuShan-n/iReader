@@ -13,7 +13,3 @@ fun RenderConfig.ReflowText.effectiveParagraphSpacingDp(): Float {
         PageInsetMode.COMPACT -> (paragraphSpacingDp * 0.8f).coerceAtLeast(0f)
     }
 }
-
-fun RenderConfig.ReflowText.effectiveParagraphIndentEm(): Float {
-    return paragraphIndentEm.coerceAtLeast(0f)
-}

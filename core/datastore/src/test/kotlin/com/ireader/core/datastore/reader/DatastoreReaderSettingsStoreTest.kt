@@ -38,7 +38,6 @@ class DatastoreReaderSettingsStoreTest {
             fontSizeSp = 21f,
             lineHeightMult = 1.7f,
             paragraphSpacingDp = 8f,
-            paragraphIndentEm = 2f,
             pagePaddingDp = 14f,
             respectPublisherStyles = true,
             hyphenationMode = HyphenationMode.FULL
@@ -48,9 +47,10 @@ class DatastoreReaderSettingsStoreTest {
 
         val prefs = dataStore.data.first()
         assertEquals(21f, prefs[floatPreferencesKey("reader.reflow.fontSizeSp")])
-        assertEquals(2f, prefs[floatPreferencesKey("reader.reflow.paragraphIndentEm")])
         assertEquals("FULL", prefs[stringPreferencesKey("reader.reflow.hyphenationMode")])
         assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.respectPublisherStyles")])
+        assertNull(prefs[floatPreferencesKey("reader.reflow.paragraphIndentEm")])
+        assertNull(prefs[stringPreferencesKey("reader.reflow.textAlign")])
         assertNull(prefs[floatPreferencesKey("reader.reflow.font_size_sp")])
     }
 

@@ -30,6 +30,7 @@ import com.ireader.core.common.android.typography.toAndroidJustificationMode
 import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
+import com.ireader.reader.api.render.TextAlignMode
 import com.ireader.reader.api.render.toTypographySpec
 import com.ireader.reader.model.DocumentLink
 import kotlin.math.roundToInt
@@ -157,7 +158,7 @@ fun TextPage(
                 textView.hyphenationFrequency = hyphenation
             }
             runCatching {
-                val expectedJustification = typography.textAlign.toAndroidJustificationMode(
+                val expectedJustification = TextAlignMode.JUSTIFY.toAndroidJustificationMode(
                     preferInterCharacter = preferInterCharacterJustify
                 )
                 if (textView.justificationMode != expectedJustification) {

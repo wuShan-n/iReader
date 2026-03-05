@@ -1,6 +1,5 @@
 package com.ireader.engines.epub.internal.render
 
-import com.ireader.reader.api.render.TextAlignMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.READER_APPEARANCE_BG_ARGB_EXTRA_KEY
 import com.ireader.reader.api.render.READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY
@@ -33,9 +32,7 @@ class EpubPreferencesMapperTest {
             paragraphSpacingDp = 200f,
             pagePaddingDp = 200f,
             fontFamilyName = "sans",
-            hyphenationMode = HyphenationMode.FULL,
-            textAlign = TextAlignMode.START,
-            paragraphIndentEm = 10f
+            hyphenationMode = HyphenationMode.FULL
         ).toEpubPreferences()
 
         assertNotNull(prefs.fontSize)
@@ -48,12 +45,12 @@ class EpubPreferencesMapperTest {
         assertNotNull(prefs.textAlign)
         assertEquals(4.0, prefs.fontSize!!, 0.0001)
         assertEquals(2.0, prefs.lineHeight!!, 0.0001)
-        assertEquals(3.0, prefs.paragraphIndent!!, 0.0001)
+        assertEquals(0.0, prefs.paragraphIndent!!, 0.0001)
         assertEquals(2.0, prefs.paragraphSpacing!!, 0.0001)
         assertEquals(4.0, prefs.pageMargins!!, 0.0001)
         assertEquals(false, prefs.scroll)
         assertEquals(false, prefs.publisherStyles)
-        assertEquals(ReadiumTextAlign.START, prefs.textAlign)
+        assertEquals(ReadiumTextAlign.JUSTIFY, prefs.textAlign)
         assertFalse(prefs.fontFamily == null)
     }
 
@@ -93,8 +90,6 @@ class EpubPreferencesMapperTest {
             respectPublisherStyles = true,
             lineHeightMult = 2.0f,
             paragraphSpacingDp = 10f,
-            paragraphIndentEm = 2.0f,
-            textAlign = TextAlignMode.JUSTIFY,
             hyphenationMode = HyphenationMode.FULL
         ).toEpubPreferences()
 

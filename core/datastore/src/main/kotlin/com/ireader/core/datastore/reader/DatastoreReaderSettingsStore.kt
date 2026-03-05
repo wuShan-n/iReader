@@ -14,7 +14,6 @@ import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.api.render.TextAlignMode
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -32,10 +31,10 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val fontSizeSp = floatPreferencesKey("reader.reflow.fontSizeSp")
             val lineHeightMult = floatPreferencesKey("reader.reflow.lineHeightMult")
             val paragraphSpacingDp = floatPreferencesKey("reader.reflow.paragraphSpacingDp")
-            val paragraphIndentEm = floatPreferencesKey("reader.reflow.paragraphIndentEm")
+            val paragraphIndentEmLegacy = floatPreferencesKey("reader.reflow.paragraphIndentEm")
             val pagePaddingDp = floatPreferencesKey("reader.reflow.pagePaddingDp")
             val fontFamilyName = stringPreferencesKey("reader.reflow.fontFamilyName")
-            val textAlign = stringPreferencesKey("reader.reflow.textAlign")
+            val textAlignLegacy = stringPreferencesKey("reader.reflow.textAlign")
             val breakStrategy = stringPreferencesKey("reader.reflow.breakStrategy")
             val hyphenationMode = stringPreferencesKey("reader.reflow.hyphenationMode")
             val includeFontPadding = booleanPreferencesKey("reader.reflow.includeFontPadding")
@@ -69,10 +68,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
         fontSizeSp = 20f,
         lineHeightMult = 1.85f,
         paragraphSpacingDp = 10f,
-        paragraphIndentEm = 2.0f,
         pagePaddingDp = 20f,
         fontFamilyName = "serif",
-        textAlign = TextAlignMode.JUSTIFY,
         breakStrategy = BreakStrategyMode.BALANCED,
         hyphenationMode = HyphenationMode.NORMAL,
         includeFontPadding = false,
@@ -88,9 +85,6 @@ class DatastoreReaderSettingsStore @Inject constructor(
 
     override val reflowConfig: Flow<RenderConfig.ReflowText> =
         dataStore.data.map { prefs ->
-            val textAlign = prefs[Keys.Reflow.textAlign]
-                ?.let(::parseTextAlignMode)
-                ?: defaultReflow.textAlign
             val breakStrategy = prefs[Keys.Reflow.breakStrategy]
                 ?.let(::parseBreakStrategyMode)
                 ?: defaultReflow.breakStrategy
@@ -113,10 +107,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
                 fontSizeSp = prefs[Keys.Reflow.fontSizeSp] ?: defaultReflow.fontSizeSp,
                 lineHeightMult = prefs[Keys.Reflow.lineHeightMult] ?: defaultReflow.lineHeightMult,
                 paragraphSpacingDp = prefs[Keys.Reflow.paragraphSpacingDp] ?: defaultReflow.paragraphSpacingDp,
-                paragraphIndentEm = prefs[Keys.Reflow.paragraphIndentEm] ?: defaultReflow.paragraphIndentEm,
                 pagePaddingDp = prefs[Keys.Reflow.pagePaddingDp] ?: defaultReflow.pagePaddingDp,
                 fontFamilyName = prefs[Keys.Reflow.fontFamilyName] ?: defaultReflow.fontFamilyName,
-                textAlign = textAlign,
                 breakStrategy = breakStrategy,
                 hyphenationMode = hyphenationMode,
                 includeFontPadding = includeFontPadding,
@@ -179,7 +171,6 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Reflow.fontSizeSp] = config.fontSizeSp
             prefs[Keys.Reflow.lineHeightMult] = config.lineHeightMult
             prefs[Keys.Reflow.paragraphSpacingDp] = config.paragraphSpacingDp
-            prefs[Keys.Reflow.paragraphIndentEm] = config.paragraphIndentEm
             prefs[Keys.Reflow.pagePaddingDp] = config.pagePaddingDp
             val fontFamilyName = config.fontFamilyName
             if (fontFamilyName.isNullOrBlank()) {
@@ -187,7 +178,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
             } else {
                 prefs[Keys.Reflow.fontFamilyName] = fontFamilyName
             }
-            prefs[Keys.Reflow.textAlign] = config.textAlign.name
+            prefs.remove(Keys.Reflow.paragraphIndentEmLegacy)
+            prefs.remove(Keys.Reflow.textAlignLegacy)
             prefs[Keys.Reflow.breakStrategy] = config.breakStrategy.name
             prefs[Keys.Reflow.hyphenationMode] = config.hyphenationMode.name
             prefs[Keys.Reflow.includeFontPadding] = config.includeFontPadding
@@ -223,11 +215,6 @@ class DatastoreReaderSettingsStore @Inject constructor(
             mutablePrefs[Keys.Display.tapZonePreset] = prefs.tapZonePreset.storageValue
             mutablePrefs[Keys.Display.preventAccidentalTurn] = prefs.preventAccidentalTurn
         }
-    }
-
-    private fun parseTextAlignMode(raw: String): TextAlignMode {
-        return runCatching { TextAlignMode.valueOf(raw) }
-            .getOrElse { defaultReflow.textAlign }
     }
 
     private fun parseBreakStrategyMode(raw: String): BreakStrategyMode {

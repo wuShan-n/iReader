@@ -35,7 +35,6 @@ class RenderConfigSanitizerTest {
             fontSizeSp = Float.NaN,
             lineHeightMult = 9f,
             paragraphSpacingDp = -5f,
-            paragraphIndentEm = 8f,
             pagePaddingDp = Float.POSITIVE_INFINITY
         )
 
@@ -45,7 +44,6 @@ class RenderConfigSanitizerTest {
         assertEquals(defaults.fontSizeSp, sanitized.fontSizeSp, 0f)
         assertEquals(3f, sanitized.lineHeightMult, 0f)
         assertEquals(0f, sanitized.paragraphSpacingDp, 0f)
-        assertEquals(6f, sanitized.paragraphIndentEm, 0f)
         assertEquals(defaults.pagePaddingDp, sanitized.pagePaddingDp, 0f)
     }
 
