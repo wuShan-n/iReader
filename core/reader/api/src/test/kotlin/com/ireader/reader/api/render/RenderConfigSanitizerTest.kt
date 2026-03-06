@@ -35,16 +35,28 @@ class RenderConfigSanitizerTest {
             fontSizeSp = Float.NaN,
             lineHeightMult = 9f,
             paragraphSpacingDp = -5f,
-            pagePaddingDp = Float.POSITIVE_INFINITY
+            pagePaddingDp = Float.POSITIVE_INFINITY,
+            extra = mapOf(
+                PAGE_PADDING_TOP_DP_EXTRA_KEY to "999",
+                PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to "-5"
+            )
         )
 
         val sanitized = dirty.sanitized()
         val defaults = RenderConfig.ReflowText()
 
         assertEquals(defaults.fontSizeSp, sanitized.fontSizeSp, 0f)
-        assertEquals(3f, sanitized.lineHeightMult, 0f)
+        assertEquals(REFLOW_LINE_HEIGHT_MAX, sanitized.lineHeightMult, 0f)
         assertEquals(0f, sanitized.paragraphSpacingDp, 0f)
         assertEquals(defaults.pagePaddingDp, sanitized.pagePaddingDp, 0f)
+        assertEquals(
+            REFLOW_PAGE_PADDING_VERTICAL_MAX_DP.toString(),
+            sanitized.extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]
+        )
+        assertEquals(
+            REFLOW_PAGE_PADDING_VERTICAL_MIN_DP.toString(),
+            sanitized.extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY]
+        )
     }
 
     @Test

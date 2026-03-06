@@ -13,6 +13,11 @@ import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
+import com.ireader.reader.api.render.REFLOW_LINE_HEIGHT_MAX
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MIN_DP
+import com.ireader.reader.api.render.REFLOW_PARAGRAPH_SPACING_MAX_DP
 import com.ireader.reader.api.render.RenderConfig
 import java.io.File
 import kotlinx.coroutines.flow.first
@@ -140,6 +145,31 @@ class DatastoreReaderSettingsStoreTest {
         val config = store.getReflowConfig()
         assertEquals("cover_horizontal", config.extra[PAGE_TURN_EXTRA_KEY])
         assertEquals("cover_overlay", config.extra[PAGE_TURN_STYLE_EXTRA_KEY])
+    }
+
+    @Test
+    fun `reflow config should clamp legacy spacing values into supported ranges`() = runTest {
+        val dataStore = createDataStore(
+            scope = this,
+            testFile = File(temporaryFolder.root, "reader_settings_reflow_clamp.preferences_pb")
+        )
+        val store = DatastoreReaderSettingsStore(dataStore)
+
+        dataStore.edit { prefs ->
+            prefs[floatPreferencesKey("reader.reflow.lineHeightMult")] = 9f
+            prefs[floatPreferencesKey("reader.reflow.paragraphSpacingDp")] = 999f
+            prefs[floatPreferencesKey("reader.reflow.pagePaddingDp")] = -5f
+            prefs[floatPreferencesKey("reader.reflow.pagePaddingTopDp")] = 100f
+            prefs[floatPreferencesKey("reader.reflow.pagePaddingBottomDp")] = -10f
+        }
+
+        val config = store.getReflowConfig()
+
+        assertEquals(REFLOW_LINE_HEIGHT_MAX, config.lineHeightMult, 0f)
+        assertEquals(REFLOW_PARAGRAPH_SPACING_MAX_DP, config.paragraphSpacingDp, 0f)
+        assertEquals(REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP, config.pagePaddingDp, 0f)
+        assertEquals(REFLOW_PAGE_PADDING_VERTICAL_MAX_DP.toString(), config.extra[PAGE_PADDING_TOP_DP_EXTRA_KEY])
+        assertEquals(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP.toString(), config.extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY])
     }
 
     @Test

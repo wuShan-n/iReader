@@ -43,6 +43,10 @@ import com.ireader.feature.reader.ui.ReaderSurface
 import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PageTurnMode
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_HORIZONTAL_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MIN_DP
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
@@ -136,7 +140,9 @@ fun PageRenderer(
                     }
                 } else {
                     val reflowConfig = state.currentConfig as? RenderConfig.ReflowText
-                    val horizontalPaddingDp = reflowConfig?.pagePaddingDp?.coerceIn(0f, 64f) ?: 0f
+                    val horizontalPaddingDp = reflowConfig?.pagePaddingDp
+                        ?.coerceIn(REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP, REFLOW_PAGE_PADDING_HORIZONTAL_MAX_DP)
+                        ?: 0f
                     val topPaddingDp = reflowConfig?.resolveTopPaddingDp(horizontalPaddingDp) ?: horizontalPaddingDp
                     val bottomPaddingDp = reflowConfig?.resolveBottomPaddingDp(horizontalPaddingDp) ?: horizontalPaddingDp
                     val readiumBasePaddingDp = minOf(horizontalPaddingDp, topPaddingDp, bottomPaddingDp)
@@ -346,15 +352,15 @@ private data class TextLinkHit(
 private fun RenderConfig.ReflowText.resolveTopPaddingDp(defaultDp: Float): Float {
     return (extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
         .takeIf(Float::isFinite)
-        ?.coerceIn(0f, 64f)
-        ?: defaultDp.coerceIn(0f, 64f)
+        ?.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
+        ?: defaultDp.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
 }
 
 private fun RenderConfig.ReflowText.resolveBottomPaddingDp(defaultDp: Float): Float {
     return (extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
         .takeIf(Float::isFinite)
-        ?.coerceIn(0f, 64f)
-        ?: defaultDp.coerceIn(0f, 64f)
+        ?.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
+        ?: defaultDp.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
 }
 
 private fun hitTestTextLink(

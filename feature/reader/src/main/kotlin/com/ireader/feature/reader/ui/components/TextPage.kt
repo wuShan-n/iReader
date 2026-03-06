@@ -30,6 +30,8 @@ import com.ireader.core.common.android.typography.toAndroidJustificationMode
 import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MIN_DP
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.TextAlignMode
@@ -252,13 +254,13 @@ private const val DEFAULT_HIGHLIGHT_OPACITY: Float = 0.35f
 private fun RenderConfig.ReflowText.resolveTopPaddingDp(defaultDp: Float): Float {
     return (extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
         .takeIf(Float::isFinite)
-        ?.coerceIn(0f, 64f)
-        ?: defaultDp.coerceIn(0f, 64f)
+        ?.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
+        ?: defaultDp.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
 }
 
 private fun RenderConfig.ReflowText.resolveBottomPaddingDp(defaultDp: Float): Float {
     return (extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
         .takeIf(Float::isFinite)
-        ?.coerceIn(0f, 64f)
-        ?: defaultDp.coerceIn(0f, 64f)
+        ?.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
+        ?: defaultDp.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
 }

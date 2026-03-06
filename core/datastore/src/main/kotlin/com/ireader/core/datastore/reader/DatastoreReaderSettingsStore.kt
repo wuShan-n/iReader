@@ -15,7 +15,16 @@ import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
+import com.ireader.reader.api.render.REFLOW_LINE_HEIGHT_MAX
+import com.ireader.reader.api.render.REFLOW_LINE_HEIGHT_MIN
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_HORIZONTAL_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MIN_DP
+import com.ireader.reader.api.render.REFLOW_PARAGRAPH_SPACING_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PARAGRAPH_SPACING_MIN_DP
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.sanitized
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -108,16 +117,23 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val pageTurnStyle = normalizePageTurnStyleRaw(
                 raw = prefs[Keys.Reflow.pageTurnStyle]
             )
-            val pagePaddingTopDp = (prefs[Keys.Reflow.pagePaddingTopDp]
-                ?: defaultReflow.pagePaddingDp).coerceIn(0f, 64f)
-            val pagePaddingBottomDp = (prefs[Keys.Reflow.pagePaddingBottomDp]
-                ?: defaultReflow.pagePaddingDp).coerceIn(0f, 64f)
+            val lineHeightMult = sanitizeLineHeightMult(prefs[Keys.Reflow.lineHeightMult])
+            val paragraphSpacingDp = sanitizeParagraphSpacingDp(prefs[Keys.Reflow.paragraphSpacingDp])
+            val pagePaddingDp = sanitizeHorizontalPaddingDp(prefs[Keys.Reflow.pagePaddingDp])
+            val pagePaddingTopDp = parsePaddingDpPreference(
+                raw = prefs[Keys.Reflow.pagePaddingTopDp],
+                fallback = pagePaddingDp
+            )
+            val pagePaddingBottomDp = parsePaddingDpPreference(
+                raw = prefs[Keys.Reflow.pagePaddingBottomDp],
+                fallback = pagePaddingDp
+            )
 
             defaultReflow.copy(
                 fontSizeSp = prefs[Keys.Reflow.fontSizeSp] ?: defaultReflow.fontSizeSp,
-                lineHeightMult = prefs[Keys.Reflow.lineHeightMult] ?: defaultReflow.lineHeightMult,
-                paragraphSpacingDp = prefs[Keys.Reflow.paragraphSpacingDp] ?: defaultReflow.paragraphSpacingDp,
-                pagePaddingDp = prefs[Keys.Reflow.pagePaddingDp] ?: defaultReflow.pagePaddingDp,
+                lineHeightMult = lineHeightMult,
+                paragraphSpacingDp = paragraphSpacingDp,
+                pagePaddingDp = pagePaddingDp,
                 fontFamilyName = prefs[Keys.Reflow.fontFamilyName] ?: defaultReflow.fontFamilyName,
                 breakStrategy = breakStrategy,
                 hyphenationMode = hyphenationMode,
@@ -179,12 +195,13 @@ class DatastoreReaderSettingsStore @Inject constructor(
     override suspend fun getDisplayPrefs(): ReaderDisplayPrefs = displayPrefs.first()
 
     override suspend fun setReflowConfig(config: RenderConfig.ReflowText) {
+        val sanitizedConfig = config.sanitized()
         dataStore.edit { prefs ->
-            prefs[Keys.Reflow.fontSizeSp] = config.fontSizeSp
-            prefs[Keys.Reflow.lineHeightMult] = config.lineHeightMult
-            prefs[Keys.Reflow.paragraphSpacingDp] = config.paragraphSpacingDp
-            prefs[Keys.Reflow.pagePaddingDp] = config.pagePaddingDp
-            val fontFamilyName = config.fontFamilyName
+            prefs[Keys.Reflow.fontSizeSp] = sanitizedConfig.fontSizeSp
+            prefs[Keys.Reflow.lineHeightMult] = sanitizedConfig.lineHeightMult
+            prefs[Keys.Reflow.paragraphSpacingDp] = sanitizedConfig.paragraphSpacingDp
+            prefs[Keys.Reflow.pagePaddingDp] = sanitizedConfig.pagePaddingDp
+            val fontFamilyName = sanitizedConfig.fontFamilyName
             if (fontFamilyName.isNullOrBlank()) {
                 prefs.remove(Keys.Reflow.fontFamilyName)
             } else {
@@ -192,22 +209,22 @@ class DatastoreReaderSettingsStore @Inject constructor(
             }
             prefs.remove(Keys.Reflow.paragraphIndentEmLegacy)
             prefs.remove(Keys.Reflow.textAlignLegacy)
-            prefs[Keys.Reflow.breakStrategy] = config.breakStrategy.name
-            prefs[Keys.Reflow.hyphenationMode] = config.hyphenationMode.name
-            prefs[Keys.Reflow.includeFontPadding] = config.includeFontPadding
-            prefs[Keys.Reflow.pageInsetMode] = config.pageInsetMode.name
-            prefs[Keys.Reflow.respectPublisherStyles] = config.respectPublisherStyles
+            prefs[Keys.Reflow.breakStrategy] = sanitizedConfig.breakStrategy.name
+            prefs[Keys.Reflow.hyphenationMode] = sanitizedConfig.hyphenationMode.name
+            prefs[Keys.Reflow.includeFontPadding] = sanitizedConfig.includeFontPadding
+            prefs[Keys.Reflow.pageInsetMode] = sanitizedConfig.pageInsetMode.name
+            prefs[Keys.Reflow.respectPublisherStyles] = sanitizedConfig.respectPublisherStyles
             prefs[Keys.Reflow.pagePaddingTopDp] = parsePaddingDpExtra(
-                raw = config.extra[PAGE_PADDING_TOP_DP_EXTRA_KEY],
-                fallback = config.pagePaddingDp
+                raw = sanitizedConfig.extra[PAGE_PADDING_TOP_DP_EXTRA_KEY],
+                fallback = sanitizedConfig.pagePaddingDp
             )
             prefs[Keys.Reflow.pagePaddingBottomDp] = parsePaddingDpExtra(
-                raw = config.extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY],
-                fallback = config.pagePaddingDp
+                raw = sanitizedConfig.extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY],
+                fallback = sanitizedConfig.pagePaddingDp
             )
-            val pageTurnMode = PageTurnMode.fromStorageValue(config.extra[PAGE_TURN_EXTRA_KEY])
+            val pageTurnMode = PageTurnMode.fromStorageValue(sanitizedConfig.extra[PAGE_TURN_EXTRA_KEY])
             val pageTurnStyle = normalizePageTurnStyleRaw(
-                raw = config.extra[PAGE_TURN_STYLE_EXTRA_KEY]
+                raw = sanitizedConfig.extra[PAGE_TURN_STYLE_EXTRA_KEY]
             )
             prefs[Keys.Reflow.pageTurnMode] = pageTurnMode.storageValue
             prefs[Keys.Reflow.pageTurnStyle] = pageTurnStyle
@@ -252,11 +269,35 @@ class DatastoreReaderSettingsStore @Inject constructor(
             .getOrElse { defaultReflow.pageInsetMode }
     }
 
+    private fun sanitizeLineHeightMult(raw: Float?): Float {
+        val fallback = defaultReflow.lineHeightMult
+        return (raw?.takeIf(Float::isFinite) ?: fallback)
+            .coerceIn(REFLOW_LINE_HEIGHT_MIN, REFLOW_LINE_HEIGHT_MAX)
+    }
+
+    private fun sanitizeParagraphSpacingDp(raw: Float?): Float {
+        val fallback = defaultReflow.paragraphSpacingDp
+        return (raw?.takeIf(Float::isFinite) ?: fallback)
+            .coerceIn(REFLOW_PARAGRAPH_SPACING_MIN_DP, REFLOW_PARAGRAPH_SPACING_MAX_DP)
+    }
+
+    private fun sanitizeHorizontalPaddingDp(raw: Float?): Float {
+        val fallback = defaultReflow.pagePaddingDp
+        return (raw?.takeIf(Float::isFinite) ?: fallback)
+            .coerceIn(REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP, REFLOW_PAGE_PADDING_HORIZONTAL_MAX_DP)
+    }
+
+    private fun parsePaddingDpPreference(raw: Float?, fallback: Float): Float {
+        return (raw?.takeIf(Float::isFinite) ?: fallback)
+            .coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
+    }
+
     private fun parsePaddingDpExtra(raw: String?, fallback: Float): Float {
         val parsed = raw
             ?.toFloatOrNull()
             ?.takeIf(Float::isFinite)
-        return (parsed ?: fallback).coerceIn(0f, 64f)
+        return (parsed ?: fallback)
+            .coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
     }
 
     private fun normalizePageTurnStyleRaw(raw: String?): String {

@@ -52,7 +52,7 @@ class EpubPreferencesMapperTest {
         assertEquals(2.0, prefs.lineHeight!!, 0.0001)
         assertEquals(0.0, prefs.paragraphIndent!!, 0.0001)
         assertEquals(2.0, prefs.paragraphSpacing!!, 0.0001)
-        assertEquals(4.0, prefs.pageMargins!!, 0.0001)
+        assertEquals(3.0, prefs.pageMargins!!, 0.0001)
         assertEquals(false, prefs.scroll)
         assertEquals(false, prefs.publisherStyles)
         assertEquals(ReadiumTextAlign.JUSTIFY, prefs.textAlign)
@@ -70,6 +70,19 @@ class EpubPreferencesMapperTest {
         ).toEpubPreferences()
 
         assertEquals(0.75, prefs.pageMargins!!, 0.0001)
+    }
+
+    @Test
+    fun `reflow page margin baseline should clamp vertical extras to supported range`() {
+        val prefs = RenderConfig.ReflowText(
+            pagePaddingDp = 60f,
+            extra = mapOf(
+                PAGE_PADDING_TOP_DP_EXTRA_KEY to "100.0",
+                PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to "120.0"
+            )
+        ).toEpubPreferences()
+
+        assertEquals(3.0, prefs.pageMargins!!, 0.0001)
     }
 
     @Test

@@ -17,11 +17,32 @@ object RenderConfigSanitizer {
 
 fun RenderConfig.ReflowText.sanitized(): RenderConfig.ReflowText {
     val defaults = RenderConfig.ReflowText()
+    val sanitizedPagePaddingDp = pagePaddingDp
+        .finiteOr(defaults.pagePaddingDp)
+        .coerceIn(REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP, REFLOW_PAGE_PADDING_HORIZONTAL_MAX_DP)
+    val sanitizedExtra = extra.toMutableMap()
+    if (extra.containsKey(PAGE_PADDING_TOP_DP_EXTRA_KEY)) {
+        sanitizedExtra[PAGE_PADDING_TOP_DP_EXTRA_KEY] = sanitizeVerticalPaddingDp(
+            raw = extra[PAGE_PADDING_TOP_DP_EXTRA_KEY],
+            fallback = sanitizedPagePaddingDp
+        ).toString()
+    }
+    if (extra.containsKey(PAGE_PADDING_BOTTOM_DP_EXTRA_KEY)) {
+        sanitizedExtra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY] = sanitizeVerticalPaddingDp(
+            raw = extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY],
+            fallback = sanitizedPagePaddingDp
+        ).toString()
+    }
     return copy(
         fontSizeSp = fontSizeSp.finiteOr(defaults.fontSizeSp).coerceIn(8f, 72f),
-        lineHeightMult = lineHeightMult.finiteOr(defaults.lineHeightMult).coerceIn(1.0f, 3.0f),
-        paragraphSpacingDp = paragraphSpacingDp.finiteOr(defaults.paragraphSpacingDp).coerceIn(0f, 64f),
-        pagePaddingDp = pagePaddingDp.finiteOr(defaults.pagePaddingDp).coerceIn(0f, 64f)
+        lineHeightMult = lineHeightMult
+            .finiteOr(defaults.lineHeightMult)
+            .coerceIn(REFLOW_LINE_HEIGHT_MIN, REFLOW_LINE_HEIGHT_MAX),
+        paragraphSpacingDp = paragraphSpacingDp
+            .finiteOr(defaults.paragraphSpacingDp)
+            .coerceIn(REFLOW_PARAGRAPH_SPACING_MIN_DP, REFLOW_PARAGRAPH_SPACING_MAX_DP),
+        pagePaddingDp = sanitizedPagePaddingDp,
+        extra = sanitizedExtra
     )
 }
 
@@ -41,4 +62,14 @@ private fun Float.finiteOr(defaultValue: Float): Float {
 private fun Int.finiteRotationDegrees(): Int {
     val raw = this % 360
     return if (raw < 0) raw + 360 else raw
+}
+
+private fun sanitizeVerticalPaddingDp(raw: String?, fallback: Float): Float {
+    val parsed = raw
+        ?.toFloatOrNull()
+        ?.takeIf(Float::isFinite)
+    return (parsed ?: fallback).coerceIn(
+        REFLOW_PAGE_PADDING_VERTICAL_MIN_DP,
+        REFLOW_PAGE_PADDING_VERTICAL_MAX_DP
+    )
 }

@@ -59,6 +59,14 @@ import com.ireader.core.designsystem.PrototypeIcons
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
+import com.ireader.reader.api.render.REFLOW_LINE_HEIGHT_MAX
+import com.ireader.reader.api.render.REFLOW_LINE_HEIGHT_MIN
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_HORIZONTAL_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MIN_DP
+import com.ireader.reader.api.render.REFLOW_PARAGRAPH_SPACING_MAX_DP
+import com.ireader.reader.api.render.REFLOW_PARAGRAPH_SPACING_MIN_DP
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.feature.reader.presentation.PageTurnStyle
 import com.ireader.feature.reader.presentation.pageTurnStyle
@@ -288,7 +296,7 @@ private fun SpacingPanel(
             ),
             SpacingPreset(
                 label = "宽松",
-                lineHeight = 2.1f,
+                lineHeight = 2.0f,
                 paragraph = 14f,
                 horizontalPadding = 24f,
                 topPadding = 26f,
@@ -296,9 +304,25 @@ private fun SpacingPanel(
             )
         )
     }
-    var lineHeight by remember(current.lineHeightMult) { mutableFloatStateOf(current.lineHeightMult) }
-    var paragraph by remember(current.paragraphSpacingDp) { mutableFloatStateOf(current.paragraphSpacingDp) }
-    var horizontalPadding by remember(current.pagePaddingDp) { mutableFloatStateOf(current.pagePaddingDp) }
+    var lineHeight by remember(current.lineHeightMult) {
+        mutableFloatStateOf(current.lineHeightMult.coerceIn(REFLOW_LINE_HEIGHT_MIN, REFLOW_LINE_HEIGHT_MAX))
+    }
+    var paragraph by remember(current.paragraphSpacingDp) {
+        mutableFloatStateOf(
+            current.paragraphSpacingDp.coerceIn(
+                REFLOW_PARAGRAPH_SPACING_MIN_DP,
+                REFLOW_PARAGRAPH_SPACING_MAX_DP
+            )
+        )
+    }
+    var horizontalPadding by remember(current.pagePaddingDp) {
+        mutableFloatStateOf(
+            current.pagePaddingDp.coerceIn(
+                REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP,
+                REFLOW_PAGE_PADDING_HORIZONTAL_MAX_DP
+            )
+        )
+    }
     var topPadding by remember(current.extra, current.pagePaddingDp) {
         mutableFloatStateOf(current.resolveTopPaddingDp())
     }
@@ -412,7 +436,8 @@ private fun SpacingPanel(
             label = "行间距",
             valueLabel = "%.2f".format(lineHeight),
             value = lineHeight,
-            range = 1.1f..2.4f,
+            range = REFLOW_LINE_HEIGHT_MIN..REFLOW_LINE_HEIGHT_MAX,
+            step = 0.05f,
             textColor = textColor,
             enabled = allowParagraphSpacingAdjustments,
             onChange = {
@@ -424,7 +449,8 @@ private fun SpacingPanel(
             label = "段间距",
             valueLabel = "${paragraph.roundToInt()}dp",
             value = paragraph,
-            range = 0f..24f,
+            range = REFLOW_PARAGRAPH_SPACING_MIN_DP..REFLOW_PARAGRAPH_SPACING_MAX_DP,
+            step = 1f,
             textColor = textColor,
             enabled = allowParagraphSpacingAdjustments,
             onChange = {
@@ -436,7 +462,8 @@ private fun SpacingPanel(
             label = "左右间距",
             valueLabel = "${horizontalPadding.roundToInt()}dp",
             value = horizontalPadding,
-            range = 8f..42f,
+            range = REFLOW_PAGE_PADDING_HORIZONTAL_MIN_DP..REFLOW_PAGE_PADDING_HORIZONTAL_MAX_DP,
+            step = 1f,
             textColor = textColor,
             enabled = allowParagraphSpacingAdjustments,
             onChange = {
@@ -448,7 +475,8 @@ private fun SpacingPanel(
             label = "上间距",
             valueLabel = "${topPadding.roundToInt()}dp",
             value = topPadding,
-            range = 0f..64f,
+            range = REFLOW_PAGE_PADDING_VERTICAL_MIN_DP..REFLOW_PAGE_PADDING_VERTICAL_MAX_DP,
+            step = 1f,
             textColor = textColor,
             enabled = allowParagraphSpacingAdjustments,
             onChange = {
@@ -460,7 +488,8 @@ private fun SpacingPanel(
             label = "下间距",
             valueLabel = "${bottomPadding.roundToInt()}dp",
             value = bottomPadding,
-            range = 0f..64f,
+            range = REFLOW_PAGE_PADDING_VERTICAL_MIN_DP..REFLOW_PAGE_PADDING_VERTICAL_MAX_DP,
+            step = 1f,
             textColor = textColor,
             enabled = allowParagraphSpacingAdjustments,
             onChange = {
@@ -475,16 +504,16 @@ private fun RenderConfig.ReflowText.resolveTopPaddingDp(): Float {
     val raw = extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]
     return (raw?.toFloatOrNull() ?: pagePaddingDp)
         .takeIf(Float::isFinite)
-        ?.coerceIn(0f, 64f)
-        ?: pagePaddingDp.coerceIn(0f, 64f)
+        ?.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
+        ?: pagePaddingDp.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
 }
 
 private fun RenderConfig.ReflowText.resolveBottomPaddingDp(): Float {
     val raw = extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY]
     return (raw?.toFloatOrNull() ?: pagePaddingDp)
         .takeIf(Float::isFinite)
-        ?.coerceIn(0f, 64f)
-        ?: pagePaddingDp.coerceIn(0f, 64f)
+        ?.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
+        ?: pagePaddingDp.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
 }
 
 @Composable
@@ -876,11 +905,13 @@ private fun SettingSliderRow(
     valueLabel: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    step: Float = 0f,
     textColor: Color,
     enabled: Boolean = true,
     onChange: (Float) -> Unit
 ) {
     val effectiveTextColor = if (enabled) textColor else textColor.copy(alpha = 0.52f)
+    val snappedValue = remember(value, range, step) { snapSliderValue(value, range, step) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -892,10 +923,13 @@ private fun SettingSliderRow(
             modifier = Modifier.width(64.dp)
         )
         Slider(
-            value = value,
+            value = snappedValue,
             valueRange = range,
+            steps = sliderDiscreteSteps(range, step),
             enabled = enabled,
-            onValueChange = onChange,
+            onValueChange = { raw ->
+                onChange(snapSliderValue(raw, range, step))
+            },
             modifier = Modifier.weight(1f)
         )
         Text(
