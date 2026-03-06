@@ -52,13 +52,13 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.core.designsystem.PrototypeIcons
-import com.ireader.reader.api.render.BreakStrategyMode
-import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.core.designsystem.ReaderTokens
-import com.ireader.reader.api.render.PageInsetMode
+import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.feature.reader.presentation.PageTurnStyle
 import com.ireader.feature.reader.presentation.pageTurnStyle
@@ -80,6 +80,7 @@ fun SettingsSheet(
     panel: ReaderSettingsPanel,
     capabilities: DocumentCapabilities?,
     config: RenderConfig?,
+    isEmbeddedEpub: Boolean,
     isNightMode: Boolean,
     backgroundPreset: ReaderBackgroundPreset,
     onClose: () -> Unit,
@@ -120,6 +121,7 @@ fun SettingsSheet(
 
             ReaderSettingsPanel.PageTurn -> PageTurnPanel(
                 current = current,
+                isEmbeddedEpub = isEmbeddedEpub,
                 isNightMode = isNightMode,
                 onBack = onBackToMain,
                 onApply = onApply
@@ -251,79 +253,104 @@ private fun SpacingPanel(
             lineHeightMult = 1.85f,
             paragraphSpacingDp = 10f,
             pagePaddingDp = 20f,
-            breakStrategy = BreakStrategyMode.BALANCED,
-            hyphenationMode = HyphenationMode.NORMAL,
-            includeFontPadding = false,
-            pageInsetMode = PageInsetMode.RELAXED
+            respectPublisherStyles = false,
+            extra = mapOf(
+                PAGE_PADDING_TOP_DP_EXTRA_KEY to "20.0",
+                PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to "20.0"
+            )
         )
     }
     data class SpacingPreset(
         val label: String,
         val lineHeight: Float,
         val paragraph: Float,
-        val padding: Float
+        val horizontalPadding: Float,
+        val topPadding: Float,
+        val bottomPadding: Float
     )
     val spacingPresets = remember {
         listOf(
-            SpacingPreset(label = "紧凑", lineHeight = 1.45f, paragraph = 4f, padding = 14f),
-            SpacingPreset(label = "默认", lineHeight = 1.85f, paragraph = 10f, padding = 20f),
-            SpacingPreset(label = "宽松", lineHeight = 2.1f, paragraph = 14f, padding = 24f)
+            SpacingPreset(
+                label = "紧凑",
+                lineHeight = 1.45f,
+                paragraph = 4f,
+                horizontalPadding = 14f,
+                topPadding = 10f,
+                bottomPadding = 10f
+            ),
+            SpacingPreset(
+                label = "默认",
+                lineHeight = 1.85f,
+                paragraph = 10f,
+                horizontalPadding = 20f,
+                topPadding = 20f,
+                bottomPadding = 20f
+            ),
+            SpacingPreset(
+                label = "宽松",
+                lineHeight = 2.1f,
+                paragraph = 14f,
+                horizontalPadding = 24f,
+                topPadding = 26f,
+                bottomPadding = 26f
+            )
         )
     }
-    var persist by remember { mutableStateOf(true) }
-    var livePreview by remember { mutableStateOf(true) }
     var lineHeight by remember(current.lineHeightMult) { mutableFloatStateOf(current.lineHeightMult) }
     var paragraph by remember(current.paragraphSpacingDp) { mutableFloatStateOf(current.paragraphSpacingDp) }
-    var padding by remember(current.pagePaddingDp) { mutableFloatStateOf(current.pagePaddingDp) }
-    var breakStrategy by remember(current.breakStrategy) { mutableStateOf(current.breakStrategy) }
-    var hyphenationMode by remember(current.hyphenationMode) { mutableStateOf(current.hyphenationMode) }
-    var includeFontPadding by remember(current.includeFontPadding) { mutableStateOf(current.includeFontPadding) }
-    var pageInsetMode by remember(current.pageInsetMode) { mutableStateOf(current.pageInsetMode) }
+    var horizontalPadding by remember(current.pagePaddingDp) { mutableFloatStateOf(current.pagePaddingDp) }
+    var topPadding by remember(current.extra, current.pagePaddingDp) {
+        mutableFloatStateOf(current.resolveTopPaddingDp())
+    }
+    var bottomPadding by remember(current.extra, current.pagePaddingDp) {
+        mutableFloatStateOf(current.resolveBottomPaddingDp())
+    }
     var respectPublisherStyles by remember(current.respectPublisherStyles) { mutableStateOf(current.respectPublisherStyles) }
     val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
     val subColor = if (isNightMode) Color(0xFF9C978E) else Color(0xFF6F6A62)
+    val allowParagraphSpacingAdjustments = !respectPublisherStyles
 
     fun draftConfig(): RenderConfig.ReflowText {
         return current.copy(
             lineHeightMult = lineHeight,
             paragraphSpacingDp = paragraph,
-            pagePaddingDp = padding,
-            breakStrategy = breakStrategy,
-            hyphenationMode = hyphenationMode,
-            includeFontPadding = includeFontPadding,
-            pageInsetMode = pageInsetMode,
-            respectPublisherStyles = respectPublisherStyles
+            pagePaddingDp = horizontalPadding,
+            respectPublisherStyles = respectPublisherStyles,
+            extra = current.extra +
+                (PAGE_PADDING_TOP_DP_EXTRA_KEY to topPadding.toString()) +
+                (PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to bottomPadding.toString())
         )
     }
-    fun previewIfEnabled() {
-        if (livePreview) {
-            onApply(draftConfig(), false)
-        }
+
+    fun applyDraft() {
+        onApply(draftConfig(), false)
     }
 
     fun resetToDefaults() {
         lineHeight = defaults.lineHeightMult
         paragraph = defaults.paragraphSpacingDp
-        padding = defaults.pagePaddingDp
-        breakStrategy = defaults.breakStrategy
-        hyphenationMode = defaults.hyphenationMode
-        includeFontPadding = defaults.includeFontPadding
-        pageInsetMode = defaults.pageInsetMode
+        horizontalPadding = defaults.pagePaddingDp
+        topPadding = defaults.resolveTopPaddingDp()
+        bottomPadding = defaults.resolveBottomPaddingDp()
         respectPublisherStyles = defaults.respectPublisherStyles
-        previewIfEnabled()
+        applyDraft()
     }
 
     fun applyPreset(preset: SpacingPreset) {
         lineHeight = preset.lineHeight
         paragraph = preset.paragraph
-        padding = preset.padding
-        previewIfEnabled()
+        horizontalPadding = preset.horizontalPadding
+        topPadding = preset.topPadding
+        bottomPadding = preset.bottomPadding
+        applyDraft()
     }
 
     fun isPresetSelected(preset: SpacingPreset): Boolean {
         return abs(lineHeight - preset.lineHeight) < 0.02f &&
             abs(paragraph - preset.paragraph) < 0.5f &&
-            abs(padding - preset.padding) < 0.5f
+            abs(horizontalPadding - preset.horizontalPadding) < 0.5f &&
+            abs(topPadding - preset.topPadding) < 0.5f &&
+            abs(bottomPadding - preset.bottomPadding) < 0.5f
     }
 
     Column(
@@ -370,8 +397,15 @@ private fun SpacingPanel(
                 checked = respectPublisherStyles,
                 onCheckedChange = {
                     respectPublisherStyles = it
-                    previewIfEnabled()
+                    applyDraft()
                 }
+            )
+        }
+        if (!allowParagraphSpacingAdjustments) {
+            Text(
+                "当前已启用出版方样式，行距/段距/边距将由书籍样式控制",
+                color = subColor,
+                style = MaterialTheme.typography.bodySmall
             )
         }
         SettingSliderRow(
@@ -380,9 +414,10 @@ private fun SpacingPanel(
             value = lineHeight,
             range = 1.1f..2.4f,
             textColor = textColor,
+            enabled = allowParagraphSpacingAdjustments,
             onChange = {
                 lineHeight = it
-                previewIfEnabled()
+                applyDraft()
             }
         )
         SettingSliderRow(
@@ -391,158 +426,71 @@ private fun SpacingPanel(
             value = paragraph,
             range = 0f..24f,
             textColor = textColor,
+            enabled = allowParagraphSpacingAdjustments,
             onChange = {
                 paragraph = it
-                previewIfEnabled()
+                applyDraft()
             }
         )
         SettingSliderRow(
-            label = "左右边距",
-            valueLabel = "${padding.roundToInt()}dp",
-            value = padding,
+            label = "左右间距",
+            valueLabel = "${horizontalPadding.roundToInt()}dp",
+            value = horizontalPadding,
             range = 8f..42f,
             textColor = textColor,
+            enabled = allowParagraphSpacingAdjustments,
             onChange = {
-                padding = it
-                previewIfEnabled()
+                horizontalPadding = it
+                applyDraft()
             }
         )
-
-        Text("断行策略", color = textColor)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChoiceButton(
-                label = "快速",
-                selected = breakStrategy == BreakStrategyMode.SIMPLE,
-                isNightMode = isNightMode,
-                onClick = {
-                    breakStrategy = BreakStrategyMode.SIMPLE
-                    previewIfEnabled()
-                }
-            )
-            ChoiceButton(
-                label = "平衡",
-                selected = breakStrategy == BreakStrategyMode.BALANCED,
-                isNightMode = isNightMode,
-                onClick = {
-                    breakStrategy = BreakStrategyMode.BALANCED
-                    previewIfEnabled()
-                }
-            )
-            ChoiceButton(
-                label = "高质量",
-                selected = breakStrategy == BreakStrategyMode.HIGH_QUALITY,
-                isNightMode = isNightMode,
-                onClick = {
-                    breakStrategy = BreakStrategyMode.HIGH_QUALITY
-                    previewIfEnabled()
-                }
-            )
-        }
-
-        Text("断词", color = textColor)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChoiceButton(
-                label = "关闭",
-                selected = hyphenationMode == HyphenationMode.NONE,
-                isNightMode = isNightMode,
-                onClick = {
-                    hyphenationMode = HyphenationMode.NONE
-                    previewIfEnabled()
-                }
-            )
-            ChoiceButton(
-                label = "普通",
-                selected = hyphenationMode == HyphenationMode.NORMAL,
-                isNightMode = isNightMode,
-                onClick = {
-                    hyphenationMode = HyphenationMode.NORMAL
-                    previewIfEnabled()
-                }
-            )
-            ChoiceButton(
-                label = "增强",
-                selected = hyphenationMode == HyphenationMode.FULL,
-                isNightMode = isNightMode,
-                onClick = {
-                    hyphenationMode = HyphenationMode.FULL
-                    previewIfEnabled()
-                }
-            )
-        }
-
-        Text("页面留白", color = textColor)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChoiceButton(
-                label = "舒适",
-                selected = pageInsetMode == PageInsetMode.RELAXED,
-                isNightMode = isNightMode,
-                onClick = {
-                    pageInsetMode = PageInsetMode.RELAXED
-                    previewIfEnabled()
-                }
-            )
-            ChoiceButton(
-                label = "紧凑",
-                selected = pageInsetMode == PageInsetMode.COMPACT,
-                isNightMode = isNightMode,
-                onClick = {
-                    pageInsetMode = PageInsetMode.COMPACT
-                    previewIfEnabled()
-                }
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("字体安全留白", color = textColor)
-            Switch(
-                checked = includeFontPadding,
-                onCheckedChange = {
-                    includeFontPadding = it
-                    previewIfEnabled()
-                }
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("实时预览", color = textColor)
-            Switch(
-                checked = livePreview,
-                onCheckedChange = {
-                    livePreview = it
-                    previewIfEnabled()
-                }
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.Checkbox(
-                    checked = persist,
-                    onCheckedChange = { persist = it }
-                )
-                Text("保存为默认", color = textColor)
+        SettingSliderRow(
+            label = "上间距",
+            valueLabel = "${topPadding.roundToInt()}dp",
+            value = topPadding,
+            range = 0f..64f,
+            textColor = textColor,
+            enabled = allowParagraphSpacingAdjustments,
+            onChange = {
+                topPadding = it
+                applyDraft()
             }
-            Button(onClick = { onApply(draftConfig(), persist) }) {
-                Text("应用")
+        )
+        SettingSliderRow(
+            label = "下间距",
+            valueLabel = "${bottomPadding.roundToInt()}dp",
+            value = bottomPadding,
+            range = 0f..64f,
+            textColor = textColor,
+            enabled = allowParagraphSpacingAdjustments,
+            onChange = {
+                bottomPadding = it
+                applyDraft()
             }
-        }
+        )
     }
+}
+
+private fun RenderConfig.ReflowText.resolveTopPaddingDp(): Float {
+    val raw = extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]
+    return (raw?.toFloatOrNull() ?: pagePaddingDp)
+        .takeIf(Float::isFinite)
+        ?.coerceIn(0f, 64f)
+        ?: pagePaddingDp.coerceIn(0f, 64f)
+}
+
+private fun RenderConfig.ReflowText.resolveBottomPaddingDp(): Float {
+    val raw = extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY]
+    return (raw?.toFloatOrNull() ?: pagePaddingDp)
+        .takeIf(Float::isFinite)
+        ?.coerceIn(0f, 64f)
+        ?: pagePaddingDp.coerceIn(0f, 64f)
 }
 
 @Composable
 private fun PageTurnPanel(
     current: RenderConfig.ReflowText,
+    isEmbeddedEpub: Boolean,
     isNightMode: Boolean,
     onBack: () -> Unit,
     onApply: (RenderConfig, persist: Boolean) -> Unit
@@ -575,6 +523,8 @@ private fun PageTurnPanel(
     val optionBg = if (isNightMode) Color(0xFF2B2B2B) else Color(0xFFF4F5F6)
     val optionBorder = if (isNightMode) Color(0x2EFFFFFF) else ReaderTokens.Palette.PrototypeBorder
     val textColor = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF1E1C18)
+    val subColor = if (isNightMode) Color(0xFF9C978E) else Color(0xFF6F6A62)
+    val controlsEnabled = !isEmbeddedEpub
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -583,6 +533,13 @@ private fun PageTurnPanel(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         SheetHeader(title = "翻页方式", onBack = onBack)
+        if (isEmbeddedEpub) {
+            Text(
+                text = "当前 EPUB 阅读由内核控制翻页动画，此设置仅对 TXT 生效",
+                color = subColor,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
@@ -607,6 +564,7 @@ private fun PageTurnPanel(
                         )
                     }
                     TextButton(
+                        enabled = controlsEnabled,
                         onClick = {
                             selectedStyle = option.style
                             previewIfEnabled()
@@ -629,6 +587,7 @@ private fun PageTurnPanel(
             Text("实时预览", color = textColor)
             Switch(
                 checked = livePreview,
+                enabled = controlsEnabled,
                 onCheckedChange = {
                     livePreview = it
                     previewIfEnabled()
@@ -644,11 +603,15 @@ private fun PageTurnPanel(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.Checkbox(
                     checked = persist,
+                    enabled = controlsEnabled,
                     onCheckedChange = { persist = it }
                 )
                 Text("保存为默认", color = textColor)
             }
-            Button(onClick = { onApply(draftConfig(), persist) }) {
+            Button(
+                enabled = controlsEnabled,
+                onClick = { onApply(draftConfig(), persist) }
+            ) {
                 Text("应用")
             }
         }
@@ -914,18 +877,33 @@ private fun SettingSliderRow(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     textColor: Color,
+    enabled: Boolean = true,
     onChange: (Float) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, color = textColor)
-            Text(valueLabel, color = textColor.copy(alpha = 0.7f))
-        }
-        Slider(value = value, valueRange = range, onValueChange = onChange)
+    val effectiveTextColor = if (enabled) textColor else textColor.copy(alpha = 0.52f)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = effectiveTextColor,
+            modifier = Modifier.width(64.dp)
+        )
+        Slider(
+            value = value,
+            valueRange = range,
+            enabled = enabled,
+            onValueChange = onChange,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = valueLabel,
+            color = effectiveTextColor.copy(alpha = 0.7f),
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(56.dp)
+        )
     }
 }
 
@@ -934,6 +912,7 @@ private fun ChoiceButton(
     label: String,
     selected: Boolean,
     isNightMode: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     val selectedColors = ButtonDefaults.buttonColors(
@@ -943,11 +922,18 @@ private fun ChoiceButton(
     val unselectedText = if (isNightMode) Color(0xFFE9E5DE) else Color(0xFF24201C)
 
     if (selected) {
-        Button(onClick = onClick, colors = selectedColors) {
+        Button(
+            enabled = enabled,
+            onClick = onClick,
+            colors = selectedColors
+        ) {
             Text(label)
         }
     } else {
-        OutlinedButton(onClick = onClick) {
+        OutlinedButton(
+            enabled = enabled,
+            onClick = onClick
+        ) {
             Text(label, color = unselectedText)
         }
     }

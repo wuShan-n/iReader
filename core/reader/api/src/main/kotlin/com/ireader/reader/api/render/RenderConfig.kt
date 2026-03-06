@@ -34,6 +34,8 @@ enum class PageTurnMode(val storageValue: String) {
 
 const val PAGE_TURN_EXTRA_KEY: String = "page_turn"
 const val PAGE_TURN_STYLE_EXTRA_KEY: String = "page_turn_style"
+const val PAGE_PADDING_TOP_DP_EXTRA_KEY: String = "page_padding_top_dp"
+const val PAGE_PADDING_BOTTOM_DP_EXTRA_KEY: String = "page_padding_bottom_dp"
 const val READER_APPEARANCE_BG_ARGB_EXTRA_KEY: String = "reader_appearance_bg_argb"
 const val READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY: String = "reader_appearance_text_argb"
 const val READER_APPEARANCE_THEME_EXTRA_KEY: String = "reader_appearance_theme"

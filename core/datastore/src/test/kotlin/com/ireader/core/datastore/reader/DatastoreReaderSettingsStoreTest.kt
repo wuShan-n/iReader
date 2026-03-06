@@ -9,6 +9,8 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
@@ -40,7 +42,11 @@ class DatastoreReaderSettingsStoreTest {
             paragraphSpacingDp = 8f,
             pagePaddingDp = 14f,
             respectPublisherStyles = true,
-            hyphenationMode = HyphenationMode.FULL
+            hyphenationMode = HyphenationMode.FULL,
+            extra = mapOf(
+                PAGE_PADDING_TOP_DP_EXTRA_KEY to "18.0",
+                PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to "22.0"
+            )
         )
 
         store.setReflowConfig(config)
@@ -49,9 +55,13 @@ class DatastoreReaderSettingsStoreTest {
         assertEquals(21f, prefs[floatPreferencesKey("reader.reflow.fontSizeSp")])
         assertEquals("FULL", prefs[stringPreferencesKey("reader.reflow.hyphenationMode")])
         assertEquals(true, prefs[booleanPreferencesKey("reader.reflow.respectPublisherStyles")])
+        assertEquals(18f, prefs[floatPreferencesKey("reader.reflow.pagePaddingTopDp")])
+        assertEquals(22f, prefs[floatPreferencesKey("reader.reflow.pagePaddingBottomDp")])
         assertNull(prefs[floatPreferencesKey("reader.reflow.paragraphIndentEm")])
         assertNull(prefs[stringPreferencesKey("reader.reflow.textAlign")])
         assertNull(prefs[floatPreferencesKey("reader.reflow.font_size_sp")])
+        assertEquals("18.0", store.getReflowConfig().extra[PAGE_PADDING_TOP_DP_EXTRA_KEY])
+        assertEquals("22.0", store.getReflowConfig().extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY])
     }
 
     @Test

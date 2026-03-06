@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -30,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import com.ireader.feature.reader.presentation.GestureAxis
 import com.ireader.feature.reader.presentation.PageTurnAnimationKind
 import com.ireader.feature.reader.presentation.PageTurnDirection
@@ -38,6 +40,8 @@ import com.ireader.feature.reader.presentation.defaultPageTurnStyle
 import com.ireader.feature.reader.presentation.pageTurnStyle
 import com.ireader.feature.reader.presentation.resolvePageTurnAnimationKind
 import com.ireader.feature.reader.ui.ReaderSurface
+import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
@@ -131,9 +135,24 @@ fun PageRenderer(
                         Text("No controller bound")
                     }
                 } else {
+                    val reflowConfig = state.currentConfig as? RenderConfig.ReflowText
+                    val horizontalPaddingDp = reflowConfig?.pagePaddingDp?.coerceIn(0f, 64f) ?: 0f
+                    val topPaddingDp = reflowConfig?.resolveTopPaddingDp(horizontalPaddingDp) ?: horizontalPaddingDp
+                    val bottomPaddingDp = reflowConfig?.resolveBottomPaddingDp(horizontalPaddingDp) ?: horizontalPaddingDp
+                    val readiumBasePaddingDp = minOf(horizontalPaddingDp, topPaddingDp, bottomPaddingDp)
+                    val horizontalExtraDp = (horizontalPaddingDp - readiumBasePaddingDp).coerceAtLeast(0f)
+                    val topExtraDp = (topPaddingDp - readiumBasePaddingDp).coerceAtLeast(0f)
+                    val bottomExtraDp = (bottomPaddingDp - readiumBasePaddingDp).coerceAtLeast(0f)
                     ReaderSurface(
                         controller = controller,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(
+                                start = horizontalExtraDp.dp,
+                                end = horizontalExtraDp.dp,
+                                top = topExtraDp.dp,
+                                bottom = bottomExtraDp.dp
+                            )
                     )
                 }
             }
@@ -323,6 +342,20 @@ private data class TextLinkHit(
     val link: DocumentLink,
     val range: IntRange
 )
+
+private fun RenderConfig.ReflowText.resolveTopPaddingDp(defaultDp: Float): Float {
+    return (extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
+        .takeIf(Float::isFinite)
+        ?.coerceIn(0f, 64f)
+        ?: defaultDp.coerceIn(0f, 64f)
+}
+
+private fun RenderConfig.ReflowText.resolveBottomPaddingDp(defaultDp: Float): Float {
+    return (extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
+        .takeIf(Float::isFinite)
+        ?.coerceIn(0f, 64f)
+        ?: defaultDp.coerceIn(0f, 64f)
+}
 
 private fun hitTestTextLink(
     tap: Offset,

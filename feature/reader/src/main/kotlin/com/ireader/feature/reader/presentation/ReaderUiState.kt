@@ -56,7 +56,11 @@ data class PasswordPrompt(
 data class TocItem(
     val title: String,
     val locatorEncoded: String,
-    val depth: Int
+    val depth: Int,
+    val locatorValue: String? = null,
+    val href: String? = null,
+    val position: Int? = null,
+    val progression: Double? = null
 )
 
 data class TocState(

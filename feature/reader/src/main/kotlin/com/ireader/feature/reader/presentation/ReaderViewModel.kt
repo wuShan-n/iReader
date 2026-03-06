@@ -32,6 +32,7 @@ import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.model.LinkTarget
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.OutlineNode
+import com.ireader.reader.model.BookFormat
 import com.ireader.reader.runtime.ReaderSessionHandle
 import com.ireader.reader.runtime.flow.asReaderResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -469,21 +470,25 @@ class ReaderViewModel @Inject constructor(
             observeEffectiveConfig(sessionHandle.document.capabilities)
                 .distinctUntilChanged()
                 .collect { config ->
-                    if (sessionHandle.controller.state.value.config == config) {
+                    val effectiveConfig = normalizeConfigForSession(
+                        config = config,
+                        sessionHandle = sessionHandle
+                    )
+                    if (sessionHandle.controller.state.value.config == effectiveConfig) {
                         ui.update {
                             it.copy(
-                                currentConfig = config,
-                                pageTurnMode = resolvePageTurnMode(config)
+                                currentConfig = effectiveConfig,
+                                pageTurnMode = resolvePageTurnMode(effectiveConfig)
                             )
                         }
                         return@collect
                     }
-                    when (render.withNavigationLock { sessionHandle.controller.setConfig(config) }) {
+                    when (render.withNavigationLock { sessionHandle.controller.setConfig(effectiveConfig) }) {
                         is ReaderResult.Ok -> {
                             ui.update {
                                 it.copy(
-                                    currentConfig = config,
-                                    pageTurnMode = resolvePageTurnMode(config)
+                                    currentConfig = effectiveConfig,
+                                    pageTurnMode = resolvePageTurnMode(effectiveConfig)
                                 )
                             }
                             render.requestRender(RenderRequest.SETTINGS)
@@ -539,23 +544,28 @@ class ReaderViewModel @Inject constructor(
             return
         }
 
-        if (sessionHandle.controller.state.value.config == config) {
+        val effectiveConfig = normalizeConfigForSession(
+            config = config,
+            sessionHandle = sessionHandle
+        )
+
+        if (sessionHandle.controller.state.value.config == effectiveConfig) {
             ui.update {
                 it.copy(
-                    currentConfig = config,
-                    pageTurnMode = resolvePageTurnMode(config)
+                    currentConfig = effectiveConfig,
+                    pageTurnMode = resolvePageTurnMode(effectiveConfig)
                 )
             }
             return
         }
 
-        when (val result = render.withNavigationLock { sessionHandle.controller.setConfig(config) }) {
+        when (val result = render.withNavigationLock { sessionHandle.controller.setConfig(effectiveConfig) }) {
             is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
             is ReaderResult.Ok -> {
                 ui.update {
                     it.copy(
-                        currentConfig = config,
-                        pageTurnMode = resolvePageTurnMode(config)
+                        currentConfig = effectiveConfig,
+                        pageTurnMode = resolvePageTurnMode(effectiveConfig)
                     )
                 }
                 render.requestRender(RenderRequest.CONFIG)
@@ -663,6 +673,24 @@ class ReaderViewModel @Inject constructor(
     private fun resolvePageTurnMode(config: RenderConfig?): PageTurnMode {
         val reflow = config as? RenderConfig.ReflowText ?: return PageTurnMode.COVER_HORIZONTAL
         return reflow.pageTurnMode()
+    }
+
+    private fun normalizeConfigForSession(
+        config: RenderConfig,
+        sessionHandle: ReaderSessionHandle
+    ): RenderConfig {
+        if (!isEpubReflowSession(sessionHandle)) return config
+        val requested = config as? RenderConfig.ReflowText ?: return config
+        val current = sessionHandle.controller.state.value.config as? RenderConfig.ReflowText ?: return config
+        return normalizeEpubEffectiveReflowConfig(
+            requested = requested,
+            current = current
+        )
+    }
+
+    private fun isEpubReflowSession(sessionHandle: ReaderSessionHandle): Boolean {
+        return sessionHandle.document.format == BookFormat.EPUB &&
+            !sessionHandle.document.capabilities.fixedLayout
     }
 
     private suspend fun updateDisplayPrefs(
@@ -925,10 +953,16 @@ class ReaderViewModel @Inject constructor(
 
         while (stack.isNotEmpty()) {
             val (node, depth) = stack.removeLast()
+            val extras = node.locator.extras
             out += TocItem(
                 title = node.title.ifBlank { "(untitled)" },
                 locatorEncoded = locatorCodec.encode(node.locator),
-                depth = depth
+                depth = depth,
+                locatorValue = node.locator.value,
+                href = extras[TOC_EXTRA_HREF],
+                position = extras[TOC_EXTRA_POSITION]?.toIntOrNull(),
+                progression = extras[TOC_EXTRA_TOTAL_PROGRESSION]?.toDoubleOrNull()
+                    ?: extras[TOC_EXTRA_PROGRESSION]?.toDoubleOrNull()
             )
 
             val children = node.children

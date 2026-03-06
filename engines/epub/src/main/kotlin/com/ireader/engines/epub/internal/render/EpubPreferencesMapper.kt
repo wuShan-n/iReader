@@ -1,6 +1,8 @@
 package com.ireader.engines.epub.internal.render
 
 import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.READER_APPEARANCE_BG_ARGB_EXTRA_KEY
 import com.ireader.reader.api.render.READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY
 import com.ireader.reader.api.render.READER_APPEARANCE_THEME_DARK
@@ -22,6 +24,15 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
         is RenderConfig.ReflowText -> {
             val appearance = resolveAppearance(extra)
             val typography = toTypographySpec()
+            val topPaddingDp = resolvePaddingExtraDp(
+                raw = extra[PAGE_PADDING_TOP_DP_EXTRA_KEY],
+                fallback = typography.pagePaddingDp
+            )
+            val bottomPaddingDp = resolvePaddingExtraDp(
+                raw = extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY],
+                fallback = typography.pagePaddingDp
+            )
+            val readiumMarginDp = minOf(typography.pagePaddingDp, topPaddingDp, bottomPaddingDp)
 
             val baseSp = 16f
             val fontScale = (typography.fontSizeSp / baseSp)
@@ -34,7 +45,7 @@ internal fun RenderConfig.toEpubPreferences(): EpubPreferences =
                 backgroundColor = appearance.backgroundColor,
                 fontSize = fontScale,
                 scroll = false,
-                pageMargins = (typography.pagePaddingDp / 16f).toDouble().coerceIn(0.0, 4.0),
+                pageMargins = (readiumMarginDp / 16f).toDouble().coerceIn(0.0, 4.0),
                 publisherStyles = respectPublisherStyles,
                 lineHeight = if (advanced) typography.lineHeightMult.toDouble().coerceIn(1.0, 2.0) else null,
                 paragraphSpacing = if (advanced) (typography.paragraphSpacingDp / 16f).toDouble().coerceIn(0.0, 2.0) else null,
@@ -72,6 +83,13 @@ private fun String.toReadiumFontFamilyOrNull(): FontFamily? {
         "思源宋体", "方正新楷体", "霞鹜文楷" -> FontFamily.SERIF
         else -> FontFamily(key)
     }
+}
+
+private fun resolvePaddingExtraDp(raw: String?, fallback: Float): Float {
+    return (raw?.toFloatOrNull() ?: fallback)
+        .takeIf(Float::isFinite)
+        ?.coerceIn(0f, 64f)
+        ?: fallback.coerceIn(0f, 64f)
 }
 
 private data class EpubAppearance(

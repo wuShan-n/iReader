@@ -28,6 +28,8 @@ import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
 import com.ireader.reader.api.annotation.Decoration
+import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.TextAlignMode
@@ -50,7 +52,8 @@ fun TextPage(
     val typography = config.toTypographySpec()
     val density = LocalDensity.current
     val horizontalPaddingPx = with(density) { typography.pagePaddingDp.dp.roundToPx() }
-    val verticalPaddingPx = horizontalPaddingPx
+    val verticalTopPaddingPx = with(density) { config.resolveTopPaddingDp(typography.pagePaddingDp).dp.roundToPx() }
+    val verticalBottomPaddingPx = with(density) { config.resolveBottomPaddingDp(typography.pagePaddingDp).dp.roundToPx() }
     val displayText = remember(content.text, content.mapping, links, decorations) {
         buildDisplayText(
             content = content,
@@ -116,15 +119,15 @@ fun TextPage(
             }
             if (
                 textView.paddingLeft != horizontalPaddingPx ||
-                textView.paddingTop != verticalPaddingPx ||
+                textView.paddingTop != verticalTopPaddingPx ||
                 textView.paddingRight != horizontalPaddingPx ||
-                textView.paddingBottom != verticalPaddingPx
+                textView.paddingBottom != verticalBottomPaddingPx
             ) {
                 textView.setPadding(
                     horizontalPaddingPx,
-                    verticalPaddingPx,
+                    verticalTopPaddingPx,
                     horizontalPaddingPx,
-                    verticalPaddingPx
+                    verticalBottomPaddingPx
                 )
             }
             if (textView.currentTextColor != textColorArgb) {
@@ -245,3 +248,17 @@ private fun resolveHighlightColor(decoration: Decoration.Reflow): Int {
 private const val LINK_COLOR_ARGB: Int = 0xFF2D6CDF.toInt()
 private const val DEFAULT_HIGHLIGHT_COLOR_ARGB: Int = 0xFFFFD54F.toInt()
 private const val DEFAULT_HIGHLIGHT_OPACITY: Float = 0.35f
+
+private fun RenderConfig.ReflowText.resolveTopPaddingDp(defaultDp: Float): Float {
+    return (extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
+        .takeIf(Float::isFinite)
+        ?.coerceIn(0f, 64f)
+        ?: defaultDp.coerceIn(0f, 64f)
+}
+
+private fun RenderConfig.ReflowText.resolveBottomPaddingDp(defaultDp: Float): Float {
+    return (extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
+        .takeIf(Float::isFinite)
+        ?.coerceIn(0f, 64f)
+        ?: defaultDp.coerceIn(0f, 64f)
+}

@@ -80,12 +80,14 @@ import com.ireader.feature.reader.presentation.ReaderMenuTab
 import com.ireader.feature.reader.presentation.ReaderSheet
 import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.presentation.asString
+import com.ireader.feature.reader.presentation.resolveActiveTocIndex
 import com.ireader.feature.reader.ui.components.ErrorPane
 import com.ireader.feature.reader.ui.components.PageRenderer
 import com.ireader.feature.reader.ui.components.PasswordDialog
 import com.ireader.feature.reader.ui.components.ReaderSettingsPanel
 import com.ireader.feature.reader.ui.components.SearchSheet
 import com.ireader.feature.reader.ui.components.SettingsSheet
+import com.ireader.reader.api.render.RenderContent
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -164,7 +166,6 @@ fun ReaderScaffold(
     ApplyReaderBrightness(prefs = prefs)
     ApplyReaderSystemBars(
         prefs = prefs,
-        chromeVisible = state.chromeVisible,
         isReadingLayer = state.layerState == com.ireader.feature.reader.presentation.ReaderLayerState.Reading,
         readerBackgroundColor = bgColor
     )
@@ -392,6 +393,8 @@ fun ReaderScaffold(
                     panel = state.sheet.toSettingsPanel(),
                     capabilities = state.capabilities,
                     config = state.currentConfig,
+                    isEmbeddedEpub = state.capabilities?.reflowable == true &&
+                        state.page?.content is RenderContent.Embedded,
                     isNightMode = state.isNightMode,
                     onClose = { onIntent(ReaderIntent.CloseSheet) },
                     onBackToMain = { onIntent(ReaderIntent.OpenSettings) },
@@ -677,6 +680,10 @@ private fun ReaderMenuDockPanel(
     onOpenLocator: (String) -> Unit,
     onOpenAnnotations: () -> Unit
 ) {
+    val activeTocIndex = resolveActiveTocIndex(
+        items = state.toc.items,
+        currentLocator = state.renderState?.locator
+    )
     val tabBg = if (state.isNightMode) Color(0xFF2E2E2E) else ReaderTokens.Palette.PrototypeSurfaceMuted
     val dividerColor = if (state.isNightMode) Color(0xFF3A3A3A) else ReaderTokens.Palette.PrototypeBorder
     Row(
@@ -730,7 +737,7 @@ private fun ReaderMenuDockPanel(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "已完结 共${state.toc.items.size}章",
+                            text = "共${state.toc.items.size}章",
                             color = contentColor.copy(alpha = 0.62f),
                             style = androidx.compose.material3.MaterialTheme.typography.labelMedium
                         )
@@ -761,7 +768,7 @@ private fun ReaderMenuDockPanel(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(start = (item.depth * 10).dp),
-                                    color = if (index == 0) ReaderTokens.Palette.PrototypeBlue else contentColor,
+                                    color = if (index == activeTocIndex) ReaderTokens.Palette.PrototypeBlue else contentColor,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -1403,7 +1410,6 @@ private fun ApplyReaderBrightness(prefs: ReaderDisplayPrefs) {
 @Composable
 private fun ApplyReaderSystemBars(
     prefs: ReaderDisplayPrefs,
-    chromeVisible: Boolean,
     isReadingLayer: Boolean,
     readerBackgroundColor: Color
 ) {
@@ -1413,7 +1419,6 @@ private fun ApplyReaderSystemBars(
     DisposableEffect(
         context,
         prefs.fullScreenMode,
-        chromeVisible,
         isReadingLayer,
         readerBackgroundArgb,
         useLightSystemBarIcons
@@ -1436,7 +1441,7 @@ private fun ApplyReaderSystemBars(
             controller.isAppearanceLightStatusBars = useLightSystemBarIcons
             controller.isAppearanceLightNavigationBars = useLightSystemBarIcons
 
-            val immersive = prefs.fullScreenMode && isReadingLayer && !chromeVisible
+            val immersive = prefs.fullScreenMode && isReadingLayer
             if (immersive) {
                 controller.hide(WindowInsetsCompat.Type.statusBars())
                 controller.show(WindowInsetsCompat.Type.navigationBars())

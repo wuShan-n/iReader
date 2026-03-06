@@ -11,6 +11,8 @@ import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.PageInsetMode
 import com.ireader.reader.api.render.PageTurnMode
+import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
 import com.ireader.reader.api.render.RenderConfig
@@ -33,6 +35,8 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val paragraphSpacingDp = floatPreferencesKey("reader.reflow.paragraphSpacingDp")
             val paragraphIndentEmLegacy = floatPreferencesKey("reader.reflow.paragraphIndentEm")
             val pagePaddingDp = floatPreferencesKey("reader.reflow.pagePaddingDp")
+            val pagePaddingTopDp = floatPreferencesKey("reader.reflow.pagePaddingTopDp")
+            val pagePaddingBottomDp = floatPreferencesKey("reader.reflow.pagePaddingBottomDp")
             val fontFamilyName = stringPreferencesKey("reader.reflow.fontFamilyName")
             val textAlignLegacy = stringPreferencesKey("reader.reflow.textAlign")
             val breakStrategy = stringPreferencesKey("reader.reflow.breakStrategy")
@@ -77,7 +81,9 @@ class DatastoreReaderSettingsStore @Inject constructor(
         respectPublisherStyles = false,
         extra = mapOf(
             PAGE_TURN_EXTRA_KEY to PageTurnMode.COVER_HORIZONTAL.storageValue,
-            PAGE_TURN_STYLE_EXTRA_KEY to STYLE_COVER_OVERLAY
+            PAGE_TURN_STYLE_EXTRA_KEY to STYLE_COVER_OVERLAY,
+            PAGE_PADDING_TOP_DP_EXTRA_KEY to "20.0",
+            PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to "20.0"
         )
     )
     private val defaultFixed = RenderConfig.FixedPage()
@@ -102,6 +108,10 @@ class DatastoreReaderSettingsStore @Inject constructor(
             val pageTurnStyle = normalizePageTurnStyleRaw(
                 raw = prefs[Keys.Reflow.pageTurnStyle]
             )
+            val pagePaddingTopDp = (prefs[Keys.Reflow.pagePaddingTopDp]
+                ?: defaultReflow.pagePaddingDp).coerceIn(0f, 64f)
+            val pagePaddingBottomDp = (prefs[Keys.Reflow.pagePaddingBottomDp]
+                ?: defaultReflow.pagePaddingDp).coerceIn(0f, 64f)
 
             defaultReflow.copy(
                 fontSizeSp = prefs[Keys.Reflow.fontSizeSp] ?: defaultReflow.fontSizeSp,
@@ -117,7 +127,9 @@ class DatastoreReaderSettingsStore @Inject constructor(
                     ?: defaultReflow.respectPublisherStyles,
                 extra = defaultReflow.extra +
                     (PAGE_TURN_EXTRA_KEY to pageTurnMode.storageValue) +
-                    (PAGE_TURN_STYLE_EXTRA_KEY to pageTurnStyle)
+                    (PAGE_TURN_STYLE_EXTRA_KEY to pageTurnStyle) +
+                    (PAGE_PADDING_TOP_DP_EXTRA_KEY to pagePaddingTopDp.toString()) +
+                    (PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to pagePaddingBottomDp.toString())
             )
         }.distinctUntilChanged()
 
@@ -185,6 +197,14 @@ class DatastoreReaderSettingsStore @Inject constructor(
             prefs[Keys.Reflow.includeFontPadding] = config.includeFontPadding
             prefs[Keys.Reflow.pageInsetMode] = config.pageInsetMode.name
             prefs[Keys.Reflow.respectPublisherStyles] = config.respectPublisherStyles
+            prefs[Keys.Reflow.pagePaddingTopDp] = parsePaddingDpExtra(
+                raw = config.extra[PAGE_PADDING_TOP_DP_EXTRA_KEY],
+                fallback = config.pagePaddingDp
+            )
+            prefs[Keys.Reflow.pagePaddingBottomDp] = parsePaddingDpExtra(
+                raw = config.extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY],
+                fallback = config.pagePaddingDp
+            )
             val pageTurnMode = PageTurnMode.fromStorageValue(config.extra[PAGE_TURN_EXTRA_KEY])
             val pageTurnStyle = normalizePageTurnStyleRaw(
                 raw = config.extra[PAGE_TURN_STYLE_EXTRA_KEY]
@@ -230,6 +250,13 @@ class DatastoreReaderSettingsStore @Inject constructor(
     private fun parsePageInsetMode(raw: String): PageInsetMode {
         return runCatching { PageInsetMode.valueOf(raw) }
             .getOrElse { defaultReflow.pageInsetMode }
+    }
+
+    private fun parsePaddingDpExtra(raw: String?, fallback: Float): Float {
+        val parsed = raw
+            ?.toFloatOrNull()
+            ?.takeIf(Float::isFinite)
+        return (parsed ?: fallback).coerceIn(0f, 64f)
     }
 
     private fun normalizePageTurnStyleRaw(raw: String?): String {

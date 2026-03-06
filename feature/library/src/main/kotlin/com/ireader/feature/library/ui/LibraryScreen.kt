@@ -634,16 +634,6 @@ private fun LibraryBottomBar(
                 selected = true
             )
             LibraryTabItem(
-                label = "书城",
-                icon = { tint -> PrototypeIcons.Store(tint = tint) },
-                selected = false
-            )
-            LibraryTabItem(
-                label = "会员",
-                icon = { tint -> PrototypeIcons.Crown(tint = tint) },
-                selected = false
-            )
-            LibraryTabItem(
                 label = "我的",
                 icon = { tint -> PrototypeIcons.Smile(tint = tint) },
                 selected = false

@@ -1,6 +1,11 @@
 package com.ireader.engines.epub.internal.render
 
+import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
+import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_TURN_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_TURN_STYLE_EXTRA_KEY
 import com.ireader.reader.api.render.READER_APPEARANCE_BG_ARGB_EXTRA_KEY
 import com.ireader.reader.api.render.READER_APPEARANCE_TEXT_ARGB_EXTRA_KEY
 import com.ireader.reader.api.render.READER_APPEARANCE_THEME_DARK
@@ -52,6 +57,19 @@ class EpubPreferencesMapperTest {
         assertEquals(false, prefs.publisherStyles)
         assertEquals(ReadiumTextAlign.JUSTIFY, prefs.textAlign)
         assertFalse(prefs.fontFamily == null)
+    }
+
+    @Test
+    fun `reflow page margin baseline should respect minimum of horizontal and vertical paddings`() {
+        val prefs = RenderConfig.ReflowText(
+            pagePaddingDp = 24f,
+            extra = mapOf(
+                PAGE_PADDING_TOP_DP_EXTRA_KEY to "32.0",
+                PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to "12.0"
+            )
+        ).toEpubPreferences()
+
+        assertEquals(0.75, prefs.pageMargins!!, 0.0001)
     }
 
     @Test
@@ -133,5 +151,37 @@ class EpubPreferencesMapperTest {
         assertEquals(background, prefs.backgroundColor?.int)
         assertEquals(text, prefs.textColor?.int)
         assertEquals(Theme.DARK, prefs.theme)
+    }
+
+    @Test
+    fun `unsupported reflow fields should not affect epub preferences output`() {
+        val base = RenderConfig.ReflowText(
+            fontSizeSp = 20f,
+            lineHeightMult = 1.8f,
+            paragraphSpacingDp = 10f,
+            pagePaddingDp = 18f,
+            hyphenationMode = HyphenationMode.NORMAL
+        )
+        val changed = base.copy(
+            breakStrategy = BreakStrategyMode.HIGH_QUALITY,
+            includeFontPadding = !base.includeFontPadding,
+            extra = base.extra +
+                (PAGE_TURN_EXTRA_KEY to "cover_horizontal") +
+                (PAGE_TURN_STYLE_EXTRA_KEY to "simulation")
+        )
+
+        val basePrefs = base.toEpubPreferences()
+        val changedPrefs = changed.toEpubPreferences()
+
+        assertEquals(basePrefs.fontSize, changedPrefs.fontSize)
+        assertEquals(basePrefs.lineHeight, changedPrefs.lineHeight)
+        assertEquals(basePrefs.paragraphSpacing, changedPrefs.paragraphSpacing)
+        assertEquals(basePrefs.pageMargins, changedPrefs.pageMargins)
+        assertEquals(basePrefs.hyphens, changedPrefs.hyphens)
+        assertEquals(basePrefs.publisherStyles, changedPrefs.publisherStyles)
+        assertEquals(basePrefs.textAlign, changedPrefs.textAlign)
+        assertEquals(basePrefs.backgroundColor?.int, changedPrefs.backgroundColor?.int)
+        assertEquals(basePrefs.textColor?.int, changedPrefs.textColor?.int)
+        assertEquals(basePrefs.theme, changedPrefs.theme)
     }
 }
