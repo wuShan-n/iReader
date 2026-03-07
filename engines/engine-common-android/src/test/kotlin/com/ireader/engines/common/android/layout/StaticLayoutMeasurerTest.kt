@@ -2,10 +2,14 @@ package com.ireader.engines.common.android.layout
 
 import android.graphics.text.LineBreakConfig
 import android.text.Layout
+import com.ireader.core.common.android.typography.AndroidTextLayoutKind
+import com.ireader.core.common.android.typography.resolveAndroidTextLayoutProfile
+import com.ireader.core.common.android.typography.toEffectiveTxtBreakStrategy
 import com.ireader.core.common.android.typography.txtAndroidLineBreakConfig
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
+import com.ireader.core.common.android.typography.toTxtAndroidJustificationMode
 import com.ireader.core.common.android.typography.toAndroidLayoutAlignment
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
@@ -38,15 +42,48 @@ class StaticLayoutMeasurerTest {
             TextAlignMode.START.toAndroidJustificationMode()
         )
         assertEquals(
-            Layout.JUSTIFICATION_MODE_INTER_CHARACTER,
+            Layout.JUSTIFICATION_MODE_INTER_WORD,
             TextAlignMode.JUSTIFY.toAndroidJustificationMode()
+        )
+        assertEquals(
+            Layout.JUSTIFICATION_MODE_INTER_CHARACTER,
+            TextAlignMode.JUSTIFY.toTxtAndroidJustificationMode()
         )
     }
 
     @Test
-    fun `txt line break config should use strict phrase line breaking`() {
+    fun `txt line break config should disable strict cjk overrides`() {
         val config = txtAndroidLineBreakConfig()
-        assertEquals(LineBreakConfig.LINE_BREAK_STYLE_STRICT, config.lineBreakStyle)
-        assertEquals(LineBreakConfig.LINE_BREAK_WORD_STYLE_PHRASE, config.lineBreakWordStyle)
+        assertEquals(LineBreakConfig.LINE_BREAK_STYLE_NONE, config.lineBreakStyle)
+        assertEquals(LineBreakConfig.LINE_BREAK_WORD_STYLE_NONE, config.lineBreakWordStyle)
+    }
+
+    @Test
+    fun `txt effective break strategy should downgrade balanced to simple`() {
+        assertEquals(BreakStrategyMode.SIMPLE, BreakStrategyMode.BALANCED.toEffectiveTxtBreakStrategy())
+        assertEquals(BreakStrategyMode.HIGH_QUALITY, BreakStrategyMode.HIGH_QUALITY.toEffectiveTxtBreakStrategy())
+    }
+
+    @Test
+    fun `text layout profile should separate generic and txt behavior`() {
+        val generic = resolveAndroidTextLayoutProfile(
+            kind = AndroidTextLayoutKind.GENERIC,
+            textAlign = TextAlignMode.JUSTIFY,
+            breakStrategy = BreakStrategyMode.BALANCED,
+            hyphenationMode = HyphenationMode.NORMAL
+        )
+        val txt = resolveAndroidTextLayoutProfile(
+            kind = AndroidTextLayoutKind.TXT,
+            textAlign = TextAlignMode.JUSTIFY,
+            breakStrategy = BreakStrategyMode.BALANCED,
+            hyphenationMode = HyphenationMode.NORMAL
+        )
+
+        assertEquals(BreakStrategyMode.BALANCED, generic.breakStrategy)
+        assertEquals(Layout.JUSTIFICATION_MODE_INTER_WORD, generic.justificationMode)
+        assertEquals(BreakStrategyMode.SIMPLE, txt.breakStrategy)
+        assertEquals(Layout.JUSTIFICATION_MODE_INTER_CHARACTER, txt.justificationMode)
+        assertEquals(LineBreakConfig.LINE_BREAK_STYLE_NONE, txt.lineBreakConfig.lineBreakStyle)
+        assertEquals(LineBreakConfig.LINE_BREAK_WORD_STYLE_NONE, txt.lineBreakConfig.lineBreakWordStyle)
     }
 }

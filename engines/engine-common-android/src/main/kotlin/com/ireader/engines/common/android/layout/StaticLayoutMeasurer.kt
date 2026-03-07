@@ -5,13 +5,10 @@ package com.ireader.engines.common.android.layout
 import android.graphics.text.LineBreakConfig
 import android.text.StaticLayout
 import android.text.TextPaint
-import com.ireader.core.common.android.typography.txtAndroidLineBreakConfig
+import com.ireader.core.common.android.typography.AndroidTextLayoutProfile
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
-import com.ireader.core.common.android.typography.toAndroidJustificationMode
 import com.ireader.core.common.android.typography.toAndroidLayoutAlignment
-import com.ireader.reader.api.render.BreakStrategyMode
-import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.TextAlignMode
 
 data class MeasureResult(
@@ -29,9 +26,8 @@ object StaticLayoutMeasurer {
         heightPx: Int,
         lineHeightMult: Float,
         textAlign: TextAlignMode,
-        breakStrategy: BreakStrategyMode,
-        hyphenationMode: HyphenationMode,
-        includeFontPadding: Boolean
+        includeFontPadding: Boolean,
+        layoutProfile: AndroidTextLayoutProfile
     ): MeasureResult {
         if (text.isEmpty() || widthPx <= 0 || heightPx <= 0) {
             return MeasureResult(
@@ -40,7 +36,6 @@ object StaticLayoutMeasurer {
                 lastVisibleLine = -1
             )
         }
-        val lineBreakConfig = txtAndroidLineBreakConfig()
 
         val builder = StaticLayout.Builder.obtain(
             text,
@@ -53,13 +48,13 @@ object StaticLayoutMeasurer {
             .setIncludePad(includeFontPadding)
             .setLineSpacing(0f, lineHeightMult)
             .setUseLineSpacingFromFallbacks(true)
-            .setHyphenationFrequency(hyphenationMode.toAndroidHyphenationFrequency())
-            .setBreakStrategy(breakStrategy.toAndroidBreakStrategy())
-            .setJustificationMode(textAlign.toAndroidJustificationMode())
+            .setHyphenationFrequency(layoutProfile.hyphenationMode.toAndroidHyphenationFrequency())
+            .setBreakStrategy(layoutProfile.breakStrategy.toAndroidBreakStrategy())
+            .setJustificationMode(layoutProfile.justificationMode)
             .setLineBreakConfig(
                 LineBreakConfig.Builder()
-                    .setLineBreakStyle(lineBreakConfig.lineBreakStyle)
-                    .setLineBreakWordStyle(lineBreakConfig.lineBreakWordStyle)
+                    .setLineBreakStyle(layoutProfile.lineBreakConfig.lineBreakStyle)
+                    .setLineBreakWordStyle(layoutProfile.lineBreakConfig.lineBreakWordStyle)
                     .build()
             )
 

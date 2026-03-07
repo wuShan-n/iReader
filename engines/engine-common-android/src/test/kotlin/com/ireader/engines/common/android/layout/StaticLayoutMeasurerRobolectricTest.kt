@@ -6,7 +6,10 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.widget.TextView
-import com.ireader.core.common.android.typography.txtAndroidLineBreakConfig
+import com.ireader.core.common.android.typography.AndroidTextLayoutKind
+import com.ireader.core.common.android.typography.resolveAndroidTextLayoutProfile
+import com.ireader.core.common.android.typography.toAndroidBreakStrategy
+import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.TextAlignMode
@@ -38,6 +41,12 @@ class StaticLayoutMeasurerRobolectricTest {
         val paint = TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply {
             textSize = textSizePx
         }
+        val layoutProfile = resolveAndroidTextLayoutProfile(
+            kind = AndroidTextLayoutKind.TXT,
+            textAlign = TextAlignMode.JUSTIFY,
+            breakStrategy = BreakStrategyMode.BALANCED,
+            hyphenationMode = HyphenationMode.NORMAL
+        )
 
         val measure = StaticLayoutMeasurer.measure(
             text = sampleText,
@@ -46,20 +55,19 @@ class StaticLayoutMeasurerRobolectricTest {
             heightPx = heightPx,
             lineHeightMult = lineHeightMult,
             textAlign = TextAlignMode.JUSTIFY,
-            breakStrategy = BreakStrategyMode.BALANCED,
-            hyphenationMode = HyphenationMode.NORMAL,
-            includeFontPadding = false
+            includeFontPadding = false,
+            layoutProfile = layoutProfile
         )
 
         val textView = TextView(context).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
             setLineSpacing(0f, lineHeightMult)
             includeFontPadding = false
-            breakStrategy = Layout.BREAK_STRATEGY_BALANCED
-            hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NORMAL
-            justificationMode = Layout.JUSTIFICATION_MODE_INTER_CHARACTER
+            breakStrategy = layoutProfile.breakStrategy.toAndroidBreakStrategy()
+            hyphenationFrequency = layoutProfile.hyphenationMode.toAndroidHyphenationFrequency()
+            justificationMode = layoutProfile.justificationMode
             setFallbackLineSpacing(true)
-            val lineBreakConfig = txtAndroidLineBreakConfig()
+            val lineBreakConfig = layoutProfile.lineBreakConfig
             lineBreakStyle = lineBreakConfig.lineBreakStyle
             lineBreakWordStyle = lineBreakConfig.lineBreakWordStyle
             gravity = Gravity.TOP or Gravity.START
@@ -100,6 +108,12 @@ class StaticLayoutMeasurerRobolectricTest {
         val paint = TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply {
             textSize = textSizePx
         }
+        val layoutProfile = resolveAndroidTextLayoutProfile(
+            kind = AndroidTextLayoutKind.TXT,
+            textAlign = TextAlignMode.JUSTIFY,
+            breakStrategy = BreakStrategyMode.HIGH_QUALITY,
+            hyphenationMode = HyphenationMode.NONE
+        )
 
         val measure = StaticLayoutMeasurer.measure(
             text = sampleText,
@@ -108,20 +122,19 @@ class StaticLayoutMeasurerRobolectricTest {
             heightPx = viewportHeightPx - topPaddingPx - bottomPaddingPx,
             lineHeightMult = lineHeightMult,
             textAlign = TextAlignMode.JUSTIFY,
-            breakStrategy = BreakStrategyMode.HIGH_QUALITY,
-            hyphenationMode = HyphenationMode.NONE,
-            includeFontPadding = false
+            includeFontPadding = false,
+            layoutProfile = layoutProfile
         )
 
         val textView = TextView(context).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
             setLineSpacing(0f, lineHeightMult)
             includeFontPadding = false
-            breakStrategy = Layout.BREAK_STRATEGY_HIGH_QUALITY
-            hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
-            justificationMode = Layout.JUSTIFICATION_MODE_INTER_CHARACTER
+            breakStrategy = layoutProfile.breakStrategy.toAndroidBreakStrategy()
+            hyphenationFrequency = layoutProfile.hyphenationMode.toAndroidHyphenationFrequency()
+            justificationMode = layoutProfile.justificationMode
             setFallbackLineSpacing(true)
-            val lineBreakConfig = txtAndroidLineBreakConfig()
+            val lineBreakConfig = layoutProfile.lineBreakConfig
             lineBreakStyle = lineBreakConfig.lineBreakStyle
             lineBreakWordStyle = lineBreakConfig.lineBreakWordStyle
             gravity = Gravity.TOP or Gravity.START

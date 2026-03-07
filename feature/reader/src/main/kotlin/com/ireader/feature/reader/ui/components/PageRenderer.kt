@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.ireader.core.common.android.typography.AndroidTextLayoutKind
 import com.ireader.feature.reader.presentation.GestureAxis
 import com.ireader.feature.reader.presentation.PageTurnAnimationKind
 import com.ireader.feature.reader.presentation.PageTurnDirection
@@ -53,6 +54,7 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.TextMapping
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
+import com.ireader.reader.model.LocatorSchemes
 
 @Composable
 fun PageRenderer(
@@ -214,6 +216,9 @@ private fun AnimatedTextPage(
         }
 
         var textViewRef by remember(targetPage.id.value) { mutableStateOf<TextView?>(null) }
+        val textLayoutKind = remember(targetPage.locator.scheme) {
+            resolveTextLayoutKind(targetPage.locator)
+        }
         val linkHits = remember(targetPage.id.value, targetPage.links, targetContent.mapping) {
             val mapping = targetContent.mapping
             targetPage.links.mapNotNull { link ->
@@ -230,6 +235,7 @@ private fun AnimatedTextPage(
                 links = targetPage.links,
                 decorations = targetPage.decorations,
                 reflowConfig = reflowConfig,
+                textLayoutKind = textLayoutKind,
                 textColor = textColor,
                 backgroundColor = backgroundColor,
                 onTextViewBound = { textView -> textViewRef = textView },
@@ -350,6 +356,15 @@ private data class TextLinkHit(
     val link: DocumentLink,
     val range: IntRange
 )
+
+internal fun resolveTextLayoutKind(locator: Locator): AndroidTextLayoutKind {
+    return when (locator.scheme) {
+        LocatorSchemes.TXT_OFFSET,
+        LocatorSchemes.TXT_BLOCK -> AndroidTextLayoutKind.TXT
+
+        else -> AndroidTextLayoutKind.GENERIC
+    }
+}
 
 private fun RenderConfig.ReflowText.resolveTopPaddingDp(defaultDp: Float): Float {
     return (extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)

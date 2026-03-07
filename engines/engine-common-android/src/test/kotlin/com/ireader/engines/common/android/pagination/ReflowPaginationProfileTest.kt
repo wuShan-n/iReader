@@ -50,6 +50,17 @@ class ReflowPaginationProfileTest {
     }
 
     @Test
+    fun `balanced and simple txt break strategies should share key`() {
+        val balanced = RenderConfig.ReflowText(breakStrategy = BreakStrategyMode.BALANCED)
+        val simple = balanced.copy(breakStrategy = BreakStrategyMode.SIMPLE)
+
+        val balancedKey = ReflowPaginationProfile.keyFor("doc-a", constraints, balanced)
+        val simpleKey = ReflowPaginationProfile.keyFor("doc-a", constraints, simple)
+
+        assertEquals(balancedKey, simpleKey)
+    }
+
+    @Test
     fun `soft break profile should change key`() {
         val balanced = RenderConfig.ReflowText(
             extra = mapOf(SOFT_BREAK_PROFILE_EXTRA_KEY to "balanced")

@@ -17,6 +17,18 @@ data class AndroidLineBreakConfig(
     val lineBreakWordStyle: Int
 )
 
+enum class AndroidTextLayoutKind {
+    GENERIC,
+    TXT
+}
+
+data class AndroidTextLayoutProfile(
+    val breakStrategy: BreakStrategyMode,
+    val hyphenationMode: HyphenationMode,
+    val justificationMode: Int,
+    val lineBreakConfig: AndroidLineBreakConfig
+)
+
 data class ResolvedPagePaddingDp(
     val horizontal: Float,
     val top: Float,
@@ -38,11 +50,22 @@ fun BreakStrategyMode.toAndroidBreakStrategy(): Int {
     }
 }
 
-fun txtAndroidLineBreakConfig(): AndroidLineBreakConfig {
+fun defaultAndroidLineBreakConfig(): AndroidLineBreakConfig {
     return AndroidLineBreakConfig(
-        lineBreakStyle = LineBreakConfig.LINE_BREAK_STYLE_STRICT,
-        lineBreakWordStyle = LineBreakConfig.LINE_BREAK_WORD_STYLE_PHRASE
+        lineBreakStyle = LineBreakConfig.LINE_BREAK_STYLE_NONE,
+        lineBreakWordStyle = LineBreakConfig.LINE_BREAK_WORD_STYLE_NONE
     )
+}
+
+fun txtAndroidLineBreakConfig(): AndroidLineBreakConfig {
+    return defaultAndroidLineBreakConfig()
+}
+
+fun BreakStrategyMode.toEffectiveTxtBreakStrategy(): BreakStrategyMode {
+    return when (this) {
+        BreakStrategyMode.BALANCED -> BreakStrategyMode.SIMPLE
+        else -> this
+    }
 }
 
 fun HyphenationMode.toAndroidHyphenationFrequency(): Int {
@@ -56,7 +79,37 @@ fun HyphenationMode.toAndroidHyphenationFrequency(): Int {
 fun TextAlignMode.toAndroidJustificationMode(): Int {
     return when (this) {
         TextAlignMode.START -> Layout.JUSTIFICATION_MODE_NONE
+        TextAlignMode.JUSTIFY -> Layout.JUSTIFICATION_MODE_INTER_WORD
+    }
+}
+
+fun TextAlignMode.toTxtAndroidJustificationMode(): Int {
+    return when (this) {
+        TextAlignMode.START -> Layout.JUSTIFICATION_MODE_NONE
         TextAlignMode.JUSTIFY -> Layout.JUSTIFICATION_MODE_INTER_CHARACTER
+    }
+}
+
+fun resolveAndroidTextLayoutProfile(
+    kind: AndroidTextLayoutKind,
+    textAlign: TextAlignMode,
+    breakStrategy: BreakStrategyMode,
+    hyphenationMode: HyphenationMode
+): AndroidTextLayoutProfile {
+    return when (kind) {
+        AndroidTextLayoutKind.GENERIC -> AndroidTextLayoutProfile(
+            breakStrategy = breakStrategy,
+            hyphenationMode = hyphenationMode,
+            justificationMode = textAlign.toAndroidJustificationMode(),
+            lineBreakConfig = defaultAndroidLineBreakConfig()
+        )
+
+        AndroidTextLayoutKind.TXT -> AndroidTextLayoutProfile(
+            breakStrategy = breakStrategy.toEffectiveTxtBreakStrategy(),
+            hyphenationMode = hyphenationMode,
+            justificationMode = textAlign.toTxtAndroidJustificationMode(),
+            lineBreakConfig = txtAndroidLineBreakConfig()
+        )
     }
 }
 

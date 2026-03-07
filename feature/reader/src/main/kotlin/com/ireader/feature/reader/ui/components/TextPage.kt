@@ -21,12 +21,12 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.ireader.core.common.android.typography.AndroidTextLayoutKind
 import com.ireader.core.common.android.typography.appendHiddenTrailingLine
+import com.ireader.core.common.android.typography.resolveAndroidTextLayoutProfile
 import com.ireader.core.common.android.typography.resolvePagePaddingDp
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
-import com.ireader.core.common.android.typography.toAndroidJustificationMode
-import com.ireader.core.common.android.typography.txtAndroidLineBreakConfig
 import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
@@ -41,6 +41,7 @@ fun TextPage(
     links: List<DocumentLink>,
     decorations: List<Decoration>,
     reflowConfig: RenderConfig.ReflowText?,
+    textLayoutKind: AndroidTextLayoutKind = AndroidTextLayoutKind.GENERIC,
     textColor: Color,
     backgroundColor: Color,
     onTextViewBound: (TextView) -> Unit,
@@ -53,7 +54,18 @@ fun TextPage(
     val horizontalPaddingPx = with(density) { pagePadding.horizontal.dp.roundToPx() }
     val verticalTopPaddingPx = with(density) { pagePadding.top.dp.roundToPx() }
     val verticalBottomPaddingPx = with(density) { pagePadding.bottom.dp.roundToPx() }
-    val lineBreakConfig = remember { txtAndroidLineBreakConfig() }
+    val textLayoutProfile = remember(
+        textLayoutKind,
+        typography.breakStrategy,
+        typography.hyphenationMode
+    ) {
+        resolveAndroidTextLayoutProfile(
+            kind = textLayoutKind,
+            textAlign = TextAlignMode.JUSTIFY,
+            breakStrategy = typography.breakStrategy,
+            hyphenationMode = typography.hyphenationMode
+        )
+    }
     val typeface = remember(typography.fontFamilyName) {
         val familyName = typography.fontFamilyName
         if (familyName.isNullOrBlank()) {
@@ -142,23 +154,23 @@ fun TextPage(
                 if (textView.text !== displayText) {
                     textView.text = displayText
                 }
-                val breakStrategy = typography.breakStrategy.toAndroidBreakStrategy()
+                val breakStrategy = textLayoutProfile.breakStrategy.toAndroidBreakStrategy()
                 if (textView.breakStrategy != breakStrategy) {
                     textView.breakStrategy = breakStrategy
                 }
+                val lineBreakConfig = textLayoutProfile.lineBreakConfig
                 if (textView.lineBreakStyle != lineBreakConfig.lineBreakStyle) {
                     textView.lineBreakStyle = lineBreakConfig.lineBreakStyle
                 }
                 if (textView.lineBreakWordStyle != lineBreakConfig.lineBreakWordStyle) {
                     textView.lineBreakWordStyle = lineBreakConfig.lineBreakWordStyle
                 }
-                val hyphenation = typography.hyphenationMode.toAndroidHyphenationFrequency()
+                val hyphenation = textLayoutProfile.hyphenationMode.toAndroidHyphenationFrequency()
                 if (textView.hyphenationFrequency != hyphenation) {
                     textView.hyphenationFrequency = hyphenation
                 }
-                val expectedJustification = TextAlignMode.JUSTIFY.toAndroidJustificationMode()
-                if (textView.justificationMode != expectedJustification) {
-                    textView.justificationMode = expectedJustification
+                if (textView.justificationMode != textLayoutProfile.justificationMode) {
+                    textView.justificationMode = textLayoutProfile.justificationMode
                 }
             }
         )

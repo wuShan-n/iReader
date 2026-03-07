@@ -5,6 +5,8 @@ package com.ireader.engines.common.android.reflow
 import android.text.SpannableStringBuilder
 import android.os.Trace
 import android.util.Log
+import com.ireader.core.common.android.typography.AndroidTextLayoutKind
+import com.ireader.core.common.android.typography.resolveAndroidTextLayoutProfile
 import com.ireader.core.common.android.typography.resolvePagePaddingDp
 import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
 import com.ireader.engines.common.android.layout.TextPaintFactory
@@ -88,6 +90,12 @@ class ReflowPaginator(
         val paragraphSpacingPx = (typography.paragraphSpacingDp * constraints.density).roundToInt()
         val paint = TextPaintFactory.create(config, constraints)
         val paragraphIndentPx = 0
+        val textLayoutProfile = resolveAndroidTextLayoutProfile(
+            kind = AndroidTextLayoutKind.TXT,
+            textAlign = TextAlignMode.JUSTIFY,
+            breakStrategy = typography.breakStrategy,
+            hyphenationMode = typography.hyphenationMode
+        )
         val softBreakProfile = SoftBreakTuningProfile.fromStorageValue(config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY])
         val softBreakRules = SoftBreakRuleConfig.forProfile(softBreakProfile)
         val softBreakSource = when {
@@ -153,9 +161,8 @@ class ReflowPaginator(
                 heightPx = height,
                 lineHeightMult = typography.lineHeightMult,
                 textAlign = TextAlignMode.JUSTIFY,
-                breakStrategy = typography.breakStrategy,
-                hyphenationMode = typography.hyphenationMode,
-                includeFontPadding = typography.includeFontPadding
+                includeFontPadding = typography.includeFontPadding,
+                layoutProfile = textLayoutProfile
             )
             measuredEnd = measure.endChar.coerceIn(0, rawLength)
 
