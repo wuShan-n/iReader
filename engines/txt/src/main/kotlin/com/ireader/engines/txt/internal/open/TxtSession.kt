@@ -28,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -60,6 +61,7 @@ internal class TxtSession(
             txtController.events
                 .filterIsInstance<ReaderEvent.Rendered>()
                 .first()
+            delay(BACKGROUND_ARTIFACT_DELAY_MS)
             ensureBackgroundArtifactsReady()
         }
     }
@@ -164,6 +166,7 @@ internal class TxtSession(
     companion object {
         private const val TXT_BLOCK_INDEX_VERSION = 1
         private const val SOFT_BREAK_MAP_VERSION = 7
+        private const val BACKGROUND_ARTIFACT_DELAY_MS = 1_200L
 
         fun create(
             controller: com.ireader.engines.txt.internal.render.TxtController,

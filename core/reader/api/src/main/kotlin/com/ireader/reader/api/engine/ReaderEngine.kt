@@ -1,9 +1,9 @@
 package com.ireader.reader.api.engine
 
 import com.ireader.reader.api.error.ReaderResult
-import com.ireader.reader.model.BookFormat
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
-import com.ireader.core.files.source.DocumentSource
+import com.ireader.reader.model.BookFormat
 
 interface ReaderEngine {
     val supportedFormats: Set<BookFormat>

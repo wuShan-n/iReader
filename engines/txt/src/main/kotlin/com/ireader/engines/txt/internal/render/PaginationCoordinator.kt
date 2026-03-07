@@ -8,6 +8,8 @@ import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.TextLayouterFactory
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
@@ -91,6 +93,7 @@ internal class PaginationCoordinator(
         var previous = checkpoint
         var safety = 0
         while (cursor < fromStart && safety < MAX_BACKTRACK_PAGES) {
+            coroutineContext.ensureActive()
             val slice = pageAt(cursor, allowCache = true).slice
             if (slice.endOffset >= fromStart) {
                 return previous.coerceAtLeast(0L)
@@ -109,9 +112,11 @@ internal class PaginationCoordinator(
         if (count <= 0) {
             return
         }
+        coroutineContext.ensureActive()
         val current = pageAt(currentStart, allowCache = true).slice
         var cursor = current.endOffset
         repeat(count.coerceAtMost(MAX_FORWARD_PREFETCH)) {
+            coroutineContext.ensureActive()
             if (cursor >= store.lengthCodeUnits) {
                 return@repeat
             }
@@ -136,6 +141,7 @@ internal class PaginationCoordinator(
         var cursor = fromStart.coerceIn(0L, store.lengthCodeUnits)
         var remaining = maxPages.coerceAtMost(MAX_FORWARD_WARMUP)
         while (remaining > 0 && cursor < store.lengthCodeUnits) {
+            coroutineContext.ensureActive()
             val slice = pageAt(cursor, allowCache = true).slice
             if (slice.endOffset <= cursor) {
                 break

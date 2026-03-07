@@ -1,6 +1,6 @@
 package com.ireader.feature.reader.presentation
 
-import com.ireader.core.datastore.reader.ReaderBackgroundPreset
+import com.ireader.core.data.reader.ReaderBackgroundPreset
 import com.ireader.reader.api.engine.TextBreakPatchDirection
 import com.ireader.reader.api.engine.TextBreakPatchState
 import com.ireader.reader.api.render.LayoutConstraints

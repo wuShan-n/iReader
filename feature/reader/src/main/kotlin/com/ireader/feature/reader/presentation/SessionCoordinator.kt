@@ -1,11 +1,11 @@
 package com.ireader.feature.reader.presentation
 
 import com.ireader.reader.model.Locator
-import com.ireader.reader.runtime.ReaderSessionHandle
+import com.ireader.reader.runtime.ReaderHandle
 import kotlinx.coroutines.Job
 
 internal class SessionCoordinator {
-    private var sessionHandle: ReaderSessionHandle? = null
+    private var sessionHandle: ReaderHandle? = null
     private var activeBookId: Long = -1L
 
     private var progressJob: Job? = null
@@ -13,13 +13,17 @@ internal class SessionCoordinator {
     private var eventJob: Job? = null
     private var settingsJob: Job? = null
 
-    fun currentHandle(): ReaderSessionHandle? = sessionHandle
+    fun currentHandle(): ReaderHandle? = sessionHandle
 
     fun currentBookId(): Long = activeBookId
 
-    fun attach(bookId: Long, handle: ReaderSessionHandle) {
+    fun attach(bookId: Long, handle: ReaderHandle) {
         activeBookId = bookId
         sessionHandle = handle
+    }
+
+    fun attach(bookId: Long, handle: com.ireader.reader.runtime.ReaderSessionHandle) {
+        attach(bookId = bookId, handle = handle as ReaderHandle)
     }
 
     fun clearHandle() {
@@ -61,7 +65,7 @@ internal class SessionCoordinator {
 
         if (current != null && bookId > 0L) {
             runCatching {
-                val renderState = current.controller.state.value
+                val renderState = current.state.value
                 saveProgress(bookId, renderState.locator, renderState.progression.percent)
             }
         }

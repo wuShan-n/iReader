@@ -1,6 +1,6 @@
 package com.ireader.reader.api.render
 
-import com.ireader.reader.model.DocumentCapabilities
+import com.ireader.reader.api.engine.DocumentCapabilities
 
 object RenderConfigSanitizer {
 

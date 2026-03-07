@@ -1,6 +1,6 @@
 package com.ireader.reader.runtime.render
 
-import com.ireader.reader.model.DocumentCapabilities
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.api.render.RenderConfig
 
 object RenderDefaults {

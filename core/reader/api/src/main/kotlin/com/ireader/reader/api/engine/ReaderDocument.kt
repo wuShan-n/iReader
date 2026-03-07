@@ -1,12 +1,11 @@
 package com.ireader.reader.api.engine
 
 import com.ireader.reader.api.error.ReaderResult
-import com.ireader.reader.model.DocumentCapabilities
+import com.ireader.reader.api.open.OpenOptions
+import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
-import com.ireader.reader.api.open.OpenOptions
-import com.ireader.reader.api.render.RenderConfig
 import java.io.Closeable
 
 interface ReaderDocument : Closeable {

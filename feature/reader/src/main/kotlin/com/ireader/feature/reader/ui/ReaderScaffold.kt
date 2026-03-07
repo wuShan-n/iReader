@@ -69,8 +69,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
-import com.ireader.core.datastore.reader.ReaderBackgroundPreset
-import com.ireader.core.datastore.reader.ReaderDisplayPrefs
+import com.ireader.core.data.reader.ReaderBackgroundPreset
+import com.ireader.core.data.reader.ReaderDisplayPrefs
 import com.ireader.core.designsystem.PrototypeIcons
 import com.ireader.core.designsystem.ReaderTokens
 import com.ireader.feature.reader.presentation.ReaderErrorAction

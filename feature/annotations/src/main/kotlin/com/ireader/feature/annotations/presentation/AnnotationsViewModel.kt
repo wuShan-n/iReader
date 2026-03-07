@@ -3,21 +3,16 @@ package com.ireader.feature.annotations.presentation
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ireader.core.data.annotation.AnnotationDocumentLookup
+import com.ireader.core.data.annotation.AnnotationListItem
+import com.ireader.core.data.annotation.AnnotationMutationFailure
+import com.ireader.core.data.annotation.AnnotationMutationResult
+import com.ireader.core.data.annotation.AnnotationRepository
 import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.book.LocatorCodec
 import com.ireader.core.data.book.ProgressRepo
 import com.ireader.core.navigation.AppRoutes
-import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.AnnotationStore
-import com.ireader.reader.model.DocumentId
-import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorRange
-import com.ireader.reader.model.LocatorSchemes
-import com.ireader.reader.model.annotation.Annotation
-import com.ireader.reader.model.annotation.AnnotationAnchor
-import com.ireader.reader.model.annotation.AnnotationDraft
-import com.ireader.reader.model.annotation.AnnotationId
-import com.ireader.reader.model.annotation.AnnotationType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -49,19 +44,30 @@ data class AnnotationsUiState(
 @HiltViewModel
 class AnnotationsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val bookRepo: BookRepo,
-    private val progressRepo: ProgressRepo,
-    private val annotationStore: AnnotationStore,
-    private val locatorCodec: LocatorCodec
+    private val annotationRepository: AnnotationRepository
 ) : ViewModel() {
+    constructor(
+        savedStateHandle: SavedStateHandle,
+        bookRepo: BookRepo,
+        progressRepo: ProgressRepo,
+        annotationStore: AnnotationStore,
+        locatorCodec: LocatorCodec
+    ) : this(
+        savedStateHandle = savedStateHandle,
+        annotationRepository = AnnotationRepository(
+            bookRepo = bookRepo,
+            progressRepo = progressRepo,
+            annotationStore = annotationStore,
+            locatorCodec = locatorCodec
+        )
+    )
 
     private val bookId: Long = savedStateHandle.get<Long>(AppRoutes.ARG_BOOK_ID) ?: -1L
     private val stateStore = MutableStateFlow(AnnotationsUiState())
     val uiState: StateFlow<AnnotationsUiState> = stateStore.asStateFlow()
 
-    private var resolvedDocumentId: DocumentId? = null
+    private var resolvedDocumentId: String? = null
     private var observeJob: Job? = null
-    private var annotationsById: Map<String, Annotation> = emptyMap()
 
     init {
         viewModelScope.launch {
@@ -74,11 +80,11 @@ class AnnotationsViewModel @Inject constructor(
     }
 
     fun onStartEdit(id: String) {
-        val annotation = annotationsById[id] ?: return
+        val annotation = uiState.value.items.firstOrNull { it.id == id } ?: return
         stateStore.update {
             it.copy(
                 editingId = id,
-                editingContent = annotation.content.orEmpty()
+                editingContent = annotation.content
             )
         }
     }
@@ -97,37 +103,20 @@ class AnnotationsViewModel @Inject constructor(
 
     fun createAnnotation() {
         viewModelScope.launch {
-            val docId = resolvedDocumentId ?: return@launch
+            val documentId = resolvedDocumentId ?: return@launch
             val content = uiState.value.draftContent.trim()
             if (content.isBlank()) {
                 stateStore.update { it.copy(errorMessage = "请输入笔记内容") }
                 return@launch
             }
 
-            val fallbackLocator = resolveFallbackLocator()
-            if (fallbackLocator == null) {
-                stateStore.update { it.copy(errorMessage = "缺少阅读定位，无法创建笔记") }
-                return@launch
-            }
-
-            val anchor = fallbackLocator.toAnchor()
-            if (anchor == null) {
-                stateStore.update { it.copy(errorMessage = "旧版 TXT 定位已失效，请先重新打开书籍后再创建笔记") }
-                return@launch
-            }
-
-            val draft = AnnotationDraft(
-                type = AnnotationType.NOTE,
-                anchor = anchor,
-                content = content
-            )
-            when (annotationStore.create(docId, draft)) {
-                is ReaderResult.Ok -> {
+            when (val result = annotationRepository.createNote(documentId, bookId, content)) {
+                AnnotationMutationResult.Success -> {
                     stateStore.update { it.copy(draftContent = "", errorMessage = null) }
                 }
 
-                is ReaderResult.Err -> {
-                    stateStore.update { it.copy(errorMessage = "创建笔记失败") }
+                is AnnotationMutationResult.Failure -> {
+                    stateStore.update { it.copy(errorMessage = createErrorMessage(result.reason)) }
                 }
             }
         }
@@ -135,17 +124,16 @@ class AnnotationsViewModel @Inject constructor(
 
     fun saveEditing() {
         viewModelScope.launch {
-            val docId = resolvedDocumentId ?: return@launch
+            val documentId = resolvedDocumentId ?: return@launch
             val editingId = uiState.value.editingId ?: return@launch
-            val original = annotationsById[editingId] ?: return@launch
             val nextContent = uiState.value.editingContent.trim()
             if (nextContent.isBlank()) {
                 stateStore.update { it.copy(errorMessage = "笔记内容不能为空") }
                 return@launch
             }
 
-            when (annotationStore.update(docId, original.copy(content = nextContent))) {
-                is ReaderResult.Ok -> {
+            when (val result = annotationRepository.updateContent(documentId, editingId, nextContent)) {
+                AnnotationMutationResult.Success -> {
                     stateStore.update {
                         it.copy(
                             editingId = null,
@@ -155,8 +143,8 @@ class AnnotationsViewModel @Inject constructor(
                     }
                 }
 
-                is ReaderResult.Err -> {
-                    stateStore.update { it.copy(errorMessage = "更新笔记失败") }
+                is AnnotationMutationResult.Failure -> {
+                    stateStore.update { it.copy(errorMessage = updateErrorMessage(result.reason)) }
                 }
             }
         }
@@ -164,9 +152,9 @@ class AnnotationsViewModel @Inject constructor(
 
     fun deleteAnnotation(id: String) {
         viewModelScope.launch {
-            val docId = resolvedDocumentId ?: return@launch
-            when (annotationStore.delete(docId, AnnotationId(id))) {
-                is ReaderResult.Ok -> {
+            val documentId = resolvedDocumentId ?: return@launch
+            when (val result = annotationRepository.delete(documentId, id)) {
+                AnnotationMutationResult.Success -> {
                     stateStore.update {
                         if (it.editingId == id) {
                             it.copy(editingId = null, editingContent = "", errorMessage = null)
@@ -176,78 +164,81 @@ class AnnotationsViewModel @Inject constructor(
                     }
                 }
 
-                is ReaderResult.Err -> {
-                    stateStore.update { it.copy(errorMessage = "删除笔记失败") }
+                is AnnotationMutationResult.Failure -> {
+                    stateStore.update { it.copy(errorMessage = deleteErrorMessage(result.reason)) }
                 }
             }
         }
     }
 
     private suspend fun loadDocument() {
-        if (bookId <= 0L) {
-            stateStore.update { it.copy(isLoading = false, errorMessage = "无效书籍参数") }
-            return
-        }
-
-        val record = bookRepo.getRecordById(bookId)
-        val documentIdValue = record?.documentId?.takeIf { it.isNotBlank() }
-        if (documentIdValue == null) {
-            stateStore.update { it.copy(isLoading = false, errorMessage = "该书籍缺少文档标识，无法加载笔记") }
-            return
-        }
-
-        val documentId = DocumentId(documentIdValue)
-        resolvedDocumentId = documentId
-        stateStore.update { it.copy(isLoading = false, documentId = documentIdValue, errorMessage = null) }
-
-        observeJob?.cancel()
-        observeJob = viewModelScope.launch {
-            annotationStore.observe(documentId).collect { annotations ->
-                annotationsById = annotations.associateBy { it.id.value }
+        when (val result = annotationRepository.resolveDocument(bookId)) {
+            AnnotationDocumentLookup.InvalidBookId -> {
                 stateStore.update {
-                    it.copy(
-                        items = annotations.map { annotation -> annotation.toUiItem() },
-                        errorMessage = null
-                    )
+                    it.copy(isLoading = false, errorMessage = "无效书籍参数")
+                }
+            }
+
+            AnnotationDocumentLookup.BookNotFound -> {
+                stateStore.update {
+                    it.copy(isLoading = false, errorMessage = "书籍不存在，无法加载笔记")
+                }
+            }
+
+            AnnotationDocumentLookup.MissingDocumentId -> {
+                stateStore.update {
+                    it.copy(isLoading = false, errorMessage = "该书籍缺少文档标识，无法加载笔记")
+                }
+            }
+
+            is AnnotationDocumentLookup.Success -> {
+                resolvedDocumentId = result.documentId
+                stateStore.update {
+                    it.copy(isLoading = false, documentId = result.documentId, errorMessage = null)
+                }
+                observeJob?.cancel()
+                observeJob = viewModelScope.launch {
+                    annotationRepository.observe(result.documentId).collect { items ->
+                        stateStore.update {
+                            it.copy(items = items.map { item -> item.toUiItem() }, errorMessage = null)
+                        }
+                    }
                 }
             }
         }
     }
 
-    private suspend fun resolveFallbackLocator(): Locator? {
-        val progress = progressRepo.getByBookId(bookId) ?: return null
-        return locatorCodec.decode(progress.locatorJson)
-    }
-
-    private fun Locator.toAnchor(): AnnotationAnchor? {
-        return if (scheme == LocatorSchemes.PDF_PAGE) {
-            AnnotationAnchor.FixedRects(page = this, rects = emptyList())
-        } else if (isLegacyTxtLocator()) {
-            null
-        } else {
-            AnnotationAnchor.ReflowRange(LocatorRange(start = this, end = this))
+    private fun createErrorMessage(reason: AnnotationMutationFailure): String {
+        return when (reason) {
+            AnnotationMutationFailure.MISSING_PROGRESS -> "缺少阅读定位，无法创建笔记"
+            AnnotationMutationFailure.LEGACY_TXT_LOCATOR -> "旧版 TXT 定位已失效，请先重新打开书籍后再创建笔记"
+            AnnotationMutationFailure.MISSING_ANNOTATION,
+            AnnotationMutationFailure.UPDATE_FAILED,
+            AnnotationMutationFailure.DELETE_FAILED,
+            AnnotationMutationFailure.CREATE_FAILED -> "创建笔记失败"
         }
     }
 
-    private fun Locator.isLegacyTxtLocator(): Boolean {
-        return scheme == "txt.offset" || scheme == "txt.block"
+    private fun updateErrorMessage(reason: AnnotationMutationFailure): String {
+        return when (reason) {
+            AnnotationMutationFailure.MISSING_ANNOTATION -> "笔记不存在或已删除"
+            else -> "更新笔记失败"
+        }
     }
 
-    private fun Annotation.toUiItem(): AnnotationItemUi {
-        val locator = when (val anchor = anchor) {
-            is AnnotationAnchor.ReflowRange -> anchor.range.start
-            is AnnotationAnchor.FixedRects -> anchor.page
+    private fun deleteErrorMessage(reason: AnnotationMutationFailure): String {
+        return when (reason) {
+            AnnotationMutationFailure.MISSING_ANNOTATION -> "笔记不存在或已删除"
+            else -> "删除笔记失败"
         }
+    }
+
+    private fun AnnotationListItem.toUiItem(): AnnotationItemUi {
         return AnnotationItemUi(
-            id = id.value,
-            content = content.orEmpty().ifBlank { "(无文本内容)" },
-            typeLabel = when (type) {
-                AnnotationType.HIGHLIGHT -> "高亮"
-                AnnotationType.UNDERLINE -> "下划线"
-                AnnotationType.NOTE -> "笔记"
-                AnnotationType.BOOKMARK -> "书签"
-            },
-            locatorEncoded = locatorCodec.encode(locator),
+            id = id,
+            content = content,
+            typeLabel = typeLabel,
+            locatorEncoded = locatorEncoded,
             updatedAtEpochMs = updatedAtEpochMs
         )
     }

@@ -12,7 +12,6 @@ dependencies {
     implementation(project(":core:navigation"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:data"))
-    implementation(project(":core:reader:api"))
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.kotlinx.coroutines.core)

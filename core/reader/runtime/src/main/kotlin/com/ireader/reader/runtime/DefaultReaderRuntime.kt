@@ -1,15 +1,15 @@
 package com.ireader.reader.runtime
 
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.reader.api.engine.EngineRegistry
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderConfigSanitizer
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
 import com.ireader.reader.runtime.error.toReaderError
@@ -39,7 +39,7 @@ class DefaultReaderRuntime(
         initialLocator: Locator?,
         initialConfig: RenderConfig?,
         resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)?
-    ): ReaderResult<ReaderSessionHandle> {
+    ): ReaderResult<ReaderHandle> {
         val docResult = openDocument(source, options)
         return when (docResult) {
             is ReaderResult.Err -> docResult
@@ -52,7 +52,11 @@ class DefaultReaderRuntime(
 
                 val sessionResult = catchingSuspend { document.createSession(initialLocator, sanitized) }
                 when (sessionResult) {
-                    is ReaderResult.Ok -> ReaderResult.Ok(ReaderSessionHandle(document, sessionResult.value))
+                    is ReaderResult.Ok -> ReaderResult.Ok(
+                        DefaultReaderHandle(
+                            ReaderSessionHandle(document, sessionResult.value)
+                        )
+                    )
                     is ReaderResult.Err -> {
                         runCatching { document.close() }
                         ReaderResult.Err(sessionResult.error)

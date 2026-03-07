@@ -132,10 +132,10 @@ fun PageRenderer(
             )
 
             RenderContent.Embedded -> {
-                val controller = state.controller
-                if (controller == null) {
+                val handle = state.handle
+                if (handle == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No controller bound")
+                        Text("No reader handle bound")
                     }
                 } else {
                     val reflowConfig = state.currentConfig as? RenderConfig.ReflowText
@@ -149,7 +149,7 @@ fun PageRenderer(
                     val topExtraDp = (topPaddingDp - readiumBasePaddingDp).coerceAtLeast(0f)
                     val bottomExtraDp = (bottomPaddingDp - readiumBasePaddingDp).coerceAtLeast(0f)
                     ReaderSurface(
-                        controller = controller,
+                        handle = handle,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(

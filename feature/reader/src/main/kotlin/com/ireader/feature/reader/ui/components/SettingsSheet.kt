@@ -54,9 +54,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.ireader.core.datastore.reader.ReaderBackgroundPreset
+import com.ireader.core.data.reader.ReaderBackgroundPreset
 import com.ireader.core.designsystem.PrototypeIcons
 import com.ireader.core.designsystem.ReaderTokens
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
 import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.REFLOW_LINE_HEIGHT_MAX
@@ -71,7 +72,6 @@ import com.ireader.reader.api.render.RenderConfig
 import com.ireader.feature.reader.presentation.PageTurnStyle
 import com.ireader.feature.reader.presentation.pageTurnStyle
 import com.ireader.feature.reader.presentation.withPageTurnStyle
-import com.ireader.reader.model.DocumentCapabilities
 import kotlin.math.abs
 import kotlin.math.roundToInt
 

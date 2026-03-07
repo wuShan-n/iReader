@@ -12,6 +12,7 @@ import com.ireader.engines.txt.internal.runtime.BreakResolver
 import com.ireader.engines.txt.internal.render.TxtController
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError
@@ -21,7 +22,6 @@ import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator

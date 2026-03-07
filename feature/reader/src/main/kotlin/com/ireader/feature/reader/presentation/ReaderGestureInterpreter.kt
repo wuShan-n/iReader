@@ -1,7 +1,7 @@
 package com.ireader.feature.reader.presentation
 
-import com.ireader.core.datastore.reader.ReaderDisplayPrefs
-import com.ireader.core.datastore.reader.TapZonePreset
+import com.ireader.core.data.reader.ReaderDisplayPrefs
+import com.ireader.core.data.reader.TapZonePreset
 import com.ireader.reader.api.render.PageTurnMode
 import kotlin.math.max
 

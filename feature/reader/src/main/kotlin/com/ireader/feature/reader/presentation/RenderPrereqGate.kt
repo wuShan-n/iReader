@@ -2,24 +2,28 @@ package com.ireader.feature.reader.presentation
 
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.TextLayouterFactory
-import com.ireader.reader.runtime.ReaderSessionHandle
+import com.ireader.reader.runtime.ReaderHandle
 
 internal data class RenderPrereqSnapshot(
-    val sessionHandle: ReaderSessionHandle,
+    val sessionHandle: ReaderHandle,
     val openEpoch: Long,
     val layoutConstraints: LayoutConstraints,
     val textLayouterFactory: TextLayouterFactory
 )
 
 internal class RenderPrereqGate {
-    private var sessionHandle: ReaderSessionHandle? = null
+    private var sessionHandle: ReaderHandle? = null
     private var sessionOpenEpoch: Long = -1L
     private var layoutConstraints: LayoutConstraints? = null
     private var textLayouterFactory: TextLayouterFactory? = null
 
-    fun attachSession(handle: ReaderSessionHandle, openEpoch: Long) {
+    fun attachSession(handle: ReaderHandle, openEpoch: Long) {
         sessionHandle = handle
         sessionOpenEpoch = openEpoch
+    }
+
+    fun attachSession(handle: com.ireader.reader.runtime.ReaderSessionHandle, openEpoch: Long) {
+        attachSession(handle = handle as ReaderHandle, openEpoch = openEpoch)
     }
 
     fun clearSession() {

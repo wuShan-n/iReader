@@ -1,4 +1,4 @@
-package com.ireader.feature.reader.domain.appearance
+package com.ireader.core.data.reader
 
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
@@ -65,7 +65,7 @@ internal fun resolveReaderAppearance(prefs: ReaderDisplayPrefs): ReaderAppearanc
     }
 }
 
-internal fun RenderConfig.withReaderAppearance(prefs: ReaderDisplayPrefs): RenderConfig {
+fun RenderConfig.withReaderAppearance(prefs: ReaderDisplayPrefs): RenderConfig {
     return withReaderAppearance(resolveReaderAppearance(prefs))
 }
 

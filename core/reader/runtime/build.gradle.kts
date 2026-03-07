@@ -9,7 +9,6 @@ android {
 dependencies {
     api(project(":core:reader:api"))
     implementation(project(":core:model"))
-    implementation(project(":core:files"))
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

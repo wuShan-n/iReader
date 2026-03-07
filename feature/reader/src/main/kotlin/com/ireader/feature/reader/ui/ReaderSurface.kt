@@ -16,12 +16,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentContainerView
 import com.ireader.core.common.android.surface.DefaultFragmentRenderSurface
-import com.ireader.reader.api.render.ReaderController
+import com.ireader.reader.runtime.ReaderHandle
 import kotlinx.coroutines.launch
 
 @Composable
 internal fun ReaderSurface(
-    controller: ReaderController,
+    handle: ReaderHandle,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -34,7 +34,7 @@ internal fun ReaderSurface(
     }
 
     val fragmentManager = activity.supportFragmentManager
-    val containerId = remember(controller) { View.generateViewId() }
+    val containerId = remember(handle) { View.generateViewId() }
     val surface = remember(fragmentManager, containerId) {
         DefaultFragmentRenderSurface(
             fragmentManager = fragmentManager,
@@ -56,14 +56,14 @@ internal fun ReaderSurface(
         }
     )
 
-    LaunchedEffect(controller, surface) {
-        controller.bindSurface(surface)
+    LaunchedEffect(handle, surface) {
+        handle.bindSurface(surface)
     }
 
-    DisposableEffect(controller, surface) {
+    DisposableEffect(handle, surface) {
         onDispose {
             scope.launch {
-                controller.unbindSurface()
+                handle.unbindSurface()
             }
         }
     }

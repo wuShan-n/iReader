@@ -13,8 +13,6 @@ dependencies {
     implementation(project(":core:navigation"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:data"))
-    implementation(project(":core:datastore"))
-    implementation(project(":core:files"))
     implementation(project(":core:reader:runtime"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material.icons.extended)
@@ -27,4 +25,5 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(project(":core:database"))
+    testImplementation(project(":core:files"))
 }

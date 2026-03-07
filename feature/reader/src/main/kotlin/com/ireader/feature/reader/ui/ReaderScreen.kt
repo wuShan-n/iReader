@@ -159,7 +159,7 @@ internal fun shouldConsumeVolumeKeyPaging(state: ReaderUiState, keyCode: Int): B
         state.passwordPrompt == null &&
         !state.isOpening &&
         state.error == null &&
-        state.controller != null
+        state.handle != null
 }
 
 internal fun volumePagingIntentForKey(

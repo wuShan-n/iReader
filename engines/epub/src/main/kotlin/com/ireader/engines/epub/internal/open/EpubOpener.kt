@@ -5,12 +5,12 @@ import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.common.android.id.SourceDocumentIds
 import com.ireader.engines.epub.internal.readium.ReadiumEpubToolkit
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.AnnotationStore
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher

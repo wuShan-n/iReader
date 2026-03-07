@@ -46,6 +46,7 @@ import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
@@ -198,7 +199,10 @@ internal class TxtController(
 
     override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> {
         return guardControllerCall("render") {
-            val snapshotResult = mutex.withLock { renderSnapshotLocked(policy) }
+            val snapshotResult = mutex.withLock {
+                cancelPaginationJobsLocked()
+                renderSnapshotLocked(policy)
+            }
             val renderResult = when (snapshotResult) {
                 is ReaderResult.Err -> snapshotResult
                 is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
@@ -218,6 +222,7 @@ internal class TxtController(
                 return@guardControllerCall ReaderResult.Err(ReaderError.Internal("TXT text layouter not set"))
             }
             val snapshotResult = mutex.withLock {
+                cancelPaginationJobsLocked()
                 val current = pagination.pageAt(
                     startOffset = navigation.currentStart,
                     allowCache = true
@@ -245,6 +250,7 @@ internal class TxtController(
                 return@guardControllerCall ReaderResult.Err(ReaderError.Internal("TXT text layouter not set"))
             }
             val snapshotResult = mutex.withLock {
+                cancelPaginationJobsLocked()
                 if (!navigation.canGoPrev()) {
                     return@withLock renderSnapshotLocked(policy)
                 }
@@ -270,6 +276,7 @@ internal class TxtController(
                 ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
             )
             val snapshotResult = mutex.withLock {
+                cancelPaginationJobsLocked()
                 navigation.moveTo(offset, store.lengthCodeUnits)
                 renderSnapshotLocked(policy)
             }
@@ -284,6 +291,7 @@ internal class TxtController(
         return guardControllerCall("goToProgress") {
             val clamped = percent.coerceIn(0.0, 1.0)
             val snapshotResult = mutex.withLock {
+                cancelPaginationJobsLocked()
                 val target = pagination.startForProgress(clamped)
                 navigation.moveTo(target, store.lengthCodeUnits)
                 renderSnapshotLocked(policy)
@@ -336,6 +344,7 @@ internal class TxtController(
                 ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
             )
             val snapshotResult = mutex.withLock {
+                cancelPaginationJobsLocked()
                 val newlineOffset = findNearestNewlineOffset(
                     fromOffset = offset,
                     direction = direction
@@ -356,6 +365,7 @@ internal class TxtController(
     suspend fun clearBreakPatches(): ReaderResult<RenderPage> {
         return guardControllerCall("clearBreakPatches") {
             val snapshotResult = mutex.withLock {
+                cancelPaginationJobsLocked()
                 breakResolver.clearPatches()
                 invalidateBreakProjectionLocked()
                 renderSnapshotLocked(RenderPolicy.Default)
@@ -571,8 +581,9 @@ internal class TxtController(
         val expectedGeneration = paginationGeneration
         val start = navigation.currentStart
         pageCompletionJob = launchSafely("page-checkpoint-warmup") {
+            delay(BACKGROUND_PAGINATION_DELAY_MS)
             if (isPaginationGenerationCurrentLocked(expectedGeneration)) {
-                pagination.warmForward(fromStart = start, maxPages = 6)
+                pagination.warmForward(fromStart = start, maxPages = PAGE_COMPLETION_WARMUP_PAGES)
             }
         }
     }
@@ -671,7 +682,7 @@ internal class TxtController(
     }
 
     private fun schedulePrefetchLocked(count: Int) {
-        if (count <= 0 || textLayouterFactoryKey == null) {
+        if (count <= 0 || textLayouterFactoryKey == null || pageCompletionJob?.isActive == true) {
             return
         }
         prefetchJob?.cancel()
@@ -764,6 +775,8 @@ internal class TxtController(
 
     private companion object {
         private const val TAG = "TxtController"
+        private const val BACKGROUND_PAGINATION_DELAY_MS = 450L
+        private const val PAGE_COMPLETION_WARMUP_PAGES = 2
 
         private fun logWarn(tag: String, message: String, throwable: Throwable?) {
             runCatching {

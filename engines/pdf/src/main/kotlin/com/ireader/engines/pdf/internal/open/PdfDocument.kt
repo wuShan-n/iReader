@@ -11,6 +11,7 @@ import com.ireader.engines.pdf.internal.provider.PdfTextProvider
 import com.ireader.engines.pdf.internal.render.PdfController
 import com.ireader.engines.pdf.internal.session.PdfSession
 import com.ireader.engines.pdf.internal.util.toPdfPageIndexOrNull
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError
@@ -19,7 +20,6 @@ import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator

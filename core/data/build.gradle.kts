@@ -19,6 +19,9 @@ android {
 
 dependencies {
     api(project(":core:model"))
+    api(project(":core:datastore"))
+    implementation(project(":core:reader:api"))
+    implementation(project(":core:reader:runtime"))
     implementation(project(":core:database"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.room.runtime)
