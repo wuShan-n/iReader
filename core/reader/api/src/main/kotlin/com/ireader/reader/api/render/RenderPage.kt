@@ -23,7 +23,8 @@ data class RenderPage(
 sealed interface RenderContent {
     data class Text(
         val text: CharSequence,
-        val mapping: TextMapping? = null
+        val mapping: TextMapping? = null,
+        val justifyVisibleLastLine: Boolean = false
     ) : RenderContent
 
     data class BitmapPage(

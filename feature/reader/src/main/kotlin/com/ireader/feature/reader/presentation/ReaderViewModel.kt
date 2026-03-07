@@ -30,6 +30,7 @@ import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.model.LinkTarget
+import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.OutlineNode
 import com.ireader.reader.model.BookFormat
@@ -43,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -54,6 +56,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
@@ -89,6 +92,7 @@ class ReaderViewModel @Inject constructor(
     private val intents = Channel<ReaderIntent>(capacity = Channel.BUFFERED)
     private var currentStartArgs: StartArgs? = null
     private var searchJob: Job? = null
+    private var searchGeneration: Long = 0L
     private var finalRenderJob: Job? = null
     private var pendingUndoTurn: PendingUndoTurn? = null
     private var appliedLayoutConstraints: LayoutConstraints? = null
@@ -97,7 +101,13 @@ class ReaderViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             for (intent in intents) {
-                handleIntent(intent)
+                try {
+                    handleIntent(intent)
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (throwable: Throwable) {
+                    recoverFromUnexpectedIntentFailure(throwable)
+                }
             }
         }
         viewModelScope.launch {
@@ -225,13 +235,21 @@ class ReaderViewModel @Inject constructor(
             }
             ReaderIntent.CloseSheet -> closeLayerToReading()
 
-            ReaderIntent.Next -> navigate(direction = PageTurnDirection.NEXT) { controller, policy ->
-                pendingUndoTurn = null
-                controller.next(policy)
+            ReaderIntent.Next -> if (canHandlePageTurn()) {
+                navigate(direction = PageTurnDirection.NEXT) { controller, policy ->
+                    pendingUndoTurn = null
+                    controller.next(policy)
+                }
+            } else {
+                false
             }
-            ReaderIntent.Prev -> navigate(direction = PageTurnDirection.PREV) { controller, policy ->
-                pendingUndoTurn = null
-                controller.prev(policy)
+            ReaderIntent.Prev -> if (canHandlePageTurn()) {
+                navigate(direction = PageTurnDirection.PREV) { controller, policy ->
+                    pendingUndoTurn = null
+                    controller.prev(policy)
+                }
+            } else {
+                false
             }
             is ReaderIntent.GoTo -> navigate { controller, policy ->
                 pendingUndoTurn = null
@@ -272,8 +290,6 @@ class ReaderViewModel @Inject constructor(
 
     private suspend fun open(args: StartArgs, password: String?) {
         closeSession()
-        searchJob?.cancel()
-        searchJob = null
         pendingUndoTurn = null
         appliedLayoutConstraints = null
 
@@ -290,6 +306,7 @@ class ReaderViewModel @Inject constructor(
                 capabilities = null,
                 renderState = null,
                 currentConfig = null,
+                gestureProfile = ReaderGestureProfile.REFLOW,
                 passwordPrompt = null,
                 error = null,
                 activeMenuTab = ReaderMenuTab.Toc,
@@ -380,6 +397,7 @@ class ReaderViewModel @Inject constructor(
                         capabilities = result.value.document.capabilities,
                         currentConfig = result.value.controller.state.value.config,
                         pageTurnMode = resolvePageTurnMode(result.value.controller.state.value.config),
+                        gestureProfile = resolveGestureProfile(result.value.document.capabilities),
                         passwordPrompt = null,
                         error = null
                     )
@@ -534,20 +552,35 @@ class ReaderViewModel @Inject constructor(
             }
         }
 
-        val sessionHandle = session.currentHandle() ?: run {
+        val sessionHandle = session.currentHandle()
+        val effectiveConfig = if (sessionHandle != null) {
+            normalizeConfigForSession(
+                config = config,
+                sessionHandle = sessionHandle
+            )
+        } else {
+            config
+        }
+
+        if (sessionHandle == null) {
             ui.update {
                 it.copy(
-                    currentConfig = config,
-                    pageTurnMode = resolvePageTurnMode(config)
+                    currentConfig = effectiveConfig,
+                    pageTurnMode = resolvePageTurnMode(effectiveConfig)
                 )
             }
             return
         }
 
-        val effectiveConfig = normalizeConfigForSession(
-            config = config,
-            sessionHandle = sessionHandle
-        )
+        if (persist) {
+            ui.update {
+                it.copy(
+                    currentConfig = effectiveConfig,
+                    pageTurnMode = resolvePageTurnMode(effectiveConfig)
+                )
+            }
+            return
+        }
 
         if (sessionHandle.controller.state.value.config == effectiveConfig) {
             ui.update {
@@ -675,6 +708,14 @@ class ReaderViewModel @Inject constructor(
         return reflow.pageTurnMode()
     }
 
+    private fun resolveGestureProfile(capabilities: DocumentCapabilities?): ReaderGestureProfile {
+        return if (capabilities?.fixedLayout == true) {
+            ReaderGestureProfile.FIXED
+        } else {
+            ReaderGestureProfile.REFLOW
+        }
+    }
+
     private fun normalizeConfigForSession(
         config: RenderConfig,
         sessionHandle: ReaderSessionHandle
@@ -691,6 +732,46 @@ class ReaderViewModel @Inject constructor(
     private fun isEpubReflowSession(sessionHandle: ReaderSessionHandle): Boolean {
         return sessionHandle.document.format == BookFormat.EPUB &&
             !sessionHandle.document.capabilities.fixedLayout
+    }
+
+    private fun canHandlePageTurn(current: ReaderUiState = ui.state.value): Boolean {
+        return current.layerState == ReaderLayerState.Reading &&
+            current.passwordPrompt == null &&
+            !current.isOpening &&
+            current.error == null &&
+            current.controller != null
+    }
+
+    private suspend fun cancelActiveSearch() {
+        val runningJob = searchJob ?: return
+        searchGeneration += 1L
+        searchJob = null
+        runningJob.cancelAndJoin()
+        ui.update { current ->
+            current.copy(
+                search = current.search.copy(isSearching = false)
+            )
+        }
+    }
+
+    private suspend fun recoverFromUnexpectedIntentFailure(throwable: Throwable) {
+        ui.update { current ->
+            current.copy(
+                isOpening = false,
+                search = current.search.copy(isSearching = false),
+                error = if (current.controller == null) {
+                    ReaderUiError(
+                        message = UiText.Dynamic("Unexpected reader error"),
+                        actionLabel = UiText.Dynamic("Back"),
+                        action = ReaderErrorAction.Back,
+                        debugCode = throwable::class.simpleName
+                    )
+                } else {
+                    current.error
+                }
+            )
+        }
+        ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("Unexpected reader error")))
     }
 
     private suspend fun updateDisplayPrefs(
@@ -877,8 +958,17 @@ class ReaderViewModel @Inject constructor(
             return
         }
 
-        searchJob?.cancel()
+        cancelActiveSearch()
+        val generation = searchGeneration + 1L
+        searchGeneration = generation
         searchJob = viewModelScope.launch {
+            val runningJob = coroutineContext[Job]
+
+            fun isCurrentSearch(): Boolean {
+                return searchGeneration == generation &&
+                    session.currentHandle() === sessionHandle
+            }
+
             ui.update {
                 it.copy(
                     search = it.search.copy(
@@ -906,6 +996,7 @@ class ReaderViewModel @Inject constructor(
                 )
                     .asReaderResult()
                     .collect { result ->
+                        if (!isCurrentSearch()) return@collect
                         when (result) {
                             is ReaderResult.Err -> {
                                 ui.update {
@@ -933,11 +1024,16 @@ class ReaderViewModel @Inject constructor(
             } catch (ce: CancellationException) {
                 throw ce
             } finally {
-                accumulator.flush()
-                ui.update {
-                    it.copy(
-                        search = it.search.copy(isSearching = false)
-                    )
+                if (isCurrentSearch() && coroutineContext.isActive) {
+                    accumulator.flush()
+                    if (searchJob === runningJob) {
+                        searchJob = null
+                    }
+                    ui.update {
+                        it.copy(
+                            search = it.search.copy(isSearching = false)
+                        )
+                    }
                 }
             }
         }
@@ -974,8 +1070,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun closeSession() {
-        searchJob?.cancel()
-        searchJob = null
+        cancelActiveSearch()
         pendingUndoTurn = null
         cancelFinalRender()
         appliedLayoutConstraints = null
@@ -1095,13 +1190,21 @@ class ReaderViewModel @Inject constructor(
             }
         }
 
-        when (
-            gestureInterpreter.resolveTapAction(
-                xPx = intent.xPx,
-                viewportWidthPx = intent.viewportWidthPx,
-                prefs = current.displayPrefs
-            )
-        ) {
+        val tapAction = gestureInterpreter.resolveTapAction(
+            xPx = intent.xPx,
+            viewportWidthPx = intent.viewportWidthPx,
+            prefs = current.displayPrefs
+        )
+
+        if (!intent.allowPageTurn) {
+            if (tapAction == ReaderTapAction.CENTER) {
+                ui.update { it.copy(chromeVisible = true) }
+                interactionTracker.track(ReaderInteractionEvent.CenterTapToggleChrome)
+            }
+            return
+        }
+
+        when (tapAction) {
             ReaderTapAction.PREV -> performGestureTurn(
                 direction = PageTurnDirection.PREV,
                 event = ReaderInteractionEvent.TapPrev
@@ -1125,6 +1228,7 @@ class ReaderViewModel @Inject constructor(
     private suspend fun handleDragEnd(intent: ReaderIntent.HandleDragEnd) {
         val current = ui.state.value
         if (current.layerState != ReaderLayerState.Reading) return
+        if (current.gestureProfile != ReaderGestureProfile.REFLOW) return
         val direction = gestureInterpreter.resolveDragDirection(
             axis = intent.axis,
             deltaPx = intent.deltaPx,

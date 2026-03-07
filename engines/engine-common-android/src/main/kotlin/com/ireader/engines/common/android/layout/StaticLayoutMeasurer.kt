@@ -3,10 +3,9 @@
 package com.ireader.engines.common.android.layout
 
 import android.graphics.text.LineBreakConfig
-import android.os.Build
 import android.text.StaticLayout
 import android.text.TextPaint
-import com.ireader.core.common.android.typography.resolveAndroidLineBreakConfig
+import com.ireader.core.common.android.typography.txtAndroidLineBreakConfig
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
@@ -14,7 +13,6 @@ import com.ireader.core.common.android.typography.toAndroidLayoutAlignment
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.TextAlignMode
-import java.lang.reflect.Method
 
 data class MeasureResult(
     val endChar: Int,
@@ -33,8 +31,7 @@ object StaticLayoutMeasurer {
         textAlign: TextAlignMode,
         breakStrategy: BreakStrategyMode,
         hyphenationMode: HyphenationMode,
-        includeFontPadding: Boolean,
-        preferInterCharacterJustify: Boolean
+        includeFontPadding: Boolean
     ): MeasureResult {
         if (text.isEmpty() || widthPx <= 0 || heightPx <= 0) {
             return MeasureResult(
@@ -43,6 +40,7 @@ object StaticLayoutMeasurer {
                 lastVisibleLine = -1
             )
         }
+        val lineBreakConfig = txtAndroidLineBreakConfig()
 
         val builder = StaticLayout.Builder.obtain(
             text,
@@ -54,33 +52,16 @@ object StaticLayoutMeasurer {
             .setAlignment(textAlign.toAndroidLayoutAlignment())
             .setIncludePad(includeFontPadding)
             .setLineSpacing(0f, lineHeightMult)
+            .setUseLineSpacingFromFallbacks(true)
             .setHyphenationFrequency(hyphenationMode.toAndroidHyphenationFrequency())
             .setBreakStrategy(breakStrategy.toAndroidBreakStrategy())
-
-        setUseLineSpacingFromFallbacksMethod?.let { method ->
-            runCatching { method.invoke(builder, true) }
-        }
-
-        runCatching {
-            builder.setJustificationMode(
-                textAlign.toAndroidJustificationMode(
-                    preferInterCharacter = preferInterCharacterJustify
-                )
+            .setJustificationMode(textAlign.toAndroidJustificationMode())
+            .setLineBreakConfig(
+                LineBreakConfig.Builder()
+                    .setLineBreakStyle(lineBreakConfig.lineBreakStyle)
+                    .setLineBreakWordStyle(lineBreakConfig.lineBreakWordStyle)
+                    .build()
             )
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            resolveAndroidLineBreakConfig(preferInterCharacterJustify)?.let { config ->
-                runCatching {
-                    builder.setLineBreakConfig(
-                        LineBreakConfig.Builder()
-                            .setLineBreakStyle(config.lineBreakStyle)
-                            .setLineBreakWordStyle(config.lineBreakWordStyle)
-                            .build()
-                    )
-                }
-            }
-        }
 
         val layout = builder.build()
 
@@ -117,14 +98,4 @@ object StaticLayoutMeasurer {
         }
         return answer.coerceAtLeast(0)
     }
-
-    private val setUseLineSpacingFromFallbacksMethod: Method? by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        runCatching {
-            StaticLayout.Builder::class.java.getMethod(
-                "setUseLineSpacingFromFallbacks",
-                Boolean::class.javaPrimitiveType
-            )
-        }.getOrNull()
-    }
-
 }

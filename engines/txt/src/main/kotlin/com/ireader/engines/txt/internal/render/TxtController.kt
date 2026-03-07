@@ -521,6 +521,7 @@ internal class TxtController(
                 text = slice.text,
                 startOffset = slice.startOffset,
                 endOffset = slice.endOffset,
+                continuesParagraph = slice.continuesParagraph,
                 range = pageRange,
                 renderTimeMs = renderTimeMs,
                 cacheHit = cacheHit
@@ -540,7 +541,8 @@ internal class TxtController(
             locator = snapshot.locator,
             content = RenderContent.Text(
                 text = snapshot.text,
-                mapping = TxtTextMapping(snapshot.startOffset, snapshot.endOffset)
+                mapping = TxtTextMapping(snapshot.startOffset, snapshot.endOffset),
+                justifyVisibleLastLine = snapshot.continuesParagraph
             ),
             links = extras.links,
             decorations = extras.decorations,
@@ -651,6 +653,7 @@ internal class TxtController(
         val text: CharSequence,
         val startOffset: Long,
         val endOffset: Long,
+        val continuesParagraph: Boolean,
         val range: LocatorRange,
         val renderTimeMs: Long,
         val cacheHit: Boolean

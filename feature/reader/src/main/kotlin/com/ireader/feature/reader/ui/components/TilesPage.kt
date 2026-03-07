@@ -26,6 +26,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPolicy
@@ -33,6 +34,7 @@ import com.ireader.reader.api.render.TileRequest
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.NormalizedPoint
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -49,7 +51,7 @@ fun TilesPage(
     links: List<DocumentLink>,
     decorations: List<Decoration>,
     pageLocator: Locator,
-    onBackgroundTap: (Offset, IntSize) -> Unit,
+    onBackgroundTap: (Offset, IntSize, Boolean) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
     onSelectionStart: (Locator) -> Unit,
     onSelectionFinish: () -> Unit,
@@ -58,6 +60,7 @@ fun TilesPage(
 ) {
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
+    val panTolerancePx = with(density) { FIXED_PAGE_TURN_PAN_TOLERANCE_DP.dp.toPx() }
     val bitmaps = remember(pageId) { mutableStateMapOf<TileKey, Bitmap>() }
     val inflight = remember(pageId) { mutableStateMapOf<TileKey, Job>() }
 
@@ -206,7 +209,16 @@ fun TilesPage(
                             if (link != null) {
                                 onLinkActivated(link)
                             } else {
-                                onBackgroundTap(tap, size)
+                                onBackgroundTap(
+                                    tap,
+                                    size,
+                                    isFixedPageTurnAllowed(
+                                        zoom = zoom,
+                                        offset = offset,
+                                        isGesturing = isGesturing,
+                                        panTolerancePx = panTolerancePx
+                                    )
+                                )
                             }
                         },
                         onLongPress = { tap ->
@@ -333,6 +345,21 @@ private data class TileKey(
     val scale: Float,
     val quality: RenderPolicy.Quality
 )
+
+internal fun isFixedPageTurnAllowed(
+    zoom: Float,
+    offset: Offset,
+    isGesturing: Boolean,
+    panTolerancePx: Float
+): Boolean {
+    if (isGesturing) return false
+    if (abs(zoom - DEFAULT_FIXED_PAGE_ZOOM) >= FIXED_PAGE_TURN_ZOOM_TOLERANCE) return false
+    return abs(offset.x) < panTolerancePx && abs(offset.y) < panTolerancePx
+}
+
+private const val DEFAULT_FIXED_PAGE_ZOOM = 1f
+private const val FIXED_PAGE_TURN_ZOOM_TOLERANCE = 0.02f
+private const val FIXED_PAGE_TURN_PAN_TOLERANCE_DP = 8
 
 private fun DrawScope.drawFixedDecorations(
     decorations: List<Decoration>,

@@ -59,7 +59,7 @@ fun PageRenderer(
     state: ReaderUiState,
     textColor: Color,
     backgroundColor: Color,
-    onBackgroundTap: (Offset, IntSize) -> Unit,
+    onBackgroundTap: (Offset, IntSize, Boolean) -> Unit,
     onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
     onSelectionStart: (Locator) -> Unit,
@@ -94,7 +94,7 @@ fun PageRenderer(
             .pointerInput(page.id.value) {
                 detectTapGestures(onTap = { tap ->
                     onSelectionClear()
-                    onBackgroundTap(tap, size)
+                    onBackgroundTap(tap, size, true)
                 })
             }
     }
@@ -172,7 +172,7 @@ private fun AnimatedTextPage(
     state: ReaderUiState,
     textColor: Color,
     backgroundColor: Color,
-    onBackgroundTap: (Offset, IntSize) -> Unit,
+    onBackgroundTap: (Offset, IntSize, Boolean) -> Unit,
     onDragEnd: (axis: GestureAxis, deltaPx: Float, viewportMainAxisPx: Int) -> Unit,
     onLinkActivated: (DocumentLink) -> Unit,
     onSelectionStart: (Locator) -> Unit,
@@ -242,12 +242,13 @@ private fun AnimatedTextPage(
                     val link = hitTestTextLink(
                         tap = tap,
                         textView = textViewRef,
-                        links = linkHits
+                        links = linkHits,
+                        visibleTextLength = targetContent.text.length
                     )
                     if (link != null) {
                         onLinkActivated(link)
                     } else {
-                        onBackgroundTap(tap, size)
+                        onBackgroundTap(tap, size, true)
                     }
                 },
                 onDragEnd = onDragEnd,
@@ -255,7 +256,8 @@ private fun AnimatedTextPage(
                     hitTestTextLocator(
                         tap = tap,
                         textView = textViewRef,
-                        mapping = targetContent.mapping
+                        mapping = targetContent.mapping,
+                        visibleTextLength = targetContent.text.length
                     )
                 },
                 onSelectionStart = onSelectionStart,
@@ -366,9 +368,11 @@ private fun RenderConfig.ReflowText.resolveBottomPaddingDp(defaultDp: Float): Fl
 private fun hitTestTextLink(
     tap: Offset,
     textView: TextView?,
-    links: List<TextLinkHit>
+    links: List<TextLinkHit>,
+    visibleTextLength: Int
 ): DocumentLink? {
-    val charOffset = hitTestTextCharOffset(tap = tap, textView = textView) ?: return null
+    val rawOffset = hitTestTextCharOffset(tap = tap, textView = textView) ?: return null
+    val charOffset = coerceVisibleTextOffset(rawOffset, visibleTextLength) ?: return null
     if (links.isEmpty()) return null
     val match = links.firstOrNull { hit -> charOffset in hit.range } ?: return null
     return match.link
@@ -377,10 +381,22 @@ private fun hitTestTextLink(
 private fun hitTestTextLocator(
     tap: Offset,
     textView: TextView?,
-    mapping: TextMapping?
+    mapping: TextMapping?,
+    visibleTextLength: Int
 ): Locator? {
-    val charOffset = hitTestTextCharOffset(tap = tap, textView = textView) ?: return null
+    val rawOffset = hitTestTextCharOffset(tap = tap, textView = textView) ?: return null
+    val charOffset = coerceVisibleTextOffset(rawOffset, visibleTextLength) ?: return null
     return mapping?.locatorAt(charOffset)
+}
+
+internal fun coerceVisibleTextOffset(
+    charOffset: Int,
+    visibleTextLength: Int
+): Int? {
+    if (charOffset < 0 || visibleTextLength < 0) {
+        return null
+    }
+    return charOffset.coerceAtMost(visibleTextLength)
 }
 
 private fun hitTestTextCharOffset(

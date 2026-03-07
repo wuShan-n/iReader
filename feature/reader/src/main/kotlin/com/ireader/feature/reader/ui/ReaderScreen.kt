@@ -17,7 +17,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ireader.feature.reader.presentation.ReaderEffect
 import com.ireader.feature.reader.presentation.ReaderHardwareKeyBridge
 import com.ireader.feature.reader.presentation.ReaderIntent
+import com.ireader.feature.reader.presentation.ReaderLayerState
 import com.ireader.feature.reader.presentation.UiText
+import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.presentation.ReaderViewModel
 import com.ireader.feature.reader.web.ExternalLinkPolicy
 
@@ -34,26 +36,18 @@ fun ReaderScreen(
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val volumeKeyHandler = rememberUpdatedState(newValue = { keyCode: Int, action: Int ->
-        if (!state.displayPrefs.volumeKeyPagingEnabled) {
-            false
+        val intent = volumePagingIntentForKey(
+            state = state,
+            keyCode = keyCode,
+            action = action
+        )
+        if (intent != null) {
+            vm.dispatch(intent)
+            true
+        } else if (shouldConsumeVolumeKeyPaging(state, keyCode)) {
+            true
         } else {
-            when (keyCode) {
-                KeyEvent.KEYCODE_VOLUME_UP -> {
-                    if (action == KeyEvent.ACTION_DOWN) {
-                        vm.dispatch(ReaderIntent.Prev)
-                    }
-                    true
-                }
-
-                KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                    if (action == KeyEvent.ACTION_DOWN) {
-                        vm.dispatch(ReaderIntent.Next)
-                    }
-                    true
-                }
-
-                else -> false
-            }
+            false
         }
     })
 
@@ -129,4 +123,30 @@ fun ReaderScreen(
             vm.dispatch(ReaderIntent.LayoutChanged(constraints))
         }
     )
+}
+
+internal fun shouldConsumeVolumeKeyPaging(state: ReaderUiState, keyCode: Int): Boolean {
+    val isVolumeKey = keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+    if (!isVolumeKey) return false
+    return state.displayPrefs.volumeKeyPagingEnabled &&
+        state.layerState == ReaderLayerState.Reading &&
+        state.passwordPrompt == null &&
+        !state.isOpening &&
+        state.error == null &&
+        state.controller != null
+}
+
+internal fun volumePagingIntentForKey(
+    state: ReaderUiState,
+    keyCode: Int,
+    action: Int
+): ReaderIntent? {
+    if (!shouldConsumeVolumeKeyPaging(state, keyCode) || action != KeyEvent.ACTION_DOWN) {
+        return null
+    }
+    return when (keyCode) {
+        KeyEvent.KEYCODE_VOLUME_UP -> ReaderIntent.Prev
+        KeyEvent.KEYCODE_VOLUME_DOWN -> ReaderIntent.Next
+        else -> null
+    }
 }

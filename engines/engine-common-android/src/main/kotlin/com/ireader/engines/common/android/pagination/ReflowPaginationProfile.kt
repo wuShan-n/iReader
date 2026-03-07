@@ -1,5 +1,6 @@
 package com.ireader.engines.common.android.pagination
 
+import com.ireader.core.common.android.typography.resolvePagePaddingDp
 import com.ireader.engines.common.hash.Hashing
 import com.ireader.engines.common.android.reflow.SOFT_BREAK_PROFILE_EXTRA_KEY
 import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
@@ -11,7 +12,7 @@ import kotlin.math.roundToInt
 
 object ReflowPaginationProfile {
 
-    private const val PROFILE_SCHEMA_VERSION = 10
+    private const val PROFILE_SCHEMA_VERSION = 11
 
     fun keyFor(
         documentKey: String,
@@ -19,6 +20,7 @@ object ReflowPaginationProfile {
         config: RenderConfig.ReflowText,
         keyLength: Int = 16
     ): String {
+        val pagePadding = config.resolvePagePaddingDp()
         val softBreakProfile = SoftBreakTuningProfile.fromStorageValue(
             config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY]
         )
@@ -43,7 +45,11 @@ object ReflowPaginationProfile {
             append('|')
             append(config.paragraphSpacingDp.normalizedKeyPart())
             append('|')
-            append(config.pagePaddingDp.normalizedKeyPart())
+            append(pagePadding.horizontal.normalizedKeyPart())
+            append('|')
+            append(pagePadding.top.normalizedKeyPart())
+            append('|')
+            append(pagePadding.bottom.normalizedKeyPart())
             append('|')
             append(config.fontFamilyName.orEmpty())
             append('|')

@@ -3,10 +3,9 @@
 package com.ireader.engines.common.android.reflow
 
 import android.text.SpannableStringBuilder
-import android.util.Log
 import android.os.Trace
-import com.ireader.core.common.android.typography.prefersInterCharacterJustify
-import com.ireader.core.common.android.typography.effectiveForInterCharacterScript
+import android.util.Log
+import com.ireader.core.common.android.typography.resolvePagePaddingDp
 import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
 import com.ireader.engines.common.android.layout.TextPaintFactory
 import com.ireader.reader.api.render.LayoutConstraints
@@ -60,19 +59,32 @@ class ReflowPaginator(
     ): ReflowPageSlice {
         val startedNs = System.nanoTime()
         if (source.lengthChars <= 0L) {
-            return ReflowPageSlice(0L, 0L, "")
+            return ReflowPageSlice(
+                startOffset = 0L,
+                endOffset = 0L,
+                text = "",
+                continuesParagraph = false
+            )
         }
 
         val start = startOffset.coerceIn(0L, source.lengthChars)
         if (start >= source.lengthChars) {
-            return ReflowPageSlice(source.lengthChars, source.lengthChars, "")
+            return ReflowPageSlice(
+                startOffset = source.lengthChars,
+                endOffset = source.lengthChars,
+                text = "",
+                continuesParagraph = false
+            )
         }
 
         val startsAtParagraphBoundary = startsAtParagraphBoundary(start)
         val typography = config.toTypographySpec()
-        val paddingPx = (typography.pagePaddingDp * constraints.density).roundToInt()
-        val width = (constraints.viewportWidthPx - paddingPx * 2).coerceAtLeast(1)
-        val height = (constraints.viewportHeightPx - paddingPx * 2).coerceAtLeast(1)
+        val pagePadding = config.resolvePagePaddingDp()
+        val horizontalPaddingPx = (pagePadding.horizontal * constraints.density).roundToInt()
+        val topPaddingPx = (pagePadding.top * constraints.density).roundToInt()
+        val bottomPaddingPx = (pagePadding.bottom * constraints.density).roundToInt()
+        val width = (constraints.viewportWidthPx - horizontalPaddingPx * 2).coerceAtLeast(1)
+        val height = (constraints.viewportHeightPx - topPaddingPx - bottomPaddingPx).coerceAtLeast(1)
         val paragraphSpacingPx = (typography.paragraphSpacingDp * constraints.density).roundToInt()
         val paint = TextPaintFactory.create(config, constraints)
         val paragraphIndentPx = 0
@@ -99,7 +111,12 @@ class ReflowPaginator(
             rawLength = raw.length
             measuredRaw = raw
             if (rawLength == 0) {
-                return ReflowPageSlice(start, start, "")
+                return ReflowPageSlice(
+                    startOffset = start,
+                    endOffset = start,
+                    text = "",
+                    continuesParagraph = false
+                )
             }
 
             val display = when {
@@ -128,9 +145,6 @@ class ReflowPaginator(
                 )
             }
             measuredText = display
-            val preferInterCharacterJustify = raw.prefersInterCharacterJustify()
-            val effectiveBreakStrategy = typography.breakStrategy
-                .effectiveForInterCharacterScript(preferInterCharacterJustify)
 
             val measure = StaticLayoutMeasurer.measure(
                 text = display,
@@ -139,10 +153,9 @@ class ReflowPaginator(
                 heightPx = height,
                 lineHeightMult = typography.lineHeightMult,
                 textAlign = TextAlignMode.JUSTIFY,
-                breakStrategy = effectiveBreakStrategy,
+                breakStrategy = typography.breakStrategy,
                 hyphenationMode = typography.hyphenationMode,
-                includeFontPadding = typography.includeFontPadding,
-                preferInterCharacterJustify = preferInterCharacterJustify
+                includeFontPadding = typography.includeFontPadding
             )
             measuredEnd = measure.endChar.coerceIn(0, rawLength)
 
@@ -193,7 +206,14 @@ class ReflowPaginator(
         return ReflowPageSlice(
             startOffset = start,
             endOffset = end,
-            text = measuredText
+            text = measuredText,
+            continuesParagraph = reflowPageContinuesParagraph(
+                sourceLength = source.lengthChars,
+                endOffset = end,
+                raw = measuredRaw,
+                display = measuredText,
+                measuredEnd = measuredEnd
+            )
         )
     }
 
@@ -372,4 +392,24 @@ class ReflowPaginator(
             runCatching { Log.d(tag, message) }
         }
     }
+}
+
+internal fun reflowPageContinuesParagraph(
+    sourceLength: Long,
+    endOffset: Long,
+    raw: String,
+    display: CharSequence,
+    measuredEnd: Int
+): Boolean {
+    if (measuredEnd <= 0 || endOffset >= sourceLength) {
+        return false
+    }
+    val lastIndex = measuredEnd - 1
+    if (lastIndex !in raw.indices || lastIndex !in 0 until display.length) {
+        return false
+    }
+    if (raw[lastIndex] != '\n') {
+        return true
+    }
+    return display[lastIndex] != '\n'
 }

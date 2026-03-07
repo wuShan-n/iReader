@@ -27,7 +27,8 @@ sealed interface ReaderIntent {
         val xPx: Float,
         val yPx: Float,
         val viewportWidthPx: Int,
-        val viewportHeightPx: Int
+        val viewportHeightPx: Int,
+        val allowPageTurn: Boolean = true
     ) : ReaderIntent
     data class HandleDragEnd(
         val axis: GestureAxis,

@@ -1,6 +1,8 @@
 package com.ireader.engines.common.android.pagination
 
 import com.ireader.engines.common.android.reflow.SOFT_BREAK_PROFILE_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
+import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
 import com.ireader.reader.api.render.BreakStrategyMode
 import com.ireader.reader.api.render.HyphenationMode
 import com.ireader.reader.api.render.LayoutConstraints
@@ -60,6 +62,21 @@ class ReflowPaginationProfileTest {
         val strictKey = ReflowPaginationProfile.keyFor("doc-a", constraints, strict)
 
         assertNotEquals(balancedKey, strictKey)
+    }
+
+    @Test
+    fun `vertical padding extras should change key`() {
+        val base = RenderConfig.ReflowText()
+        val modified = base.copy(
+            extra = base.extra +
+                (PAGE_PADDING_TOP_DP_EXTRA_KEY to "18.0") +
+                (PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to "26.0")
+        )
+
+        val baseKey = ReflowPaginationProfile.keyFor("doc-a", constraints, base)
+        val modifiedKey = ReflowPaginationProfile.keyFor("doc-a", constraints, modified)
+
+        assertNotEquals(baseKey, modifiedKey)
     }
 
     @Test

@@ -1,8 +1,7 @@
 package com.ireader.feature.reader.ui.components
 
 import android.graphics.Typeface
-import android.os.Build
-import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
@@ -12,6 +11,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -21,17 +21,13 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.ireader.core.common.android.typography.prefersInterCharacterJustify
-import com.ireader.core.common.android.typography.effectiveForInterCharacterScript
-import com.ireader.core.common.android.typography.resolveAndroidLineBreakConfig
+import com.ireader.core.common.android.typography.appendHiddenTrailingLine
+import com.ireader.core.common.android.typography.resolvePagePaddingDp
 import com.ireader.core.common.android.typography.toAndroidBreakStrategy
 import com.ireader.core.common.android.typography.toAndroidHyphenationFrequency
 import com.ireader.core.common.android.typography.toAndroidJustificationMode
+import com.ireader.core.common.android.typography.txtAndroidLineBreakConfig
 import com.ireader.reader.api.annotation.Decoration
-import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
-import com.ireader.reader.api.render.PAGE_PADDING_TOP_DP_EXTRA_KEY
-import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MAX_DP
-import com.ireader.reader.api.render.REFLOW_PAGE_PADDING_VERTICAL_MIN_DP
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.TextAlignMode
@@ -52,26 +48,12 @@ fun TextPage(
 ) {
     val config = reflowConfig ?: RenderConfig.ReflowText()
     val typography = config.toTypographySpec()
+    val pagePadding = remember(config) { config.resolvePagePaddingDp() }
     val density = LocalDensity.current
-    val horizontalPaddingPx = with(density) { typography.pagePaddingDp.dp.roundToPx() }
-    val verticalTopPaddingPx = with(density) { config.resolveTopPaddingDp(typography.pagePaddingDp).dp.roundToPx() }
-    val verticalBottomPaddingPx = with(density) { config.resolveBottomPaddingDp(typography.pagePaddingDp).dp.roundToPx() }
-    val displayText = remember(content.text, content.mapping, links, decorations) {
-        buildDisplayText(
-            content = content,
-            links = links,
-            decorations = decorations
-        )
-    }
-    val preferInterCharacterJustify = remember(content.text) {
-        content.text.prefersInterCharacterJustify()
-    }
-    val effectiveBreakStrategy = remember(typography.breakStrategy, preferInterCharacterJustify) {
-        typography.breakStrategy.effectiveForInterCharacterScript(preferInterCharacterJustify)
-    }
-    val lineBreakConfig = remember(preferInterCharacterJustify) {
-        resolveAndroidLineBreakConfig(preferInterCharacter = preferInterCharacterJustify)
-    }
+    val horizontalPaddingPx = with(density) { pagePadding.horizontal.dp.roundToPx() }
+    val verticalTopPaddingPx = with(density) { pagePadding.top.dp.roundToPx() }
+    val verticalBottomPaddingPx = with(density) { pagePadding.bottom.dp.roundToPx() }
+    val lineBreakConfig = remember { txtAndroidLineBreakConfig() }
     val typeface = remember(typography.fontFamilyName) {
         val familyName = typography.fontFamilyName
         if (familyName.isNullOrBlank()) {
@@ -83,143 +65,159 @@ fun TextPage(
     val textColorArgb = remember(textColor) { textColor.toArgb() }
     val backgroundColorArgb = remember(backgroundColor) { backgroundColor.toArgb() }
 
-    AndroidView(
-        modifier = modifier.fillMaxSize(),
-        factory = { context ->
-            TextView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                isFocusable = false
-                isClickable = false
-                overScrollMode = View.OVER_SCROLL_NEVER
-                gravity = Gravity.TOP or Gravity.START
-                textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-                onTextViewBound(this)
-            }
-        },
-        update = { textView ->
-            val expectedTextSizePx = TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_SP,
-                typography.fontSizeSp,
-                textView.resources.displayMetrics
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val viewportWidthPx = with(density) { maxWidth.roundToPx() }
+        val contentWidthPx = (viewportWidthPx - horizontalPaddingPx * 2).coerceAtLeast(1)
+        val displayText = remember(
+            content.text,
+            content.mapping,
+            content.justifyVisibleLastLine,
+            links,
+            decorations,
+            contentWidthPx
+        ) {
+            buildDisplayText(
+                content = content,
+                links = links,
+                decorations = decorations,
+                contentWidthPx = contentWidthPx
             )
-            if (kotlin.math.abs(textView.textSize - expectedTextSizePx) > 0.5f) {
-                textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, typography.fontSizeSp)
-            }
-            if (textView.lineSpacingExtra != 0f || textView.lineSpacingMultiplier != typography.lineHeightMult) {
-                textView.setLineSpacing(0f, typography.lineHeightMult)
-            }
-            if (textView.includeFontPadding != typography.includeFontPadding) {
-                textView.includeFontPadding = typography.includeFontPadding
-            }
-            runCatching {
+        }
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context ->
+                TextView(context).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    isFocusable = false
+                    isClickable = false
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    gravity = Gravity.TOP or Gravity.START
+                    textAlignment = View.TEXT_ALIGNMENT_VIEW_START
+                    onTextViewBound(this)
+                }
+            },
+            update = { textView ->
+                val expectedTextSizePx = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_SP,
+                    typography.fontSizeSp,
+                    textView.resources.displayMetrics
+                )
+                if (kotlin.math.abs(textView.textSize - expectedTextSizePx) > 0.5f) {
+                    textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, typography.fontSizeSp)
+                }
+                if (textView.lineSpacingExtra != 0f || textView.lineSpacingMultiplier != typography.lineHeightMult) {
+                    textView.setLineSpacing(0f, typography.lineHeightMult)
+                }
+                if (textView.includeFontPadding != typography.includeFontPadding) {
+                    textView.includeFontPadding = typography.includeFontPadding
+                }
                 if (!textView.isFallbackLineSpacing) {
                     textView.setFallbackLineSpacing(true)
                 }
-            }
-            if (
-                textView.paddingLeft != horizontalPaddingPx ||
-                textView.paddingTop != verticalTopPaddingPx ||
-                textView.paddingRight != horizontalPaddingPx ||
-                textView.paddingBottom != verticalBottomPaddingPx
-            ) {
-                textView.setPadding(
-                    horizontalPaddingPx,
-                    verticalTopPaddingPx,
-                    horizontalPaddingPx,
-                    verticalBottomPaddingPx
-                )
-            }
-            if (textView.currentTextColor != textColorArgb) {
-                textView.setTextColor(textColorArgb)
-            }
-            if ((textView.background as? android.graphics.drawable.ColorDrawable)?.color != backgroundColorArgb) {
-                textView.setBackgroundColor(backgroundColorArgb)
-            }
-            if (textView.typeface !== typeface) {
-                textView.typeface = typeface
-            }
-            if (textView.text !== displayText) {
-                textView.text = displayText
-            }
-            val breakStrategy = effectiveBreakStrategy.toAndroidBreakStrategy()
-            if (textView.breakStrategy != breakStrategy) {
-                textView.breakStrategy = breakStrategy
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                lineBreakConfig?.let { config ->
-                    if (textView.lineBreakStyle != config.lineBreakStyle) {
-                        textView.lineBreakStyle = config.lineBreakStyle
-                    }
-                    if (textView.lineBreakWordStyle != config.lineBreakWordStyle) {
-                        textView.lineBreakWordStyle = config.lineBreakWordStyle
-                    }
+                if (
+                    textView.paddingLeft != horizontalPaddingPx ||
+                    textView.paddingTop != verticalTopPaddingPx ||
+                    textView.paddingRight != horizontalPaddingPx ||
+                    textView.paddingBottom != verticalBottomPaddingPx
+                ) {
+                    textView.setPadding(
+                        horizontalPaddingPx,
+                        verticalTopPaddingPx,
+                        horizontalPaddingPx,
+                        verticalBottomPaddingPx
+                    )
                 }
-            }
-            val hyphenation = typography.hyphenationMode.toAndroidHyphenationFrequency()
-            if (textView.hyphenationFrequency != hyphenation) {
-                textView.hyphenationFrequency = hyphenation
-            }
-            runCatching {
-                val expectedJustification = TextAlignMode.JUSTIFY.toAndroidJustificationMode(
-                    preferInterCharacter = preferInterCharacterJustify
-                )
+                if (textView.currentTextColor != textColorArgb) {
+                    textView.setTextColor(textColorArgb)
+                }
+                if ((textView.background as? android.graphics.drawable.ColorDrawable)?.color != backgroundColorArgb) {
+                    textView.setBackgroundColor(backgroundColorArgb)
+                }
+                if (textView.typeface !== typeface) {
+                    textView.typeface = typeface
+                }
+                if (textView.text !== displayText) {
+                    textView.text = displayText
+                }
+                val breakStrategy = typography.breakStrategy.toAndroidBreakStrategy()
+                if (textView.breakStrategy != breakStrategy) {
+                    textView.breakStrategy = breakStrategy
+                }
+                if (textView.lineBreakStyle != lineBreakConfig.lineBreakStyle) {
+                    textView.lineBreakStyle = lineBreakConfig.lineBreakStyle
+                }
+                if (textView.lineBreakWordStyle != lineBreakConfig.lineBreakWordStyle) {
+                    textView.lineBreakWordStyle = lineBreakConfig.lineBreakWordStyle
+                }
+                val hyphenation = typography.hyphenationMode.toAndroidHyphenationFrequency()
+                if (textView.hyphenationFrequency != hyphenation) {
+                    textView.hyphenationFrequency = hyphenation
+                }
+                val expectedJustification = TextAlignMode.JUSTIFY.toAndroidJustificationMode()
                 if (textView.justificationMode != expectedJustification) {
                     textView.justificationMode = expectedJustification
                 }
             }
-        }
-    )
+        )
+    }
 }
 
 private fun buildDisplayText(
     content: RenderContent.Text,
     links: List<DocumentLink>,
-    decorations: List<Decoration>
+    decorations: List<Decoration>,
+    contentWidthPx: Int
 ): CharSequence {
     val source = content.text
-    val mapping = content.mapping ?: return source
-    val spannable = SpannableString(source)
+    val spannable = SpannableStringBuilder(source)
+    val mapping = content.mapping
 
-    links.forEach { link ->
-        val locatorRange = link.range ?: return@forEach
-        val charRange = mapping.charRangeFor(locatorRange) ?: return@forEach
-        applyRange(spannable, charRange) { start, end ->
-            spannable.setSpan(
-                ForegroundColorSpan(LINK_COLOR_ARGB),
-                start,
-                end,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-            spannable.setSpan(
-                UnderlineSpan(),
-                start,
-                end,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
+    if (mapping != null) {
+        links.forEach { link ->
+            val locatorRange = link.range ?: return@forEach
+            val charRange = mapping.charRangeFor(locatorRange) ?: return@forEach
+            applyRange(spannable, charRange) { start, end ->
+                spannable.setSpan(
+                    ForegroundColorSpan(LINK_COLOR_ARGB),
+                    start,
+                    end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                spannable.setSpan(
+                    UnderlineSpan(),
+                    start,
+                    end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+
+        decorations.filterIsInstance<Decoration.Reflow>().forEach { decoration ->
+            val charRange = mapping.charRangeFor(decoration.range) ?: return@forEach
+            val highlightColor = resolveHighlightColor(decoration)
+            applyRange(spannable, charRange) { start, end ->
+                spannable.setSpan(
+                    BackgroundColorSpan(highlightColor),
+                    start,
+                    end,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
         }
     }
 
-    decorations.filterIsInstance<Decoration.Reflow>().forEach { decoration ->
-        val charRange = mapping.charRangeFor(decoration.range) ?: return@forEach
-        val highlightColor = resolveHighlightColor(decoration)
-        applyRange(spannable, charRange) { start, end ->
-            spannable.setSpan(
-                BackgroundColorSpan(highlightColor),
-                start,
-                end,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-        }
+    return if (content.justifyVisibleLastLine) {
+        appendHiddenTrailingLine(spannable, contentWidthPx)
+    } else {
+        spannable
     }
-
-    return spannable
 }
 
 private inline fun applyRange(
-    spannable: SpannableString,
+    spannable: SpannableStringBuilder,
     range: IntRange,
     block: (start: Int, endExclusive: Int) -> Unit
 ) {
@@ -250,17 +248,3 @@ private fun resolveHighlightColor(decoration: Decoration.Reflow): Int {
 private const val LINK_COLOR_ARGB: Int = 0xFF2D6CDF.toInt()
 private const val DEFAULT_HIGHLIGHT_COLOR_ARGB: Int = 0xFFFFD54F.toInt()
 private const val DEFAULT_HIGHLIGHT_OPACITY: Float = 0.35f
-
-private fun RenderConfig.ReflowText.resolveTopPaddingDp(defaultDp: Float): Float {
-    return (extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
-        .takeIf(Float::isFinite)
-        ?.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
-        ?: defaultDp.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
-}
-
-private fun RenderConfig.ReflowText.resolveBottomPaddingDp(defaultDp: Float): Float {
-    return (extra[PAGE_PADDING_BOTTOM_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
-        .takeIf(Float::isFinite)
-        ?.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
-        ?: defaultDp.coerceIn(REFLOW_PAGE_PADDING_VERTICAL_MIN_DP, REFLOW_PAGE_PADDING_VERTICAL_MAX_DP)
-}

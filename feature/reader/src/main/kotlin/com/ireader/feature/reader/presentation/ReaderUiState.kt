@@ -35,6 +35,11 @@ enum class ReaderDockTab {
     Settings
 }
 
+enum class ReaderGestureProfile {
+    REFLOW,
+    FIXED
+}
+
 sealed interface ReaderLayerState {
     data object Reading : ReaderLayerState
     data class Dock(val tab: ReaderDockTab) : ReaderLayerState
@@ -99,6 +104,7 @@ data class ReaderUiState(
     val search: SearchState = SearchState(),
     val currentConfig: RenderConfig? = null,
     val pageTurnMode: PageTurnMode = PageTurnMode.COVER_HORIZONTAL,
+    val gestureProfile: ReaderGestureProfile = ReaderGestureProfile.REFLOW,
     val pageTransition: PageTurnTransition = PageTurnTransition(),
     val displayPrefs: ReaderDisplayPrefs = ReaderDisplayPrefs(),
     val isNightMode: Boolean = false,

@@ -562,9 +562,14 @@ private fun PageTurnPanel(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         SheetHeader(title = "翻页方式", onBack = onBack)
+        Text(
+            text = "可重排文档统一使用点击区翻页；TXT 额外支持滑动翻页。",
+            color = subColor,
+            style = MaterialTheme.typography.bodySmall
+        )
         if (isEmbeddedEpub) {
             Text(
-                text = "当前 EPUB 阅读由内核控制翻页动画，此设置仅对 TXT 生效",
+                text = "当前 EPUB 的连续翻页动画由阅读内核控制，这里主要调整文本页动效预览。",
                 color = subColor,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -818,6 +823,11 @@ private fun FixedLayoutSettings(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("版式设置", color = textColor)
+        Text(
+            "固定版式优先缩放与拖拽；仅在原始视图下响应边缘点按翻页。",
+            color = textColor.copy(alpha = 0.72f),
+            style = MaterialTheme.typography.bodySmall
+        )
         Text("缩放 ${"%.2f".format(zoom)}", color = textColor)
         Slider(
             value = zoom,

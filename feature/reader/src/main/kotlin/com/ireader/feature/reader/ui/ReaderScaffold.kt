@@ -97,11 +97,15 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.ContextWrapper
 import android.app.Activity
+import android.os.Build
 import android.os.BatteryManager
+import android.view.View
+import android.view.Window
 import android.view.WindowManager
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.ViewCompat
 import kotlinx.coroutines.delay
 import com.ireader.reader.api.render.LayoutConstraints
 
@@ -191,13 +195,14 @@ fun ReaderScaffold(
                     state = state,
                     textColor = readerTextColor,
                     backgroundColor = bgColor,
-                    onBackgroundTap = { tap, size ->
+                    onBackgroundTap = { tap, size, allowPageTurn ->
                         onIntent(
                             ReaderIntent.HandleTap(
                                 xPx = tap.x,
                                 yPx = tap.y,
                                 viewportWidthPx = size.width,
-                                viewportHeightPx = size.height
+                                viewportHeightPx = size.height,
+                                allowPageTurn = allowPageTurn
                             )
                         )
                     },
@@ -282,7 +287,7 @@ fun ReaderScaffold(
                     contentColor = panelTextColor,
                     searchIcon = ReaderChromeDefaults.topSearchIcon,
                     notesIcon = ReaderChromeDefaults.topNotesIcon,
-                    onBack = onBack,
+                    onBack = { onIntent(ReaderIntent.BackPressed) },
                     onOpenSearch = { onIntent(ReaderIntent.OpenSearch) },
                     onOpenAnnotations = { onIntent(ReaderIntent.OpenAnnotations) },
                     onMore = { onIntent(ReaderIntent.OpenReaderMore) }
@@ -1311,6 +1316,7 @@ private fun ApplyReaderBrightness(prefs: ReaderDisplayPrefs) {
         val activity = context.findActivity()
         val window = activity?.window
         val attrs = window?.attributes
+        val originalBrightness = attrs?.screenBrightness
         if (window != null && attrs != null) {
             attrs.screenBrightness = if (prefs.useSystemBrightness) {
                 WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
@@ -1323,10 +1329,60 @@ private fun ApplyReaderBrightness(prefs: ReaderDisplayPrefs) {
         onDispose {
             val disposeWindow = context.findActivity()?.window ?: return@onDispose
             val disposeAttrs = disposeWindow.attributes
-            disposeAttrs.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            disposeAttrs.screenBrightness = originalBrightness ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             disposeWindow.attributes = disposeAttrs
         }
     }
+}
+
+private data class ReaderSystemBarsSnapshot(
+    val statusBarColor: Int,
+    val navigationBarColor: Int,
+    val lightStatusBars: Boolean,
+    val lightNavigationBars: Boolean,
+    val systemBarsBehavior: Int,
+    val statusBarsVisible: Boolean,
+    val navigationBarsVisible: Boolean,
+    val decorFitsSystemWindows: Boolean,
+    val systemUiVisibility: Int
+)
+
+private fun captureReaderSystemBarsSnapshot(
+    window: Window,
+    controller: WindowInsetsControllerCompat
+): ReaderSystemBarsSnapshot {
+    val rootInsets = ViewCompat.getRootWindowInsets(window.decorView)
+    return ReaderSystemBarsSnapshot(
+        statusBarColor = window.statusBarColor,
+        navigationBarColor = window.navigationBarColor,
+        lightStatusBars = controller.isAppearanceLightStatusBars,
+        lightNavigationBars = controller.isAppearanceLightNavigationBars,
+        systemBarsBehavior = controller.systemBarsBehavior,
+        statusBarsVisible = rootInsets?.isVisible(WindowInsetsCompat.Type.statusBars()) ?: true,
+        navigationBarsVisible = rootInsets?.isVisible(WindowInsetsCompat.Type.navigationBars()) ?: true,
+        decorFitsSystemWindows = window.readDecorFitsSystemWindowsCompat(),
+        systemUiVisibility = window.decorView.systemUiVisibility
+    )
+}
+
+private fun Window.readDecorFitsSystemWindowsCompat(): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val getter = runCatching {
+            Window::class.java.getMethod("isDecorFitsSystemWindows")
+        }.recoverCatching {
+            Window::class.java.getMethod("getDecorFitsSystemWindows")
+        }.getOrNull()
+        val reflectedValue = getter?.let { method ->
+            runCatching { method.invoke(this) as Boolean }.getOrNull()
+        }
+        if (reflectedValue != null) {
+            return reflectedValue
+        }
+    }
+    val layoutFlags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+    return decorView.systemUiVisibility and layoutFlags == 0
 }
 
 @Composable
@@ -1347,17 +1403,13 @@ private fun ApplyReaderSystemBars(
     ) {
         val activity = context.findActivity()
         val window = activity?.window
-        val originalStatusBarColor = window?.statusBarColor
-        val originalNavigationBarColor = window?.navigationBarColor
-        var originalLightStatusBars = false
-        var originalLightNavigationBars = false
+        var snapshot: ReaderSystemBarsSnapshot? = null
         if (window != null) {
-            WindowCompat.setDecorFitsSystemWindows(window, false)
             val controller = WindowInsetsControllerCompat(window, window.decorView)
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            originalLightStatusBars = controller.isAppearanceLightStatusBars
-            originalLightNavigationBars = controller.isAppearanceLightNavigationBars
+            snapshot = captureReaderSystemBarsSnapshot(window, controller)
 
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             window.statusBarColor = readerBackgroundArgb
             window.navigationBarColor = readerBackgroundArgb
             controller.isAppearanceLightStatusBars = useLightSystemBarIcons
@@ -1374,13 +1426,25 @@ private fun ApplyReaderSystemBars(
 
         onDispose {
             val disposeWindow = context.findActivity()?.window ?: return@onDispose
-            WindowCompat.setDecorFitsSystemWindows(disposeWindow, true)
+            val original = snapshot ?: return@onDispose
             val disposeController = WindowInsetsControllerCompat(disposeWindow, disposeWindow.decorView)
-            disposeController.isAppearanceLightStatusBars = originalLightStatusBars
-            disposeController.isAppearanceLightNavigationBars = originalLightNavigationBars
-            originalStatusBarColor?.let { disposeWindow.statusBarColor = it }
-            originalNavigationBarColor?.let { disposeWindow.navigationBarColor = it }
-            disposeController.show(WindowInsetsCompat.Type.systemBars())
+            WindowCompat.setDecorFitsSystemWindows(disposeWindow, original.decorFitsSystemWindows)
+            disposeWindow.decorView.systemUiVisibility = original.systemUiVisibility
+            disposeController.systemBarsBehavior = original.systemBarsBehavior
+            disposeController.isAppearanceLightStatusBars = original.lightStatusBars
+            disposeController.isAppearanceLightNavigationBars = original.lightNavigationBars
+            disposeWindow.statusBarColor = original.statusBarColor
+            disposeWindow.navigationBarColor = original.navigationBarColor
+            if (original.statusBarsVisible) {
+                disposeController.show(WindowInsetsCompat.Type.statusBars())
+            } else {
+                disposeController.hide(WindowInsetsCompat.Type.statusBars())
+            }
+            if (original.navigationBarsVisible) {
+                disposeController.show(WindowInsetsCompat.Type.navigationBars())
+            } else {
+                disposeController.hide(WindowInsetsCompat.Type.navigationBars())
+            }
         }
     }
 }
