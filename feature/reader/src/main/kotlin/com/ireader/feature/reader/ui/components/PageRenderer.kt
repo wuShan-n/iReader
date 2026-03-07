@@ -1,6 +1,5 @@
 package com.ireader.feature.reader.ui.components
 
-import android.widget.TextView
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -32,7 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.ireader.core.common.android.typography.AndroidTextLayoutKind
 import com.ireader.feature.reader.presentation.GestureAxis
 import com.ireader.feature.reader.presentation.PageTurnAnimationKind
 import com.ireader.feature.reader.presentation.PageTurnDirection
@@ -54,7 +52,6 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.TextMapping
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
-import com.ireader.reader.model.LocatorSchemes
 
 @Composable
 fun PageRenderer(
@@ -215,10 +212,7 @@ private fun AnimatedTextPage(
             return@AnimatedContent
         }
 
-        var textViewRef by remember(targetPage.id.value) { mutableStateOf<TextView?>(null) }
-        val textLayoutKind = remember(targetPage.locator.scheme) {
-            resolveTextLayoutKind(targetPage.locator)
-        }
+        var textLayoutState by remember(targetPage.id.value) { mutableStateOf<TextPageLayoutState?>(null) }
         val linkHits = remember(targetPage.id.value, targetPage.links, targetContent.mapping) {
             val mapping = targetContent.mapping
             targetPage.links.mapNotNull { link ->
@@ -235,10 +229,11 @@ private fun AnimatedTextPage(
                 links = targetPage.links,
                 decorations = targetPage.decorations,
                 reflowConfig = reflowConfig,
-                textLayoutKind = textLayoutKind,
                 textColor = textColor,
                 backgroundColor = backgroundColor,
-                onTextViewBound = { textView -> textViewRef = textView },
+                onLayoutStateChanged = { layoutState ->
+                    textLayoutState = layoutState
+                },
                 modifier = Modifier.fillMaxSize()
             )
             TextGestureOverlay(
@@ -247,9 +242,8 @@ private fun AnimatedTextPage(
                 onTap = { tap, size ->
                     val link = hitTestTextLink(
                         tap = tap,
-                        textView = textViewRef,
-                        links = linkHits,
-                        visibleTextLength = targetContent.text.length
+                        layoutState = textLayoutState,
+                        links = linkHits
                     )
                     if (link != null) {
                         onLinkActivated(link)
@@ -261,9 +255,8 @@ private fun AnimatedTextPage(
                 resolveLocatorAt = { tap ->
                     hitTestTextLocator(
                         tap = tap,
-                        textView = textViewRef,
-                        mapping = targetContent.mapping,
-                        visibleTextLength = targetContent.text.length
+                        layoutState = textLayoutState,
+                        mapping = targetContent.mapping
                     )
                 },
                 onSelectionStart = onSelectionStart,
@@ -279,6 +272,11 @@ private fun AnimatedTextPage(
 private data class AnimatedTextTarget(
     val page: RenderPage,
     val transition: com.ireader.feature.reader.presentation.PageTurnTransition
+)
+
+private data class TextLinkHit(
+    val link: DocumentLink,
+    val range: IntRange
 )
 
 @Composable
@@ -352,20 +350,6 @@ private fun TextGestureOverlay(
     )
 }
 
-private data class TextLinkHit(
-    val link: DocumentLink,
-    val range: IntRange
-)
-
-internal fun resolveTextLayoutKind(locator: Locator): AndroidTextLayoutKind {
-    return when (locator.scheme) {
-        LocatorSchemes.TXT_OFFSET,
-        LocatorSchemes.TXT_BLOCK -> AndroidTextLayoutKind.TXT
-
-        else -> AndroidTextLayoutKind.GENERIC
-    }
-}
-
 private fun RenderConfig.ReflowText.resolveTopPaddingDp(defaultDp: Float): Float {
     return (extra[PAGE_PADDING_TOP_DP_EXTRA_KEY]?.toFloatOrNull() ?: defaultDp)
         .takeIf(Float::isFinite)
@@ -382,25 +366,26 @@ private fun RenderConfig.ReflowText.resolveBottomPaddingDp(defaultDp: Float): Fl
 
 private fun hitTestTextLink(
     tap: Offset,
-    textView: TextView?,
-    links: List<TextLinkHit>,
-    visibleTextLength: Int
+    layoutState: TextPageLayoutState?,
+    links: List<TextLinkHit>
 ): DocumentLink? {
-    val rawOffset = hitTestTextCharOffset(tap = tap, textView = textView) ?: return null
-    val charOffset = coerceVisibleTextOffset(rawOffset, visibleTextLength) ?: return null
+    val charOffset = hitTestTextCharOffset(
+        tap = tap,
+        layoutState = layoutState
+    ) ?: return null
     if (links.isEmpty()) return null
-    val match = links.firstOrNull { hit -> charOffset in hit.range } ?: return null
-    return match.link
+    return links.firstOrNull { hit -> charOffset in hit.range }?.link
 }
 
 private fun hitTestTextLocator(
     tap: Offset,
-    textView: TextView?,
-    mapping: TextMapping?,
-    visibleTextLength: Int
+    layoutState: TextPageLayoutState?,
+    mapping: TextMapping?
 ): Locator? {
-    val rawOffset = hitTestTextCharOffset(tap = tap, textView = textView) ?: return null
-    val charOffset = coerceVisibleTextOffset(rawOffset, visibleTextLength) ?: return null
+    val charOffset = hitTestTextCharOffset(
+        tap = tap,
+        layoutState = layoutState
+    ) ?: return null
     return mapping?.locatorAt(charOffset)
 }
 
@@ -416,26 +401,28 @@ internal fun coerceVisibleTextOffset(
 
 private fun hitTestTextCharOffset(
     tap: Offset,
-    textView: TextView?
+    layoutState: TextPageLayoutState?
 ): Int? {
-    val view = textView ?: return null
-    val layout = view.layout ?: return null
-
-    val localX = tap.x - view.totalPaddingLeft + view.scrollX
-    val localY = tap.y - view.totalPaddingTop + view.scrollY
-    if (localX < 0f || localY < 0f) {
+    val state = layoutState ?: return null
+    val local = tap - state.contentOffset
+    val layout = state.layoutResult
+    if (layout.lineCount <= 0) {
         return null
     }
-    if (layout.height <= 0) {
+    if (local.x < 0f || local.y < 0f) {
         return null
     }
-    val line = layout.getLineForVertical(localY.toInt().coerceAtMost(layout.height - 1))
+    if (local.x > layout.size.width || local.y > layout.size.height) {
+        return null
+    }
+    val line = layout.getLineForVerticalPosition(local.y)
     val lineLeft = layout.getLineLeft(line)
     val lineRight = layout.getLineRight(line)
-    if (localX < lineLeft || localX > lineRight) {
+    if (local.x < lineLeft || local.x > lineRight) {
         return null
     }
-    return layout.getOffsetForHorizontal(line, localX)
+    val rawOffset = layout.getOffsetForPosition(local)
+    return coerceVisibleTextOffset(rawOffset, state.visibleTextLength)
 }
 
 private fun buildPageTransform(

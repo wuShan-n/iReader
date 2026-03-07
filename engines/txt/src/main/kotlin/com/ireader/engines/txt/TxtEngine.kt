@@ -57,6 +57,7 @@ class TxtEngine(
             maxPageCache = config.maxPageCache,
             annotationProviderFactory = config.annotationProviderFactory,
             ioDispatcher = config.ioDispatcher,
+            paginationDispatcher = config.paginationDispatcher,
             defaultDispatcher = config.defaultDispatcher
         )
     }

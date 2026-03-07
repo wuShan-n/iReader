@@ -1,7 +1,5 @@
 package com.ireader.engines.common.android.pagination
 
-import com.ireader.core.common.android.typography.AndroidTextLayoutKind
-import com.ireader.core.common.android.typography.resolveAndroidTextLayoutProfile
 import com.ireader.core.common.android.typography.resolvePagePaddingDp
 import com.ireader.engines.common.hash.Hashing
 import com.ireader.engines.common.android.reflow.SOFT_BREAK_PROFILE_EXTRA_KEY
@@ -9,13 +7,12 @@ import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
 import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.api.render.TextAlignMode
 import java.util.Locale
 import kotlin.math.roundToInt
 
 object ReflowPaginationProfile {
 
-    private const val PROFILE_SCHEMA_VERSION = 12
+    private const val PROFILE_SCHEMA_VERSION = 13
 
     fun keyFor(
         documentKey: String,
@@ -28,12 +25,6 @@ object ReflowPaginationProfile {
             config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY]
         )
         val rulesVersion = SoftBreakRuleConfig.forProfile(softBreakProfile).rulesVersion
-        val textLayoutProfile = resolveAndroidTextLayoutProfile(
-            kind = AndroidTextLayoutKind.TXT,
-            textAlign = TextAlignMode.JUSTIFY,
-            breakStrategy = config.breakStrategy,
-            hyphenationMode = config.hyphenationMode
-        )
         val raw = buildString {
             append("v")
             append(PROFILE_SCHEMA_VERSION)
@@ -62,15 +53,9 @@ object ReflowPaginationProfile {
             append('|')
             append(config.fontFamilyName.orEmpty())
             append('|')
-            append(textLayoutProfile.breakStrategy)
+            append(config.breakStrategy.name)
             append('|')
-            append(textLayoutProfile.hyphenationMode)
-            append('|')
-            append(textLayoutProfile.justificationMode)
-            append('|')
-            append(textLayoutProfile.lineBreakConfig.lineBreakStyle)
-            append('|')
-            append(textLayoutProfile.lineBreakConfig.lineBreakWordStyle)
+            append(config.hyphenationMode.name)
             append('|')
             append(config.includeFontPadding)
             append('|')

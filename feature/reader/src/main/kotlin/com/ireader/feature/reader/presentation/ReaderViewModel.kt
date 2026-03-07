@@ -29,6 +29,7 @@ import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
+import com.ireader.reader.api.render.TextLayouterFactory
 import com.ireader.reader.model.LinkTarget
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.Locator
@@ -96,6 +97,8 @@ class ReaderViewModel @Inject constructor(
     private var finalRenderJob: Job? = null
     private var pendingUndoTurn: PendingUndoTurn? = null
     private var appliedLayoutConstraints: LayoutConstraints? = null
+    private var pendingTextLayouterFactory: TextLayouterFactory? = null
+    private var appliedTextLayouterFactoryKey: String? = null
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
@@ -167,6 +170,7 @@ class ReaderViewModel @Inject constructor(
             }
 
             is ReaderIntent.LayoutChanged -> applyLayout(intent.constraints)
+            is ReaderIntent.TextLayouterFactoryChanged -> applyTextLayouterFactory(intent.factory)
             ReaderIntent.RefreshPage -> render.requestRender(RenderRequest.REFRESH)
             ReaderIntent.ToggleChrome,
             ReaderIntent.ToggleImmersiveChrome -> toggleImmersiveChrome()
@@ -292,6 +296,7 @@ class ReaderViewModel @Inject constructor(
         closeSession()
         pendingUndoTurn = null
         appliedLayoutConstraints = null
+        appliedTextLayouterFactoryKey = null
 
         ui.update {
             it.copy(
@@ -404,6 +409,9 @@ class ReaderViewModel @Inject constructor(
                 }
 
                 startSessionCollectors(result.value, book.bookId)
+                if (!ensureTextLayouterFactoryReady(result.value.controller)) {
+                    return
+                }
                 val constraints = render.currentLayout()
                 if (constraints != null) {
                     applyLayout(constraints)
@@ -540,6 +548,35 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    private suspend fun applyTextLayouterFactory(factory: TextLayouterFactory) {
+        pendingTextLayouterFactory = factory
+        val sessionHandle = session.currentHandle() ?: return
+        if (!ensureTextLayouterFactoryReady(sessionHandle.controller)) {
+            return
+        }
+        if (render.currentLayout() != null) {
+            render.requestRender(RenderRequest.LAYOUT)
+        }
+    }
+
+    private suspend fun ensureTextLayouterFactoryReady(controller: ReaderController): Boolean {
+        val factory = pendingTextLayouterFactory ?: return false
+        if (appliedTextLayouterFactoryKey == factory.environmentKey) {
+            return true
+        }
+        return when (val result = render.withNavigationLock { controller.setTextLayouterFactory(factory) }) {
+            is ReaderResult.Ok -> {
+                appliedTextLayouterFactoryKey = factory.environmentKey
+                true
+            }
+
+            is ReaderResult.Err -> {
+                ui.update { it.copy(error = errorMapper.map(result.error)) }
+                false
+            }
+        }
+    }
+
     private suspend fun applyConfig(config: RenderConfig, persist: Boolean) {
         if (persist) {
             runCatching {
@@ -609,6 +646,7 @@ class ReaderViewModel @Inject constructor(
     private suspend fun renderCurrentPageImmediate() {
         val sessionHandle = session.currentHandle() ?: return
         if (render.currentLayout() == null) return
+        if (!ensureTextLayouterFactoryReady(sessionHandle.controller)) return
         cancelFinalRender()
         val fixedLayout = sessionHandle.document.capabilities.fixedLayout
         val result = render.withNavigationLock {
@@ -634,6 +672,7 @@ class ReaderViewModel @Inject constructor(
         block: suspend (ReaderController, RenderPolicy) -> ReaderResult<RenderPage>
     ): Boolean {
         val sessionHandle = session.currentHandle() ?: return false
+        if (!ensureTextLayouterFactoryReady(sessionHandle.controller)) return false
         cancelFinalRender()
         val fixedLayout = sessionHandle.document.capabilities.fixedLayout
         val actionPolicy = if (fixedLayout) {
@@ -1074,6 +1113,7 @@ class ReaderViewModel @Inject constructor(
         pendingUndoTurn = null
         cancelFinalRender()
         appliedLayoutConstraints = null
+        appliedTextLayouterFactoryKey = null
         ui.update { it.copy(page = null, isRenderingFinal = false) }
         session.closeCurrent { bookId, locator, progression ->
             saveReadingProgress(

@@ -298,6 +298,10 @@ private class FakeController : ReaderController {
 
     override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
+    override suspend fun setTextLayouterFactory(
+        factory: com.ireader.reader.api.render.TextLayouterFactory
+    ): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
     override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
     override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))

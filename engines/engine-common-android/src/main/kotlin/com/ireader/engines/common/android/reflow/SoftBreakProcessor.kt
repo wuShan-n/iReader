@@ -10,6 +10,11 @@ import kotlin.math.roundToInt
 
 object SoftBreakProcessor {
 
+    data class LayoutText(
+        val text: String,
+        val hardBreakPositions: IntArray
+    )
+
     fun renderRawPreservingBreaks(
         rawText: String,
         paragraphSpacingPx: Int,
@@ -27,9 +32,8 @@ object SoftBreakProcessor {
         startsAtParagraphBoundary: Boolean,
         ruleConfig: SoftBreakRuleConfig = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED)
     ): CharSequence {
-        val normalizedInput = normalizeLineEndings(rawText)
-        val normalized = normalizeSoftBreaks(
-            text = normalizedInput,
+        val normalized = processForLayout(
+            rawText = rawText,
             hardWrapLikely = hardWrapLikely,
             ruleConfig = ruleConfig
         )
@@ -45,6 +49,23 @@ object SoftBreakProcessor {
             startsAtParagraphBoundary = startsAtParagraphBoundary
         )
         return builder
+    }
+
+    fun processForLayout(
+        rawText: String,
+        hardWrapLikely: Boolean,
+        ruleConfig: SoftBreakRuleConfig = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED)
+    ): LayoutText {
+        val normalizedInput = normalizeLineEndings(rawText)
+        val normalized = normalizeSoftBreaks(
+            text = normalizedInput,
+            hardWrapLikely = hardWrapLikely,
+            ruleConfig = ruleConfig
+        )
+        return LayoutText(
+            text = normalized.text,
+            hardBreakPositions = normalized.hardBreakPositions
+        )
     }
 
     fun decorateParagraphs(

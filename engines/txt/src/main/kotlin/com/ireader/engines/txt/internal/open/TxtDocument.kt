@@ -35,6 +35,7 @@ internal class TxtDocument(
     private val maxPageCache: Int,
     private val annotationProviderFactory: ((DocumentId) -> AnnotationProvider?)?,
     private val ioDispatcher: CoroutineDispatcher,
+    private val paginationDispatcher: CoroutineDispatcher,
     private val defaultDispatcher: CoroutineDispatcher
 ) : ReaderDocument {
 
@@ -97,6 +98,7 @@ internal class TxtDocument(
                     files = files,
                     annotationProvider = annotationProvider,
                     ioDispatcher = ioDispatcher,
+                    paginationDispatcher = paginationDispatcher,
                     defaultDispatcher = defaultDispatcher
                 )
                 ReaderResult.Ok(

@@ -1,8 +1,10 @@
 package com.ireader.engines.common.android.controller
 
+import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderState
+import com.ireader.reader.api.render.TextLayouterFactory
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
@@ -45,6 +47,10 @@ abstract class BaseCoroutineReaderController(
 
     protected val stateMutable = MutableStateFlow(initialState)
     override val state: StateFlow<RenderState> = stateMutable.asStateFlow()
+
+    override suspend fun setTextLayouterFactory(factory: TextLayouterFactory): ReaderResult<Unit> {
+        return ReaderResult.Ok(Unit)
+    }
 
     protected fun launchSafely(
         name: String,

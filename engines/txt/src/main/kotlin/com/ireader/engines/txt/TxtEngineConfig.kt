@@ -13,5 +13,6 @@ data class TxtEngineConfig(
     val maxPageCache: Int = 7,
     val annotationProviderFactory: ((DocumentId) -> AnnotationProvider?)? = null,
     val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    val paginationDispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
     val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
 )

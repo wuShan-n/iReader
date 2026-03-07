@@ -2,15 +2,13 @@
 
 package com.ireader.engines.common.android.reflow
 
-import android.text.SpannableStringBuilder
 import android.os.Trace
 import android.util.Log
-import com.ireader.core.common.android.typography.AndroidTextLayoutKind
-import com.ireader.core.common.android.typography.resolveAndroidTextLayoutProfile
 import com.ireader.core.common.android.typography.resolvePagePaddingDp
-import com.ireader.engines.common.android.layout.StaticLayoutMeasurer
-import com.ireader.engines.common.android.layout.TextPaintFactory
 import com.ireader.reader.api.render.LayoutConstraints
+import com.ireader.reader.api.render.TextLayoutInput
+import com.ireader.reader.api.render.TextLayouter
+import com.ireader.reader.api.render.TextLayouterFactory
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.TextAlignMode
 import com.ireader.reader.api.render.toTypographySpec
@@ -36,9 +34,16 @@ class ReflowPaginator(
     private var softBreakIndex: ReflowSoftBreakIndex? = null,
     private val pageEndAdjuster: ReflowPageEndAdjuster = ReflowPageEndAdjuster.NONE
 ) {
+    private var textLayouterFactory: TextLayouterFactory? = null
+    private var textLayouter: TextLayouter? = null
 
     fun setSoftBreakIndex(index: ReflowSoftBreakIndex?) {
         softBreakIndex = index
+    }
+
+    fun setTextLayouterFactory(factory: TextLayouterFactory?) {
+        textLayouterFactory = factory
+        textLayouter = null
     }
 
     suspend fun pageAt(
@@ -88,14 +93,7 @@ class ReflowPaginator(
         val width = (constraints.viewportWidthPx - horizontalPaddingPx * 2).coerceAtLeast(1)
         val height = (constraints.viewportHeightPx - topPaddingPx - bottomPaddingPx).coerceAtLeast(1)
         val paragraphSpacingPx = (typography.paragraphSpacingDp * constraints.density).roundToInt()
-        val paint = TextPaintFactory.create(config, constraints)
         val paragraphIndentPx = 0
-        val textLayoutProfile = resolveAndroidTextLayoutProfile(
-            kind = AndroidTextLayoutKind.TXT,
-            textAlign = TextAlignMode.JUSTIFY,
-            breakStrategy = typography.breakStrategy,
-            hyphenationMode = typography.hyphenationMode
-        )
         val softBreakProfile = SoftBreakTuningProfile.fromStorageValue(config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY])
         val softBreakRules = SoftBreakRuleConfig.forProfile(softBreakProfile)
         val softBreakSource = when {
@@ -109,9 +107,10 @@ class ReflowPaginator(
             .coerceIn(initialWindow, MAX_WINDOW_CHARS)
         var windowChars = initialWindow
         var measuredEnd = 0
-        var measuredText: CharSequence = ""
+        var measuredText = ""
         var rawLength = 0
         var measuredRaw = ""
+        val textLayouter = textLayouter()
 
         while (true) {
             val toRead = min(windowChars.toLong(), source.lengthChars - start).toInt()
@@ -133,36 +132,36 @@ class ReflowPaginator(
                     paragraphSpacingPx = paragraphSpacingPx,
                     paragraphIndentPx = paragraphIndentPx,
                     startsAtParagraphBoundary = startsAtParagraphBoundary
-                )
+                ).toString()
 
-                softBreakIndex != null -> applySoftBreakIndex(
+                softBreakIndex != null -> applySoftBreakIndexPlainText(
                     start = start,
                     raw = raw,
-                    paragraphSpacingPx = paragraphSpacingPx,
-                    paragraphIndentPx = paragraphIndentPx,
                     startsAtParagraphBoundary = startsAtParagraphBoundary
                 )
 
-                else -> SoftBreakProcessor.process(
+                else -> SoftBreakProcessor.processForLayout(
                     rawText = raw,
                     hardWrapLikely = hardWrapLikely,
-                    paragraphSpacingPx = paragraphSpacingPx,
-                    paragraphIndentPx = paragraphIndentPx,
-                    startsAtParagraphBoundary = startsAtParagraphBoundary,
                     ruleConfig = softBreakRules
-                )
+                ).text
             }
             measuredText = display
 
-            val measure = StaticLayoutMeasurer.measure(
+            val measure = textLayouter.measure(
                 text = display,
-                paint = paint,
-                widthPx = width,
-                heightPx = height,
-                lineHeightMult = typography.lineHeightMult,
-                textAlign = TextAlignMode.JUSTIFY,
-                includeFontPadding = typography.includeFontPadding,
-                layoutProfile = textLayoutProfile
+                input = TextLayoutInput(
+                    widthPx = width,
+                    heightPx = height,
+                    fontSizeSp = typography.fontSizeSp,
+                    lineHeightMult = typography.lineHeightMult,
+                    textAlign = TextAlignMode.JUSTIFY,
+                    breakStrategy = typography.breakStrategy,
+                    hyphenationMode = typography.hyphenationMode,
+                    includeFontPadding = typography.includeFontPadding,
+                    fontFamilyName = typography.fontFamilyName,
+                    paragraphSpacingPx = paragraphSpacingPx
+                )
             )
             measuredEnd = measure.endChar.coerceIn(0, rawLength)
 
@@ -187,9 +186,9 @@ class ReflowPaginator(
         if (end <= start) {
             end = (start + 1L).coerceAtMost(source.lengthChars)
             measuredEnd = (end - start).toInt()
-            measuredText = measuredText.subSequence(0, measuredEnd)
+            measuredText = measuredText.substring(0, measuredEnd)
         } else {
-            measuredText = measuredText.subSequence(0, measuredEnd)
+            measuredText = measuredText.substring(0, measuredEnd)
         }
 
         if (isDebugLoggingEnabled()) {
@@ -224,35 +223,38 @@ class ReflowPaginator(
         )
     }
 
-    private fun applySoftBreakIndex(
+    private fun applySoftBreakIndexPlainText(
         start: Long,
         raw: String,
-        paragraphSpacingPx: Int,
-        paragraphIndentPx: Int,
         startsAtParagraphBoundary: Boolean
-    ): CharSequence {
-        val builder = SpannableStringBuilder(raw)
-        val hardBreakPositions = ArrayList<Int>()
+    ): String {
+        if (!startsAtParagraphBoundary && raw.isEmpty()) {
+            return raw
+        }
+        val chars = raw.toCharArray()
         val end = start + raw.length.toLong()
         softBreakIndex?.forEachNewlineInRange(start, end) { offset, isSoft ->
             val local = (offset - start).toInt()
-            if (local !in 0 until builder.length) {
+            if (local !in chars.indices) {
                 return@forEachNewlineInRange
             }
             if (isSoft) {
-                builder.replace(local, local + 1, " ")
-            } else {
-                hardBreakPositions += local
+                chars[local] = ' '
             }
         }
-        SoftBreakProcessor.decorateParagraphs(
-            builder = builder,
-            hardBreakPositions = hardBreakPositions.toIntArray(),
-            paragraphSpacingPx = paragraphSpacingPx,
-            paragraphIndentPx = paragraphIndentPx,
-            startsAtParagraphBoundary = startsAtParagraphBoundary
-        )
-        return builder
+        return String(chars)
+    }
+
+    private fun textLayouter(): TextLayouter {
+        val cached = textLayouter
+        if (cached != null) {
+            return cached
+        }
+        val factory = textLayouterFactory
+            ?: error("TextLayouterFactory not set for TXT pagination")
+        return factory.create(cacheSize = 0).also { created ->
+            textLayouter = created
+        }
     }
 
     private suspend fun startsAtParagraphBoundary(offset: Long): Boolean {

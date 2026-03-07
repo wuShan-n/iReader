@@ -177,6 +177,9 @@ private class FakeController : ReaderController {
     override suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit> = ReaderResult.Ok(Unit)
     override suspend fun unbindSurface(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
     override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+    override suspend fun setTextLayouterFactory(
+        factory: com.ireader.reader.api.render.TextLayouterFactory
+    ): ReaderResult<Unit> = ReaderResult.Ok(Unit)
     override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> = ReaderResult.Ok(Unit)
     override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))
     override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))

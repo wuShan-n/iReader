@@ -24,6 +24,7 @@ import com.ireader.reader.api.render.RenderContent
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
+import com.ireader.reader.api.render.TextLayouterFactory
 import com.ireader.reader.api.render.sanitized
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.Progression
@@ -212,6 +213,10 @@ internal class EpubController(
 
     override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> {
         layoutConstraints = constraints
+        return ReaderResult.Ok(Unit)
+    }
+
+    override suspend fun setTextLayouterFactory(factory: TextLayouterFactory): ReaderResult<Unit> {
         return ReaderResult.Ok(Unit)
     }
 

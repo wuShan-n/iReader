@@ -45,6 +45,8 @@ interface ReaderController : Closeable {
 
     suspend fun setConfig(config: RenderConfig): ReaderResult<Unit>
 
+    suspend fun setTextLayouterFactory(factory: TextLayouterFactory): ReaderResult<Unit>
+
     /**
      * 渲染当前 locator
      */

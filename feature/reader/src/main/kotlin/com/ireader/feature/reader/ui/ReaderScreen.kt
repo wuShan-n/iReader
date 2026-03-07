@@ -12,6 +12,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ireader.feature.reader.presentation.ReaderEffect
@@ -21,6 +24,8 @@ import com.ireader.feature.reader.presentation.ReaderLayerState
 import com.ireader.feature.reader.presentation.UiText
 import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.presentation.ReaderViewModel
+import com.ireader.feature.reader.ui.components.ComposeTextLayouterFactory
+import com.ireader.feature.reader.ui.components.LayoutEnvSnapshot
 import com.ireader.feature.reader.web.ExternalLinkPolicy
 
 @Composable
@@ -35,6 +40,23 @@ fun ReaderScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val fontFamilyResolver = LocalFontFamilyResolver.current
+    val textLayouterFactory = remember(
+        fontFamilyResolver,
+        density.density,
+        density.fontScale,
+        layoutDirection
+    ) {
+        ComposeTextLayouterFactory(
+            environment = LayoutEnvSnapshot(
+                fontFamilyResolver = fontFamilyResolver,
+                density = density,
+                layoutDirection = layoutDirection
+            )
+        )
+    }
     val volumeKeyHandler = rememberUpdatedState(newValue = { keyCode: Int, action: Int ->
         val intent = volumePagingIntentForKey(
             state = state,
@@ -53,6 +75,10 @@ fun ReaderScreen(
 
     LaunchedEffect(bookId, locatorArg) {
         vm.dispatch(ReaderIntent.Start(bookId = bookId, locatorArg = locatorArg))
+    }
+
+    LaunchedEffect(textLayouterFactory) {
+        vm.dispatch(ReaderIntent.TextLayouterFactoryChanged(textLayouterFactory))
     }
 
     DisposableEffect(Unit) {

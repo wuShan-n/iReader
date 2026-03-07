@@ -3,6 +3,7 @@ package com.ireader.feature.reader.presentation
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.TextLayouterFactory
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
 
@@ -18,6 +19,7 @@ sealed interface ReaderIntent {
     data object CancelPassword : ReaderIntent
 
     data class LayoutChanged(val constraints: LayoutConstraints) : ReaderIntent
+    data class TextLayouterFactoryChanged(val factory: TextLayouterFactory) : ReaderIntent
     data object RefreshPage : ReaderIntent
 
     data object ToggleChrome : ReaderIntent
