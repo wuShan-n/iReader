@@ -26,14 +26,14 @@ class SaveReadingProgressTest {
 
         useCase(
             bookId = 7L,
-            locator = Locator("txt.offset", "42"),
+            locator = Locator("txt.anchor", "42:0:f:1"),
             progression = 2.0
         )
 
         val saved = progressDao.lastUpsert
         assertNotNull(saved)
         assertEquals(7L, saved?.bookId)
-        assertEquals("encoded:42", saved?.locatorJson)
+        assertEquals("encoded:42:0:f:1", saved?.locatorJson)
         assertEquals(1.0, saved?.progression ?: -1.0, 0.0)
     }
 }
@@ -51,4 +51,3 @@ private class FakeProgressDao : ProgressDao {
 
     override suspend fun deleteByBookId(bookId: Long) = Unit
 }
-

@@ -81,7 +81,7 @@ private fun readerUiState(
 private class NoOpReaderController : ReaderController {
     private val stateStore = MutableStateFlow(
         RenderState(
-            locator = Locator(scheme = "txt.offset", value = "0"),
+            locator = Locator(scheme = "txt.anchor", value = "0:0:f:1"),
             progression = Progression(0.0),
             nav = NavigationAvailability(canGoPrev = true, canGoNext = true),
             config = com.ireader.reader.api.render.RenderConfig.ReflowText()

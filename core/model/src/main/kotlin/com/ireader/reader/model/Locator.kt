@@ -2,8 +2,7 @@ package com.ireader.reader.model
 
 /**
  * scheme + value 统一表达位置。
- * - TXT: txt.offset -> value=UTF-16 字符偏移
- * - TXT(legacy): txt.block -> value=块起点偏移:块内偏移（兼容历史数据）
+ * - TXT: txt.anchor -> value=utf16Offset:blockId:affinity:revision
  * - EPUB: epub.cfi  -> value=CFI 字符串
  * - PDF: pdf.page   -> value=页索引(0-based 建议) 或 1-based(需统一)
  */
@@ -20,8 +19,7 @@ data class LocatorRange(
 )
 
 object LocatorSchemes {
-    const val TXT_OFFSET = "txt.offset"
-    const val TXT_BLOCK = "txt.block"
+    const val TXT_ANCHOR = "txt.anchor"
     const val EPUB_CFI = "epub.cfi"
     const val PDF_PAGE = "pdf.page"
 
@@ -35,6 +33,8 @@ object LocatorExtraKeys {
     const val PROGRESSION = "progression"
     const val REFLOW_PAGE_PROFILE = "reflowPageProfile"
     const val REFLOW_PAGE_ANCHORS = "reflowPageAnchors"
+    const val OUTLINE_CONFIDENCE = "outlineConfidence"
+    const val OUTLINE_LEVEL = "outlineLevel"
 }
 
 /**

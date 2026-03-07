@@ -4,8 +4,13 @@ package com.ireader.engines.txt.internal.open
 
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
-import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
+import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
+import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
+import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.runtime.BlockStore
+import com.ireader.engines.txt.internal.runtime.BreakResolver
 import com.ireader.engines.txt.internal.render.TxtController
+import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
@@ -87,15 +92,44 @@ internal class TxtDocument(
                 val effectiveConfig = config.sanitized()
                 val initialOffset = when {
                     initialLocator == null -> 0L
-                    else -> TxtBlockLocatorCodec.parseOffset(initialLocator, store.lengthChars) ?: 0L
+                    else -> TxtAnchorLocatorCodec.parseOffset(
+                        locator = initialLocator,
+                        blockIndex = blockIndex,
+                        expectedRevision = meta.contentRevision,
+                        maxOffset = store.lengthChars
+                    ) ?: 0L
                 }.coerceIn(0L, store.lengthChars)
                 val annotationProvider = annotationProviderFactory?.invoke(id)
+                val breakIndex = requireNotNull(
+                    SoftBreakIndex.openIfValid(
+                        file = files.breakMap,
+                        meta = meta,
+                        profile = SoftBreakTuningProfile.BALANCED,
+                        rulesVersion = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED).rulesVersion
+                    )
+                ) {
+                    "Missing or invalid break map at ${files.breakMap.absolutePath}"
+                }
+                val breakResolver = BreakResolver(
+                    store = store,
+                    files = files,
+                    meta = meta,
+                    breakIndex = breakIndex
+                )
+                val blockStore = BlockStore(
+                    store = store,
+                    blockIndex = blockIndex,
+                    revision = meta.contentRevision,
+                    breakResolver = breakResolver
+                )
 
                 val controller = TxtController(
                     documentKey = id.value,
                     store = store,
                     meta = meta,
                     blockIndex = blockIndex,
+                    breakResolver = breakResolver,
+                    blockStore = blockStore,
                     initialLocator = initialLocator,
                     initialOffset = initialOffset,
                     initialConfig = effectiveConfig,
@@ -108,12 +142,14 @@ internal class TxtDocument(
                     defaultDispatcher = defaultDispatcher
                 )
                 ReaderResult.Ok(
-                    TxtSession(
+                    TxtSession.create(
                         controller = controller,
                         files = files,
                         meta = meta,
                         blockIndex = blockIndex,
-                        store = store,
+                        breakIndex = breakIndex,
+                        breakResolver = breakResolver,
+                        blockStore = blockStore,
                         ioDispatcher = ioDispatcher,
                         persistOutline = persistOutline,
                         annotationsProvider = annotationProvider

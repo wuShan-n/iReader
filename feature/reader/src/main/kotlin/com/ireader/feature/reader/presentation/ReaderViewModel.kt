@@ -15,6 +15,9 @@ import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
 import com.ireader.feature.reader.domain.usecase.OpenReaderSession
 import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
 import com.ireader.feature.reader.web.ExternalLinkPolicy
+import com.ireader.reader.api.engine.TextBreakPatchDirection
+import com.ireader.reader.api.engine.TextBreakPatchState
+import com.ireader.reader.api.engine.TextBreakPatchSupport
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
@@ -33,6 +36,7 @@ import com.ireader.reader.api.render.TextLayouterFactory
 import com.ireader.reader.model.LinkTarget
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.Locator
+import com.ireader.reader.model.LocatorExtraKeys
 import com.ireader.reader.model.OutlineNode
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.runtime.ReaderSessionHandle
@@ -284,6 +288,11 @@ class ReaderViewModel @Inject constructor(
             }
 
             ReaderIntent.ExecuteSearch -> executeSearch()
+            is ReaderIntent.ApplyTextBreakPatch -> applyTextBreakPatch(
+                direction = intent.direction,
+                state = intent.state
+            )
+            ReaderIntent.ClearTextBreakPatches -> clearTextBreakPatches()
 
             is ReaderIntent.UpdateConfig -> applyConfig(
                 config = intent.config,
@@ -312,6 +321,7 @@ class ReaderViewModel @Inject constructor(
                 renderState = null,
                 currentConfig = null,
                 gestureProfile = ReaderGestureProfile.REFLOW,
+                supportsTextBreakPatches = false,
                 passwordPrompt = null,
                 error = null,
                 activeMenuTab = ReaderMenuTab.Toc,
@@ -403,6 +413,7 @@ class ReaderViewModel @Inject constructor(
                         currentConfig = result.value.controller.state.value.config,
                         pageTurnMode = resolvePageTurnMode(result.value.controller.state.value.config),
                         gestureProfile = resolveGestureProfile(result.value.document.capabilities),
+                        supportsTextBreakPatches = result.value.session is TextBreakPatchSupport,
                         passwordPrompt = null,
                         error = null
                     )
@@ -937,7 +948,7 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadTocIfNeeded() {
+    private suspend fun loadTocIfNeeded(force: Boolean = false) {
         val sessionHandle = session.currentHandle() ?: return
         val outline = sessionHandle.outline
         if (outline == null) {
@@ -952,7 +963,7 @@ class ReaderViewModel @Inject constructor(
             }
             return
         }
-        if (ui.state.value.toc.items.isNotEmpty()) return
+        if (!force && ui.state.value.toc.items.isNotEmpty()) return
 
         ui.update { it.copy(toc = it.toc.copy(isLoading = true, error = null)) }
         when (val result = outline.getOutline()) {
@@ -971,6 +982,86 @@ class ReaderViewModel @Inject constructor(
             is ReaderResult.Ok -> {
                 val flat = flattenOutlineIterative(result.value)
                 ui.update { it.copy(toc = TocState(isLoading = false, items = flat)) }
+            }
+        }
+    }
+
+    private suspend fun applyTextBreakPatch(
+        direction: TextBreakPatchDirection,
+        state: TextBreakPatchState
+    ) {
+        val sessionHandle = session.currentHandle() ?: return
+        val patchSupport = sessionHandle.session as? TextBreakPatchSupport ?: run {
+            ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("当前文档不支持 TXT 换行修正")))
+            return
+        }
+        val locator = ui.state.value.renderState?.locator ?: run {
+            ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("当前页面缺少定位，无法应用修正")))
+            return
+        }
+        cancelActiveSearch()
+        cancelFinalRender()
+        when (val result = patchSupport.applyBreakPatch(locator, direction, state)) {
+            is ReaderResult.Err -> {
+                ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("TXT 换行修正失败")))
+            }
+
+            is ReaderResult.Ok -> {
+                replacePage(result.value, direction = null)
+                ui.update { current ->
+                    current.copy(
+                        search = current.search.copy(
+                            isSearching = false,
+                            results = emptyList(),
+                            error = null
+                        )
+                    )
+                }
+                if (ui.state.value.activeMenuTab == ReaderMenuTab.Toc) {
+                    loadTocIfNeeded(force = true)
+                }
+                ui.emit(
+                    ReaderEffect.Snackbar(
+                        UiText.Dynamic(
+                            when (state) {
+                                TextBreakPatchState.HARD_PARAGRAPH -> "已保留当前位置附近的换行"
+                                TextBreakPatchState.SOFT_JOIN -> "已合并当前位置附近的换行"
+                                TextBreakPatchState.SOFT_SPACE -> "已合并并补空格"
+                                TextBreakPatchState.PRESERVE -> "已标记为保留换行"
+                                TextBreakPatchState.UNKNOWN -> "已恢复为待判定换行"
+                            }
+                        )
+                    )
+                )
+            }
+        }
+    }
+
+    private suspend fun clearTextBreakPatches() {
+        val sessionHandle = session.currentHandle() ?: return
+        val patchSupport = sessionHandle.session as? TextBreakPatchSupport ?: run {
+            ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("当前文档不支持 TXT 换行修正")))
+            return
+        }
+        cancelActiveSearch()
+        cancelFinalRender()
+        when (val result = patchSupport.clearBreakPatches()) {
+            is ReaderResult.Err -> ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("清空 TXT 修正失败")))
+            is ReaderResult.Ok -> {
+                replacePage(result.value, direction = null)
+                ui.update { current ->
+                    current.copy(
+                        search = current.search.copy(
+                            isSearching = false,
+                            results = emptyList(),
+                            error = null
+                        )
+                    )
+                }
+                if (ui.state.value.activeMenuTab == ReaderMenuTab.Toc) {
+                    loadTocIfNeeded(force = true)
+                }
+                ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("已清空 TXT 换行修正")))
             }
         }
     }
@@ -1097,7 +1188,8 @@ class ReaderViewModel @Inject constructor(
                 href = extras[TOC_EXTRA_HREF],
                 position = extras[TOC_EXTRA_POSITION]?.toIntOrNull(),
                 progression = extras[TOC_EXTRA_TOTAL_PROGRESSION]?.toDoubleOrNull()
-                    ?: extras[TOC_EXTRA_PROGRESSION]?.toDoubleOrNull()
+                    ?: extras[TOC_EXTRA_PROGRESSION]?.toDoubleOrNull(),
+                confidence = extras[LocatorExtraKeys.OUTLINE_CONFIDENCE]?.toDoubleOrNull()
             )
 
             val children = node.children
@@ -1114,7 +1206,13 @@ class ReaderViewModel @Inject constructor(
         cancelFinalRender()
         appliedLayoutConstraints = null
         appliedTextLayouterFactoryKey = null
-        ui.update { it.copy(page = null, isRenderingFinal = false) }
+        ui.update {
+            it.copy(
+                page = null,
+                isRenderingFinal = false,
+                supportsTextBreakPatches = false
+            )
+        }
         session.closeCurrent { bookId, locator, progression ->
             saveReadingProgress(
                 bookId = bookId,

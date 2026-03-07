@@ -1,6 +1,7 @@
 package com.ireader.engines.txt.internal.link
 
-import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.LinkTarget
 
@@ -14,7 +15,8 @@ internal object LinkDetector {
     fun detect(
         text: CharSequence,
         pageStartOffset: Long,
-        maxOffset: Long,
+        blockIndex: TxtBlockIndex,
+        revision: Int,
         projectedBoundaryToRawOffsets: LongArray? = null,
         max: Int = 20
     ): List<DocumentLink> {
@@ -54,18 +56,18 @@ internal object LinkDetector {
             }
 
             val globalStart = if (projectedBoundaryToRawOffsets == null) {
-                (pageStartOffset + clampedStart.toLong()).coerceAtMost(maxOffset)
+                (pageStartOffset + clampedStart.toLong()).coerceAtMost(blockIndex.lengthCodeUnits)
             } else {
                 projectedBoundaryToRawOffsets
                     .getOrElse(clampedStart) { projectedBoundaryToRawOffsets.last() }
-                    .coerceAtMost(maxOffset)
+                    .coerceAtMost(blockIndex.lengthCodeUnits)
             }
             val globalEnd = if (projectedBoundaryToRawOffsets == null) {
-                (pageStartOffset + clampedEnd.toLong()).coerceAtMost(maxOffset)
+                (pageStartOffset + clampedEnd.toLong()).coerceAtMost(blockIndex.lengthCodeUnits)
             } else {
                 projectedBoundaryToRawOffsets
                     .getOrElse(clampedEnd) { projectedBoundaryToRawOffsets.last() }
-                    .coerceAtMost(maxOffset)
+                    .coerceAtMost(blockIndex.lengthCodeUnits)
             }
             if (globalEnd <= globalStart) {
                 return
@@ -75,10 +77,11 @@ internal object LinkDetector {
                 DocumentLink(
                     target = LinkTarget.External(normalized),
                     title = value,
-                    range = TxtBlockLocatorCodec.rangeForOffsets(
+                    range = TxtAnchorLocatorCodec.rangeForOffsets(
                         startOffset = globalStart,
                         endOffset = globalEnd,
-                        maxOffset = maxOffset
+                        blockIndex = blockIndex,
+                        revision = revision
                     ),
                     bounds = null
                 )

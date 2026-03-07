@@ -1,8 +1,7 @@
 package com.ireader.engines.txt.internal.render
 
-import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
-import com.ireader.engines.common.android.reflow.ReflowPageSlice
-import com.ireader.reader.api.render.LayoutConstraints
+import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorExtraKeys
 import com.ireader.reader.model.Progression
@@ -10,7 +9,9 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 internal class TxtNavigationState(
-    initialStart: Long
+    initialStart: Long,
+    private val blockIndex: TxtBlockIndex,
+    private val revision: Int
 ) {
     var currentStart: Long = initialStart
         private set
@@ -22,10 +23,10 @@ internal class TxtNavigationState(
         currentStart = start.coerceIn(0L, maxOffset)
     }
 
-    fun updateFromSlice(slice: ReflowPageSlice) {
-        currentStart = slice.startOffset
-        currentEnd = slice.endOffset
-        val consumed = (slice.endOffset - slice.startOffset).toInt().coerceAtLeast(1)
+    fun updateFromSlice(startOffset: Long, endOffset: Long) {
+        currentStart = startOffset
+        currentEnd = endOffset
+        val consumed = (endOffset - startOffset).toInt().coerceAtLeast(1)
         avgCharsPerPage = ((avgCharsPerPage * 3) + consumed) / 4
     }
 
@@ -54,39 +55,11 @@ internal class TxtNavigationState(
         val mergedExtras = extras + mapOf(
             LocatorExtraKeys.PROGRESSION to String.format(Locale.US, "%.6f", percent)
         )
-        return TxtBlockLocatorCodec.locatorForOffset(
+        return TxtAnchorLocatorCodec.locatorForOffset(
             offset = currentStart.coerceIn(0L, maxOffset),
-            maxOffset = maxOffset,
+            blockIndex = blockIndex,
+            revision = revision,
             extras = mergedExtras
         )
-    }
-
-    suspend fun findPreviousStart(
-        fromStart: Long,
-        maxOffset: Long,
-        constraints: LayoutConstraints,
-        resolveSlice: suspend (Long, LayoutConstraints) -> ReflowPageSlice
-    ): Long {
-        if (fromStart <= 0L) {
-            return 0L
-        }
-        val estimateDistance = (avgCharsPerPage * 2L).coerceAtLeast(1_200L)
-        var cursor = (fromStart - estimateDistance).coerceAtLeast(0L)
-        var previousStart = 0L
-        var safety = 0
-
-        while (cursor < fromStart && safety < 256) {
-            val slice = resolveSlice(cursor, constraints)
-            if (slice.endOffset >= fromStart) {
-                return previousStart.coerceAtMost(fromStart)
-            }
-            previousStart = slice.startOffset
-            if (slice.endOffset <= cursor) {
-                break
-            }
-            cursor = slice.endOffset
-            safety++
-        }
-        return cursor.coerceAtMost(fromStart).coerceAtLeast(0L).coerceAtMost(maxOffset)
     }
 }

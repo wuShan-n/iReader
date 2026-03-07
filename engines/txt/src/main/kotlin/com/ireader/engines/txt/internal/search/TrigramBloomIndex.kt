@@ -1,6 +1,8 @@
 package com.ireader.engines.txt.internal.search
 
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtMeta
+import com.ireader.engines.txt.internal.runtime.BreakResolver
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.readStringUtf8
@@ -35,6 +37,7 @@ internal class TrigramBloomIndex private constructor(
         private const val BLOCK_CHARS = 32 * 1024
         private const val BITSET_BITS = 16 * 1024
         private const val MIN_CHARS_FOR_INDEX = 1_000_000L
+        private const val INDEX_BLOCK_OVERLAP = 2
 
         fun openIfValid(file: File, meta: TxtMeta): TrigramBloomIndex? {
             if (!file.exists()) {
@@ -57,7 +60,7 @@ internal class TrigramBloomIndex private constructor(
                     val blocksCount = raf.readInt()
                     val dataOffset = raf.filePointer
 
-                    if (lengthChars != meta.lengthChars || sampleHash != meta.sampleHash) {
+                    if (lengthChars != meta.lengthCodeUnits || sampleHash != meta.sampleHash) {
                         return null
                     }
                     TrigramBloomIndex(
@@ -79,7 +82,7 @@ internal class TrigramBloomIndex private constructor(
             meta: TxtMeta,
             ioDispatcher: CoroutineDispatcher
         ) = withContext(ioDispatcher) {
-            if (meta.lengthChars < MIN_CHARS_FOR_INDEX) {
+            if (meta.lengthCodeUnits < MIN_CHARS_FOR_INDEX) {
                 return@withContext
             }
             openIfValid(file, meta)?.also { return@withContext }
@@ -88,7 +91,7 @@ internal class TrigramBloomIndex private constructor(
                 lockChannel.lock().use {
                     openIfValid(file, meta)?.also { return@withContext }
 
-                    val blocksCount = ceil(meta.lengthChars.toDouble() / BLOCK_CHARS.toDouble()).toInt()
+                    val blocksCount = ceil(meta.lengthCodeUnits.toDouble() / BLOCK_CHARS.toDouble()).toInt()
                         .coerceAtLeast(1)
                     val bitsetBytes = BITSET_BITS / 8
 
@@ -101,20 +104,75 @@ internal class TrigramBloomIndex private constructor(
                         raf.writeInt(VERSION)
                         raf.writeInt(BLOCK_CHARS)
                         raf.writeInt(BITSET_BITS)
-                        raf.writeLong(meta.lengthChars)
+                        raf.writeLong(meta.lengthCodeUnits)
                         raf.writeStringUtf8(meta.sampleHash)
                         raf.writeInt(blocksCount)
 
                         for (bi in 0 until blocksCount) {
                             coroutineContext.ensureActive()
                             val rangeStart = bi.toLong() * BLOCK_CHARS.toLong()
-                            val len = min(BLOCK_CHARS.toLong(), meta.lengthChars - rangeStart)
+                            val len = min(BLOCK_CHARS.toLong(), meta.lengthCodeUnits - rangeStart)
                                 .toInt()
                                 .coerceAtLeast(0)
                             val bitset = ByteArray(bitsetBytes)
                             if (len >= 3) {
                                 val text = store.readChars(rangeStart, len)
                                 fillBitset(text, bitset, BITSET_BITS)
+                            }
+                            raf.write(bitset)
+                        }
+                    }
+
+                    replaceFileAtomically(tempFile = tmp, targetFile = file)
+                }
+            }
+        }
+
+        suspend fun buildIfNeeded(
+            file: File,
+            lockFile: File,
+            blockIndex: TxtBlockIndex,
+            breakResolver: BreakResolver,
+            meta: TxtMeta,
+            ioDispatcher: CoroutineDispatcher
+        ) = withContext(ioDispatcher) {
+            if (meta.lengthCodeUnits < MIN_CHARS_FOR_INDEX) {
+                return@withContext
+            }
+            openIfValid(file, meta)?.also { return@withContext }
+            lockFile.parentFile?.mkdirs()
+            RandomAccessFile(lockFile, "rw").channel.use { lockChannel ->
+                lockChannel.lock().use {
+                    openIfValid(file, meta)?.also { return@withContext }
+
+                    val blocksCount = blockIndex.blockCount.coerceAtLeast(1)
+                    val bitsetBytes = BITSET_BITS / 8
+                    val tmp = File(file.parentFile, "${file.name}.tmp")
+                    prepareTempFile(tmp)
+
+                    RandomAccessFile(tmp, "rw").use { raf ->
+                        raf.setLength(0L)
+                        raf.write(MAGIC.toByteArray(Charsets.US_ASCII))
+                        raf.writeInt(VERSION)
+                        raf.writeInt(blockIndex.blockSizeCodeUnits)
+                        raf.writeInt(BITSET_BITS)
+                        raf.writeLong(meta.lengthCodeUnits)
+                        raf.writeStringUtf8(meta.sampleHash)
+                        raf.writeInt(blocksCount)
+
+                        for (bi in 0 until blocksCount) {
+                            coroutineContext.ensureActive()
+                            val rangeStart = (blockIndex.blockStartOffset(bi) - INDEX_BLOCK_OVERLAP.toLong())
+                                .coerceAtLeast(0L)
+                            val rangeEnd = (blockIndex.blockEndOffset(bi) + INDEX_BLOCK_OVERLAP.toLong())
+                                .coerceAtMost(meta.lengthCodeUnits)
+                            val bitset = ByteArray(bitsetBytes)
+                            val displayText = breakResolver.projectRange(
+                                startOffset = rangeStart,
+                                endOffsetExclusive = rangeEnd
+                            ).displayText
+                            if (displayText.length >= 3) {
+                                fillBitset(displayText.toCharArray(), bitset, BITSET_BITS)
                             }
                             raf.write(bitset)
                         }

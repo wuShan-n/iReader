@@ -2,7 +2,8 @@
 
 package com.ireader.engines.txt.internal.render
 
-import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.reader.api.render.TextMapping
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
@@ -10,12 +11,18 @@ import com.ireader.reader.model.LocatorRange
 internal class TxtTextMapping(
     private val pageStart: Long,
     private val pageEnd: Long,
+    private val blockIndex: TxtBlockIndex,
+    private val revision: Int,
     private val projectedBoundaryToRawOffsets: LongArray? = null
 ) : TextMapping {
 
     override fun locatorAt(charIndex: Int): Locator {
         val global = rawOffsetForBoundary(charIndex)
-        return TxtBlockLocatorCodec.locatorForOffset(global, pageEnd)
+        return TxtAnchorLocatorCodec.locatorForOffset(
+            offset = global,
+            blockIndex = blockIndex,
+            revision = revision
+        )
     }
 
     override fun rangeFor(startChar: Int, endChar: Int): LocatorRange {
@@ -25,16 +32,27 @@ internal class TxtTextMapping(
         val maxLocal = maxOf(localStart, localEnd)
         val startGlobal = rawOffsetForBoundary(minLocal)
         val endGlobal = rawOffsetForBoundary(maxLocal)
-        return TxtBlockLocatorCodec.rangeForOffsets(
+        return TxtAnchorLocatorCodec.rangeForOffsets(
             startOffset = startGlobal,
             endOffset = endGlobal,
-            maxOffset = pageEnd
+            blockIndex = blockIndex,
+            revision = revision
         )
     }
 
     override fun charRangeFor(range: LocatorRange): IntRange? {
-        val startGlobal = TxtBlockLocatorCodec.parseOffset(range.start) ?: return null
-        val endGlobal = TxtBlockLocatorCodec.parseOffset(range.end) ?: return null
+        val startGlobal = TxtAnchorLocatorCodec.parseOffset(
+            locator = range.start,
+            blockIndex = blockIndex,
+            expectedRevision = revision,
+            maxOffset = pageEnd
+        ) ?: return null
+        val endGlobal = TxtAnchorLocatorCodec.parseOffset(
+            locator = range.end,
+            blockIndex = blockIndex,
+            expectedRevision = revision,
+            maxOffset = pageEnd
+        ) ?: return null
         val minGlobal = minOf(startGlobal, endGlobal)
         val maxGlobal = maxOf(startGlobal, endGlobal)
         if (minGlobal < pageStart || maxGlobal > pageEnd) {

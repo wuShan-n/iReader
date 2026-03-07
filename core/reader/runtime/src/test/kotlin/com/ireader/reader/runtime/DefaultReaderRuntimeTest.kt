@@ -166,7 +166,7 @@ private class FakeSession : ReaderSession {
 private class FakeController : ReaderController {
     override val state = MutableStateFlow(
         RenderState(
-            locator = Locator("txt.offset", "0"),
+            locator = Locator("txt.anchor", "0:0:f:1"),
             progression = Progression(0.0),
             nav = NavigationAvailability(canGoPrev = false, canGoNext = false),
             config = RenderConfig.ReflowText()

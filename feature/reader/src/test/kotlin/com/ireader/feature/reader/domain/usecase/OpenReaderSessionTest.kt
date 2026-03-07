@@ -88,7 +88,7 @@ class OpenReaderSessionTest {
             textEncoding = "UTF-8",
             extra = mapOf("k" to "v")
         )
-        val locator = Locator("txt.offset", "42")
+        val locator = Locator("txt.anchor", "42:0:f:1")
 
         val result = useCase(
             source = source,
@@ -284,7 +284,7 @@ private class FakeSession : ReaderSession {
 
 private class FakeController : ReaderController {
     private val stateValue = RenderState(
-        locator = Locator(scheme = "txt.offset", value = "0"),
+        locator = Locator(scheme = "txt.anchor", value = "0:0:f:1"),
         progression = Progression(0.0),
         nav = NavigationAvailability(canGoPrev = false, canGoNext = false),
         config = RenderConfig.ReflowText()

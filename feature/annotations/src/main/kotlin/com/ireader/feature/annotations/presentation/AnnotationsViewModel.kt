@@ -110,9 +110,15 @@ class AnnotationsViewModel @Inject constructor(
                 return@launch
             }
 
+            val anchor = fallbackLocator.toAnchor()
+            if (anchor == null) {
+                stateStore.update { it.copy(errorMessage = "旧版 TXT 定位已失效，请先重新打开书籍后再创建笔记") }
+                return@launch
+            }
+
             val draft = AnnotationDraft(
                 type = AnnotationType.NOTE,
-                anchor = fallbackLocator.toAnchor(),
+                anchor = anchor,
                 content = content
             )
             when (annotationStore.create(docId, draft)) {
@@ -213,12 +219,18 @@ class AnnotationsViewModel @Inject constructor(
         return locatorCodec.decode(progress.locatorJson)
     }
 
-    private fun Locator.toAnchor(): AnnotationAnchor {
+    private fun Locator.toAnchor(): AnnotationAnchor? {
         return if (scheme == LocatorSchemes.PDF_PAGE) {
             AnnotationAnchor.FixedRects(page = this, rects = emptyList())
+        } else if (isLegacyTxtLocator()) {
+            null
         } else {
             AnnotationAnchor.ReflowRange(LocatorRange(start = this, end = this))
         }
+    }
+
+    private fun Locator.isLegacyTxtLocator(): Boolean {
+        return scheme == "txt.offset" || scheme == "txt.block"
     }
 
     private fun Annotation.toUiItem(): AnnotationItemUi {

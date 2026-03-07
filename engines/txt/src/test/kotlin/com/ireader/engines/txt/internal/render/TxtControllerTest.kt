@@ -5,8 +5,15 @@ import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.Utf16LeFileWriter
+import com.ireader.engines.txt.internal.runtime.BlockStore
+import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.engines.txt.testing.buildTxtRuntimeFixture
+import com.ireader.engines.txt.testing.TxtRuntimeFixture
+import com.ireader.reader.api.engine.TextBreakPatchDirection
+import com.ireader.reader.api.engine.TextBreakPatchState
 import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.AnnotationProvider
@@ -160,7 +167,7 @@ class TxtControllerTest {
             fixture.controller.render(RenderPolicy.Default).requireOk()
             assertEquals(0, provider.decorationQueryCount.get())
 
-            provider.emitOne(maxOffset = fixture.store.lengthChars, suffix = "1")
+            provider.emitOne(locator = fixture.runtime.locatorFor(0L), suffix = "1")
             delay(80L)
             fixture.controller.render(RenderPolicy.Default).requireOk()
             assertEquals(1, provider.decorationQueryCount.get())
@@ -168,10 +175,30 @@ class TxtControllerTest {
             fixture.controller.render(RenderPolicy.Default).requireOk()
             assertEquals(1, provider.decorationQueryCount.get())
 
-            provider.emitOne(maxOffset = fixture.store.lengthChars, suffix = "2")
+            provider.emitOne(locator = fixture.runtime.locatorFor(0L), suffix = "2")
             delay(80L)
             fixture.controller.render(RenderPolicy.Default).requireOk()
             assertEquals(2, provider.decorationQueryCount.get())
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `applyBreakPatch should rerender current page with projected text and persist patch`() = runBlocking {
+        val fixture = createFixture(text = "甲\n乙\n丙\n")
+        try {
+            fixture.controller.setLayoutConstraints(defaultConstraints())
+
+            val patched = fixture.controller.applyBreakPatch(
+                locator = fixture.runtime.locatorFor(0L),
+                direction = TextBreakPatchDirection.NEXT,
+                state = TextBreakPatchState.SOFT_SPACE
+            ).requireOk()
+
+            val patchedText = (patched.content as RenderContent.Text).text.toString()
+            assertTrue(patchedText.startsWith("甲 乙"))
+            assertTrue(fixture.runtime.files.breakPatch.exists())
         } finally {
             fixture.close()
         }
@@ -212,47 +239,25 @@ class TxtControllerTest {
         annotationProvider: AnnotationProvider? = null
     ): ControllerFixture {
         val dir = Files.createTempDirectory("txt_controller_test").toFile()
-        val files = createBookFiles(dir)
-        Utf16LeFileWriter(files.textStore).use { writer ->
-            text.forEach(writer::writeChar)
-        }
-        val store = Utf16TextStore(files.textStore)
-        val meta = TxtMeta(
-            version = 1,
-            sourceUri = "file://test.txt",
-            displayName = "test.txt",
-            sizeBytes = text.length.toLong(),
+        val runtime = buildTxtRuntimeFixture(
+            text = text,
             sampleHash = "sample",
-            originalCharset = "UTF-8",
-            lengthChars = store.lengthChars,
-            hardWrapLikely = false,
-            createdAtEpochMs = 0L
-        )
-        SoftBreakIndexBuilder.buildIfNeeded(
-            files = files,
-            meta = meta,
             ioDispatcher = Dispatchers.IO,
-            profile = SoftBreakTuningProfile.BALANCED
+            rootDir = dir
         )
-        TxtBlockIndex.buildIfNeeded(
-            file = files.blockIdx,
-            store = store,
-            meta = meta,
-            ioDispatcher = Dispatchers.IO
-        )
-        val blockIndex = TxtBlockIndex.openIfValid(files.blockIdx, meta)
-            ?: error("Missing block index")
         val controller = TxtController(
             documentKey = "doc-test",
-            store = store,
-            meta = meta,
-            blockIndex = blockIndex,
+            store = runtime.store,
+            meta = runtime.meta,
+            blockIndex = runtime.blockIndex,
+            breakResolver = runtime.breakResolver,
+            blockStore = runtime.blockStore,
             initialLocator = null,
             initialOffset = 0L,
             initialConfig = RenderConfig.ReflowText(),
             maxPageCache = 8,
             persistPagination = false,
-            files = files,
+            files = runtime.files,
             annotationProvider = annotationProvider,
             ioDispatcher = Dispatchers.IO,
             paginationDispatcher = Dispatchers.Default.limitedParallelism(1),
@@ -261,26 +266,7 @@ class TxtControllerTest {
         controller.setTextLayouterFactory(TestTextLayouterFactory)
         return ControllerFixture(
             controller = controller,
-            store = store,
-            rootDir = dir
-        )
-    }
-
-    private fun createBookFiles(root: File): TxtBookFiles {
-        val paginationDir = File(root, "pagination").apply { mkdirs() }
-        return TxtBookFiles(
-            bookDir = root,
-            lockFile = File(root, "book.lock"),
-            textStore = File(root, "text.store"),
-            metaJson = File(root, "meta.json"),
-            outlineIdx = File(root, "outline.idx"),
-            paginationDir = paginationDir,
-            breakMap = File(root, "break.map"),
-            breakLock = File(root, "break.lock"),
-            searchIdx = File(root, "search.idx"),
-            searchLock = File(root, "search.lock"),
-            blockIdx = File(root, "block.idx"),
-            breakPatch = File(root, "break.patch")
+            runtime = runtime
         )
     }
 
@@ -291,13 +277,11 @@ class TxtControllerTest {
 
     private class ControllerFixture(
         val controller: TxtController,
-        val store: Utf16TextStore,
-        private val rootDir: File
+        val runtime: TxtRuntimeFixture
     ) {
         fun close() {
             controller.close()
-            store.close()
-            rootDir.deleteRecursively()
+            runtime.close()
         }
     }
 
@@ -334,11 +318,7 @@ class TxtControllerTest {
             return ReaderResult.Ok(emptyList())
         }
 
-        fun emitOne(maxOffset: Long, suffix: String) {
-            val locator = com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec.locatorForOffset(
-                offset = 0L,
-                maxOffset = maxOffset
-            )
+        fun emitOne(locator: Locator, suffix: String) {
             state.value = listOf(
                 Annotation(
                     id = AnnotationId("anno-$suffix"),

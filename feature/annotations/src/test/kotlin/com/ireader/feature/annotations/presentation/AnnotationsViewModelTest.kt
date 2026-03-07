@@ -58,7 +58,7 @@ class AnnotationsViewModelTest {
             bookEntity = sampleBook(bookId = 7L, documentId = "doc-7"),
             progressEntity = ProgressEntity(
                 bookId = 7L,
-                locatorJson = locatorCodec.encode(Locator(LocatorSchemes.TXT_OFFSET, "128")),
+                locatorJson = locatorCodec.encode(Locator(LocatorSchemes.TXT_ANCHOR, "128:0:f:1")),
                 progression = 0.1,
                 updatedAtEpochMs = 1L
             )
@@ -78,7 +78,7 @@ class AnnotationsViewModelTest {
     fun `save and delete should update list state`() = runTest {
         val locatorCodec = FakeLocatorCodec()
         val store = FakeAnnotationStore()
-        val locator = Locator(LocatorSchemes.TXT_OFFSET, "16")
+        val locator = Locator(LocatorSchemes.TXT_ANCHOR, "16:0:f:1")
         store.seed(
             documentId = DocumentId("doc-edit"),
             annotations = listOf(
@@ -112,6 +112,30 @@ class AnnotationsViewModelTest {
 
         vm.deleteAnnotation("ann-1")
         advanceUntilIdle()
+        assertTrue(vm.uiState.value.items.isEmpty())
+    }
+
+    @Test
+    fun `create annotation should reject legacy txt progress locator`() = runTest {
+        val locatorCodec = FakeLocatorCodec()
+        val vm = newViewModel(
+            locatorCodec = locatorCodec,
+            annotationStore = FakeAnnotationStore(),
+            bookEntity = sampleBook(bookId = 13L, documentId = "doc-13"),
+            progressEntity = ProgressEntity(
+                bookId = 13L,
+                locatorJson = locatorCodec.encode(Locator("txt.offset", "128")),
+                progression = 0.2,
+                updatedAtEpochMs = 2L
+            )
+        )
+        advanceUntilIdle()
+
+        vm.onDraftContentChange("legacy note")
+        vm.createAnnotation()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.errorMessage.orEmpty().contains("旧版 TXT 定位已失效"))
         assertTrue(vm.uiState.value.items.isEmpty())
     }
 

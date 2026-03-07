@@ -3,8 +3,10 @@
 package com.ireader.engines.txt.internal.provider
 
 import com.ireader.engines.common.android.error.toReaderError
-import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
-import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
+import com.ireader.engines.txt.internal.runtime.BlockStore
+import com.ireader.engines.txt.internal.runtime.BreakResolver
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.TextProvider
@@ -16,7 +18,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
 internal class TxtTextProvider(
-    private val store: Utf16TextStore,
+    private val blockIndex: TxtBlockIndex,
+    private val revision: Int,
+    private val blockStore: BlockStore,
+    private val breakResolver: BreakResolver,
     private val ioDispatcher: CoroutineDispatcher
 ) : TextProvider {
 
@@ -31,11 +36,16 @@ internal class TxtTextProvider(
                     ?: return@withContext ReaderResult.Err(
                         ReaderError.Internal("Invalid TXT range end: ${range.end}")
                     )
-                val minOffset = min(start, end).coerceIn(0L, store.lengthChars)
-                val maxOffset = maxOf(start, end).coerceIn(0L, store.lengthChars)
-                val length = (maxOffset - minOffset).toInt().coerceAtLeast(0)
-                val capped = length.coerceAtMost(MAX_EXTRACT_CHARS)
-                ReaderResult.Ok(store.readString(minOffset, capped))
+                val minOffset = min(start, end).coerceIn(0L, blockIndex.lengthCodeUnits)
+                val maxOffset = maxOf(start, end).coerceIn(0L, blockIndex.lengthCodeUnits)
+                val cappedEnd = (minOffset + MAX_EXTRACT_CODE_UNITS)
+                    .coerceAtMost(maxOffset)
+                ReaderResult.Ok(
+                    breakResolver.projectRange(
+                        startOffset = minOffset,
+                        endOffsetExclusive = cappedEnd
+                    ).displayText
+                )
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Exception) {
@@ -51,9 +61,16 @@ internal class TxtTextProvider(
                     ?: return@withContext ReaderResult.Err(
                         ReaderError.Internal("Invalid TXT locator: $locator")
                     )
-                val capped = maxChars.coerceIn(32, MAX_AROUND_CHARS)
+                val capped = maxChars.coerceIn(32, MAX_AROUND_CODE_UNITS)
                 val half = (capped / 2).coerceAtLeast(16)
-                ReaderResult.Ok(store.readAround(offset, before = half, after = half))
+                val start = (offset - half.toLong()).coerceAtLeast(0L)
+                val end = (offset + half.toLong()).coerceAtMost(blockIndex.lengthCodeUnits)
+                ReaderResult.Ok(
+                    breakResolver.projectRange(
+                        startOffset = start,
+                        endOffsetExclusive = end
+                    ).displayText
+                )
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Exception) {
@@ -63,11 +80,16 @@ internal class TxtTextProvider(
     }
 
     private fun parseOffset(locator: Locator): Long? {
-        return TxtBlockLocatorCodec.parseOffset(locator, store.lengthChars)
+        return TxtAnchorLocatorCodec.parseOffset(
+            locator = locator,
+            blockIndex = blockIndex,
+            expectedRevision = revision,
+            maxOffset = blockIndex.lengthCodeUnits
+        )
     }
 
     private companion object {
-        private const val MAX_EXTRACT_CHARS = 200_000
-        private const val MAX_AROUND_CHARS = 200_000
+        private const val MAX_EXTRACT_CODE_UNITS = 200_000L
+        private const val MAX_AROUND_CODE_UNITS = 200_000
     }
 }

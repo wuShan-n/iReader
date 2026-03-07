@@ -36,10 +36,13 @@ internal object ReaderAnnotationDraftFactory {
         )
     }
 
-    private fun SelectionProvider.Selection.toAnchor(): AnnotationAnchor {
+    private fun SelectionProvider.Selection.toAnchor(): AnnotationAnchor? {
         val startLocator = start
         val endLocator = end
         if (startLocator != null && endLocator != null) {
+            if (startLocator.isLegacyTxtLocator() || endLocator.isLegacyTxtLocator()) {
+                return null
+            }
             return AnnotationAnchor.ReflowRange(
                 LocatorRange(
                     start = startLocator,
@@ -54,17 +57,25 @@ internal object ReaderAnnotationDraftFactory {
                 page = locator,
                 rects = selectionRects()
             )
+        } else if (locator.isLegacyTxtLocator()) {
+            null
         } else {
             AnnotationAnchor.ReflowRange(LocatorRange(start = locator, end = locator))
         }
     }
 
-    private fun Locator.toFallbackAnchor(): AnnotationAnchor {
+    private fun Locator.toFallbackAnchor(): AnnotationAnchor? {
         return if (scheme == LocatorSchemes.PDF_PAGE) {
             AnnotationAnchor.FixedRects(page = this, rects = emptyList())
+        } else if (isLegacyTxtLocator()) {
+            null
         } else {
             AnnotationAnchor.ReflowRange(LocatorRange(start = this, end = this))
         }
+    }
+
+    private fun Locator.isLegacyTxtLocator(): Boolean {
+        return scheme == "txt.offset" || scheme == "txt.block"
     }
 
     private fun SelectionProvider.Selection.selectionRects(): List<NormalizedRect> {

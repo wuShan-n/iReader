@@ -81,6 +81,8 @@ import com.ireader.feature.reader.presentation.ReaderSheet
 import com.ireader.feature.reader.presentation.ReaderUiState
 import com.ireader.feature.reader.presentation.asString
 import com.ireader.feature.reader.presentation.resolveActiveTocIndex
+import com.ireader.reader.api.engine.TextBreakPatchDirection
+import com.ireader.reader.api.engine.TextBreakPatchState
 import com.ireader.feature.reader.ui.components.ErrorPane
 import com.ireader.feature.reader.ui.components.PageRenderer
 import com.ireader.feature.reader.ui.components.PasswordDialog
@@ -413,10 +415,28 @@ fun ReaderScaffold(
                 panelColor = panelColor,
                 textColor = panelTextColor,
                 darkSurface = darkSurface,
+                showTextBreakDebugActions = state.supportsTextBreakPatches,
                 onClose = { onIntent(ReaderIntent.CloseSheet) },
                 onOpenSearch = { onIntent(ReaderIntent.OpenSearch) },
                 onCreateAnnotation = { onIntent(ReaderIntent.CreateAnnotation) },
-                onShare = { onIntent(ReaderIntent.ShareBook) }
+                onShare = { onIntent(ReaderIntent.ShareBook) },
+                onMergeNextBreak = {
+                    onIntent(
+                        ReaderIntent.ApplyTextBreakPatch(
+                            direction = TextBreakPatchDirection.NEXT,
+                            state = TextBreakPatchState.SOFT_SPACE
+                        )
+                    )
+                },
+                onKeepNextBreak = {
+                    onIntent(
+                        ReaderIntent.ApplyTextBreakPatch(
+                            direction = TextBreakPatchDirection.NEXT,
+                            state = TextBreakPatchState.HARD_PARAGRAPH
+                        )
+                    )
+                },
+                onClearBreakPatches = { onIntent(ReaderIntent.ClearTextBreakPatches) }
             )
 
             ReaderSheet.FullSettings -> FullSettingsScreen(
@@ -768,15 +788,30 @@ private fun ReaderMenuDockPanel(
                                 onClick = { onOpenLocator(item.locatorEncoded) },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = item.title,
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = (item.depth * 10).dp),
-                                    color = if (index == activeTocIndex) ReaderTokens.Palette.PrototypeBlue else contentColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                        .padding(start = (item.depth * 10).dp)
+                                ) {
+                                    Text(
+                                        text = item.title,
+                                        color = if (index == activeTocIndex) {
+                                            ReaderTokens.Palette.PrototypeBlue
+                                        } else {
+                                            contentColor
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val confidence = item.confidence
+                                    if (confidence != null && confidence < 0.8) {
+                                        Text(
+                                            text = "可能目录 ${(confidence * 100).toInt()}%",
+                                            color = contentColor.copy(alpha = 0.54f),
+                                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
                             }
                             if (index < state.toc.items.lastIndex) {
                                 Box(
@@ -1059,10 +1094,14 @@ private fun ReaderMoreSheet(
     panelColor: Color,
     textColor: Color,
     darkSurface: Boolean,
+    showTextBreakDebugActions: Boolean,
     onClose: () -> Unit,
     onOpenSearch: () -> Unit,
     onCreateAnnotation: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onMergeNextBreak: () -> Unit,
+    onKeepNextBreak: () -> Unit,
+    onClearBreakPatches: () -> Unit
 ) {
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -1092,6 +1131,40 @@ private fun ReaderMoreSheet(
                     onClose()
                     onShare()
                 })
+            }
+            if (showTextBreakDebugActions) {
+                Text(
+                    "TXT 调试",
+                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                    color = textColor.copy(alpha = 0.78f)
+                )
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        onClose()
+                        onMergeNextBreak()
+                    }
+                ) {
+                    Text("合并下一处换行", color = textColor)
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        onClose()
+                        onKeepNextBreak()
+                    }
+                ) {
+                    Text("保留下一处换行", color = textColor)
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        onClose()
+                        onClearBreakPatches()
+                    }
+                ) {
+                    Text("清空 TXT 修正", color = textColor.copy(alpha = 0.72f))
+                }
             }
             TextButton(
                 modifier = Modifier.fillMaxWidth(),

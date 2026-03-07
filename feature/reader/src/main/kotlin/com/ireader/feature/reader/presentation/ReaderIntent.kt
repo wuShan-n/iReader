@@ -1,6 +1,8 @@
 package com.ireader.feature.reader.presentation
 
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
+import com.ireader.reader.api.engine.TextBreakPatchDirection
+import com.ireader.reader.api.engine.TextBreakPatchState
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.TextLayouterFactory
@@ -74,6 +76,11 @@ sealed interface ReaderIntent {
 
     data class SearchQueryChanged(val query: String) : ReaderIntent
     data object ExecuteSearch : ReaderIntent
+    data class ApplyTextBreakPatch(
+        val direction: TextBreakPatchDirection,
+        val state: TextBreakPatchState
+    ) : ReaderIntent
+    data object ClearTextBreakPatches : ReaderIntent
 
     data class UpdateConfig(val config: RenderConfig, val persist: Boolean) : ReaderIntent
 }

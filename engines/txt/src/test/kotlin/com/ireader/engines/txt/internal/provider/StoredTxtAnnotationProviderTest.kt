@@ -28,7 +28,7 @@ class StoredTxtAnnotationProviderTest {
             documentId = DocumentId("doc-1"),
             store = store
         )
-        val locator = Locator("txt.offset", "12")
+        val locator = Locator("txt.anchor", "12:0:f:1")
 
         val created = provider.create(
             AnnotationDraft(
@@ -50,7 +50,7 @@ class StoredTxtAnnotationProviderTest {
     fun `decorations should map from annotation anchors`() = runBlocking {
         val store = FakeAnnotationStore()
         val provider = StoredTxtAnnotationProvider(DocumentId("doc-2"), store)
-        val reflowLocator = Locator("txt.offset", "1")
+        val reflowLocator = Locator("txt.anchor", "1:0:f:1")
         val pageLocator = Locator("pdf.page", "3")
         store.seed(
             Annotation(

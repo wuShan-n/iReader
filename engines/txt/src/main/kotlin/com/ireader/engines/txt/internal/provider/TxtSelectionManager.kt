@@ -3,8 +3,11 @@
 package com.ireader.engines.txt.internal.provider
 
 import com.ireader.engines.common.android.error.toReaderError
-import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
-import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.engines.txt.internal.locator.TextAnchorAffinity
+import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
+import com.ireader.engines.txt.internal.runtime.BlockStore
+import com.ireader.engines.txt.internal.runtime.BreakResolver
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.SelectionController
@@ -21,7 +24,10 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 internal class TxtSelectionManager(
-    private val store: Utf16TextStore,
+    private val blockIndex: TxtBlockIndex,
+    private val revision: Int,
+    private val breakResolver: BreakResolver,
+    private val blockStore: BlockStore,
     private val ioDispatcher: CoroutineDispatcher,
     private val maxSelectedChars: Int = 4_096
 ) : SelectionProvider, SelectionController {
@@ -79,25 +85,41 @@ internal class TxtSelectionManager(
     }
 
     private fun parseOffset(locator: Locator): Long? {
-        return TxtBlockLocatorCodec.parseOffset(locator, maxOffset = store.lengthChars)
+        return TxtAnchorLocatorCodec.parseOffset(
+            locator = locator,
+            blockIndex = blockIndex,
+            expectedRevision = revision,
+            maxOffset = blockIndex.lengthCodeUnits
+        )
     }
 
     private fun buildSelection(anchorOffset: Long, edgeOffset: Long): SelectionProvider.Selection {
-        val startOffset = min(anchorOffset, edgeOffset).coerceIn(0L, store.lengthChars)
-        val endOffset = max(anchorOffset, edgeOffset).coerceIn(0L, store.lengthChars)
-        val startLocator = TxtBlockLocatorCodec.locatorForOffset(startOffset, store.lengthChars)
-        val endLocator = TxtBlockLocatorCodec.locatorForOffset(endOffset, store.lengthChars)
-        val textLength = (endOffset - startOffset).toInt().coerceAtLeast(0)
-        val selectedText = if (textLength <= 0) {
+        val startOffset = min(anchorOffset, edgeOffset).coerceIn(0L, blockIndex.lengthCodeUnits)
+        val endOffset = max(anchorOffset, edgeOffset).coerceIn(0L, blockIndex.lengthCodeUnits)
+        val startLocator = TxtAnchorLocatorCodec.locatorForOffset(
+            offset = startOffset,
+            blockIndex = blockIndex,
+            revision = revision
+        )
+        val endLocator = TxtAnchorLocatorCodec.locatorForOffset(
+            offset = endOffset,
+            blockIndex = blockIndex,
+            revision = revision,
+            affinity = TextAnchorAffinity.BACKWARD
+        )
+        val selectedText = if (endOffset <= startOffset) {
             null
         } else {
-            val cappedLength = textLength.coerceAtMost(maxSelectedChars)
-            store.readString(startOffset, cappedLength).takeIf { it.isNotBlank() }
+            val cappedEnd = (startOffset + maxSelectedChars.toLong()).coerceAtMost(endOffset)
+            breakResolver.projectRange(
+                startOffset = startOffset,
+                endOffsetExclusive = cappedEnd
+            ).displayText.takeIf { it.isNotBlank() }
         }
-        val progression = if (store.lengthChars == 0L) {
+        val progression = if (blockIndex.lengthCodeUnits == 0L) {
             0.0
         } else {
-            startOffset.toDouble() / store.lengthChars.toDouble()
+            startOffset.toDouble() / blockIndex.lengthCodeUnits.toDouble()
         }.coerceIn(0.0, 1.0)
         return SelectionProvider.Selection(
             locator = startLocator,

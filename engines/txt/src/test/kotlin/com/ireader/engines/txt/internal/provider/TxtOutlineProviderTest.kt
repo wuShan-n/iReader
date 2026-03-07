@@ -1,12 +1,8 @@
 package com.ireader.engines.txt.internal.provider
 
-import com.ireader.engines.txt.internal.open.TxtBlockIndex
-import com.ireader.engines.txt.internal.open.TxtMeta
-import com.ireader.engines.txt.internal.store.Utf16TextStore
-import com.ireader.engines.txt.testing.createBookFiles
-import com.ireader.engines.txt.testing.writeUtf16Text
+import com.ireader.engines.txt.testing.buildTxtRuntimeFixture
 import com.ireader.reader.api.error.ReaderResult
-import java.nio.file.Files
+import com.ireader.reader.model.LocatorExtraKeys
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -21,82 +17,88 @@ class TxtOutlineProviderTest {
 
     @Test
     fun `getOutline should recover from corrupted cached json`() = runBlocking {
-        val root = Files.createTempDirectory("txt_outline_cache_corrupt").toFile()
-        val files = createBookFiles(root)
-        val text = buildString {
-            append("第1章 起始\n")
-            append("这里是正文。\n")
-            append("第2章 发展\n")
-            append("这里是后续正文。\n")
-        }
-        writeUtf16Text(files.textStore, text)
-        val store = Utf16TextStore(files.textStore)
+        val fixture = buildTxtRuntimeFixture(
+            text = buildString {
+                append("第1章 起始\n")
+                append("这里是正文。\n")
+                append("第2章 发展\n")
+                append("这里是后续正文。\n")
+            },
+            sampleHash = "outline-cache",
+            ioDispatcher = Dispatchers.IO
+        )
+        val provider = TxtOutlineProvider(
+            files = fixture.files,
+            meta = fixture.meta,
+            blockIndex = fixture.blockIndex,
+            breakResolver = fixture.breakResolver,
+            blockStore = fixture.blockStore,
+            ioDispatcher = Dispatchers.IO,
+            persistOutline = true
+        )
         try {
-            TxtBlockIndex.buildIfNeeded(files.blockIdx, store, createMeta(store.lengthChars, text.length.toLong(), "outline-cache"), Dispatchers.IO)
-            val blockIndex = TxtBlockIndex.openIfValid(files.blockIdx, createMeta(store.lengthChars, text.length.toLong(), "outline-cache"))
-                ?: error("Missing block index")
-            val provider = TxtOutlineProvider(
-                files = files,
-                meta = createMeta(store.lengthChars, text.length.toLong(), sampleHash = "outline-cache"),
-                blockIndex = blockIndex,
-                store = store,
-                ioDispatcher = Dispatchers.IO,
-                persistOutline = true
-            )
-
             val first = provider.getOutline().requireOk()
             assertTrue(first.isNotEmpty())
 
-            files.outlineIdx.writeText("{broken")
+            fixture.files.outlineIdx.writeText("{broken")
 
             val second = provider.getOutline().requireOk()
             assertTrue(second.isNotEmpty())
         } finally {
-            store.close()
-            root.deleteRecursively()
+            provider.close()
+            fixture.close()
         }
     }
 
     @Test
     fun `getOutline should detect chapter title across chunk boundary`() = runBlocking {
-        val root = Files.createTempDirectory("txt_outline_chunk_boundary").toFile()
-        val files = createBookFiles(root)
-        val text = "A".repeat(63_997) + "\n第123章 跨块标题\n正文继续"
-        writeUtf16Text(files.textStore, text)
-        val store = Utf16TextStore(files.textStore)
+        val fixture = buildTxtRuntimeFixture(
+            text = "A".repeat(63_997) + "\n第123章 跨块标题\n正文继续",
+            sampleHash = "outline-boundary",
+            ioDispatcher = Dispatchers.IO
+        )
+        val provider = TxtOutlineProvider(
+            files = fixture.files,
+            meta = fixture.meta,
+            blockIndex = fixture.blockIndex,
+            breakResolver = fixture.breakResolver,
+            blockStore = fixture.blockStore,
+            ioDispatcher = Dispatchers.IO,
+            persistOutline = false
+        )
         try {
-            TxtBlockIndex.buildIfNeeded(files.blockIdx, store, createMeta(store.lengthChars, text.length.toLong(), "outline-boundary"), Dispatchers.IO)
-            val blockIndex = TxtBlockIndex.openIfValid(files.blockIdx, createMeta(store.lengthChars, text.length.toLong(), "outline-boundary"))
-                ?: error("Missing block index")
-            val provider = TxtOutlineProvider(
-                files = files,
-                meta = createMeta(store.lengthChars, text.length.toLong(), sampleHash = "outline-boundary"),
-                blockIndex = blockIndex,
-                store = store,
-                ioDispatcher = Dispatchers.IO,
-                persistOutline = false
-            )
-
             val outline = provider.getOutline().requireOk()
             assertTrue(outline.any { it.title.contains("第123章 跨块标题") })
         } finally {
-            store.close()
-            root.deleteRecursively()
+            provider.close()
+            fixture.close()
         }
     }
 
-    private fun createMeta(lengthChars: Long, sizeBytes: Long, sampleHash: String): TxtMeta {
-        return TxtMeta(
-            version = 6,
-            sourceUri = "file:///outline-test.txt",
-            displayName = "outline-test.txt",
-            sizeBytes = sizeBytes,
-            sampleHash = sampleHash,
-            originalCharset = "UTF-8",
-            lengthChars = lengthChars,
-            hardWrapLikely = false,
-            createdAtEpochMs = 0L
+    @Test
+    fun `getOutline should expose confidence in locator extras`() = runBlocking {
+        val fixture = buildTxtRuntimeFixture(
+            text = "第1章 起始\n这里是正文。\n",
+            sampleHash = "outline-confidence",
+            ioDispatcher = Dispatchers.IO
         )
+        val provider = TxtOutlineProvider(
+            files = fixture.files,
+            meta = fixture.meta,
+            blockIndex = fixture.blockIndex,
+            breakResolver = fixture.breakResolver,
+            blockStore = fixture.blockStore,
+            ioDispatcher = Dispatchers.IO,
+            persistOutline = false
+        )
+        try {
+            val outline = provider.getOutline().requireOk()
+            assertTrue(outline.isNotEmpty())
+            assertTrue(outline.first().locator.extras[LocatorExtraKeys.OUTLINE_CONFIDENCE] != null)
+        } finally {
+            provider.close()
+            fixture.close()
+        }
     }
 
     private fun <T> ReaderResult<T>.requireOk(): T {

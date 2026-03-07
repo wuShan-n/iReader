@@ -23,6 +23,9 @@ import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
 import com.ireader.feature.reader.domain.usecase.OpenReaderSession
 import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
 import com.ireader.feature.reader.testing.MainDispatcherRule
+import com.ireader.reader.api.engine.TextBreakPatchDirection
+import com.ireader.reader.api.engine.TextBreakPatchState
+import com.ireader.reader.api.engine.TextBreakPatchSupport
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError
@@ -270,6 +273,61 @@ class ReaderViewModelTest {
     }
 
     @Test
+    fun `apply text break patch intent should replace page and clear search results`() = runTest {
+        val controller = RecordingReaderController()
+        val patchSupport = FakeTextBreakPatchSupport(
+            page = RenderPage(
+                id = PageId("patched-page"),
+                locator = Locator(scheme = "txt.anchor", value = "8:0:f:1"),
+                content = RenderContent.Text(text = "patched text")
+            )
+        )
+        val vm = newViewModel(bookById = emptyMap())
+        try {
+            attachSession(
+                vm = vm,
+                bookId = 1L,
+                handle = readerSessionHandle(
+                    controller = controller,
+                    textBreakPatchSupport = patchSupport
+                )
+            )
+            setState(
+                vm = vm,
+                transform = {
+                    it.copy(
+                        search = it.search.copy(
+                            query = "needle",
+                            results = listOf(
+                                SearchResultItem(
+                                    title = null,
+                                    excerpt = "needle",
+                                    locatorEncoded = "x"
+                                )
+                            )
+                        )
+                    )
+                }
+            )
+
+            vm.dispatch(
+                ReaderIntent.ApplyTextBreakPatch(
+                    direction = TextBreakPatchDirection.NEXT,
+                    state = TextBreakPatchState.SOFT_SPACE
+                )
+            )
+            advanceUntilIdle()
+
+            assertEquals(1, patchSupport.applyCalls)
+            assertEquals("patched-page", vm.state.value.page?.id?.value)
+            assertTrue(vm.state.value.search.results.isEmpty())
+            assertTrue(vm.state.value.supportsTextBreakPatches)
+        } finally {
+            disposeViewModel(vm)
+        }
+    }
+
+    @Test
     fun `drag should be ignored for fixed gesture profile`() = runTest {
         val controller = RecordingReaderController()
         val vm = newViewModel(bookById = emptyMap())
@@ -459,13 +517,26 @@ class ReaderViewModelTest {
             bookId = bookId,
             controller = handle.controller,
             capabilities = handle.document.capabilities,
+            renderState = handle.controller.state.value,
             currentConfig = handle.controller.state.value.config,
             gestureProfile = if (handle.document.capabilities.fixedLayout) {
                 ReaderGestureProfile.FIXED
             } else {
                 ReaderGestureProfile.REFLOW
-            }
+            },
+            supportsTextBreakPatches = handle.session is TextBreakPatchSupport
         )
+    }
+
+    private fun setState(
+        vm: ReaderViewModel,
+        transform: (ReaderUiState) -> ReaderUiState
+    ) {
+        val stateField = ReaderViewModel::class.java.getDeclaredField("stateStore")
+        stateField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val stateStore = stateField.get(vm) as MutableStateFlow<ReaderUiState>
+        stateStore.value = transform(stateStore.value)
     }
 
     private fun disposeViewModel(vm: ReaderViewModel) {
@@ -711,6 +782,7 @@ private class QueueReaderRuntime(
 private fun readerSessionHandle(
     controller: RecordingReaderController = RecordingReaderController(),
     search: SearchProvider? = null,
+    textBreakPatchSupport: FakeTextBreakPatchSupport? = null,
     fixedLayout: Boolean = false,
     documentFormat: com.ireader.reader.model.BookFormat = if (fixedLayout) {
         com.ireader.reader.model.BookFormat.PDF
@@ -745,20 +817,56 @@ private fun readerSessionHandle(
 
         override fun close() = Unit
     }
-    val session = object : ReaderSession {
-        override val id: SessionId = SessionId("session")
-        override val controller: ReaderController = controller
-        override val outline: OutlineProvider? = null
-        override val search: SearchProvider? = search
-        override val text: TextProvider? = null
-        override val annotations: AnnotationProvider? = null
-        override val resources: ResourceProvider? = null
-        override val selection: SelectionProvider? = null
-        override val selectionController: SelectionController? = null
-        override fun close() = Unit
+    val session = if (textBreakPatchSupport == null) {
+        object : ReaderSession {
+            override val id: SessionId = SessionId("session")
+            override val controller: ReaderController = controller
+            override val outline: OutlineProvider? = null
+            override val search: SearchProvider? = search
+            override val text: TextProvider? = null
+            override val annotations: AnnotationProvider? = null
+            override val resources: ResourceProvider? = null
+            override val selection: SelectionProvider? = null
+            override val selectionController: SelectionController? = null
+            override fun close() = Unit
+        }
+    } else {
+        object : ReaderSession, TextBreakPatchSupport {
+            override val id: SessionId = SessionId("session")
+            override val controller: ReaderController = controller
+            override val outline: OutlineProvider? = null
+            override val search: SearchProvider? = search
+            override val text: TextProvider? = null
+            override val annotations: AnnotationProvider? = null
+            override val resources: ResourceProvider? = null
+            override val selection: SelectionProvider? = null
+            override val selectionController: SelectionController? = null
+
+            override suspend fun applyBreakPatch(
+                locator: Locator,
+                direction: TextBreakPatchDirection,
+                state: TextBreakPatchState
+            ): ReaderResult<RenderPage> {
+                textBreakPatchSupport.applyCalls += 1
+                return ReaderResult.Ok(textBreakPatchSupport.page)
+            }
+
+            override suspend fun clearBreakPatches(): ReaderResult<RenderPage> {
+                textBreakPatchSupport.clearCalls += 1
+                return ReaderResult.Ok(textBreakPatchSupport.page)
+            }
+
+            override fun close() = Unit
+        }
     }
     return ReaderSessionHandle(document = document, session = session)
 }
+
+private data class FakeTextBreakPatchSupport(
+    val page: RenderPage,
+    var applyCalls: Int = 0,
+    var clearCalls: Int = 0
+)
 
 private class RecordingReaderController(
     initialConfig: RenderConfig = RenderConfig.ReflowText()
@@ -769,7 +877,7 @@ private class RecordingReaderController(
 
     private val stateStore = MutableStateFlow(
         RenderState(
-            locator = Locator(scheme = "txt.offset", value = "0"),
+            locator = Locator(scheme = "txt.anchor", value = "0:0:f:1"),
             progression = Progression(0.0),
             nav = NavigationAvailability(canGoPrev = true, canGoNext = true),
             config = initialConfig
@@ -856,7 +964,7 @@ private class FakeSearchProvider(
     }
 
     private fun searchHit(excerpt: String): SearchHit {
-        val locator = Locator(scheme = "txt.offset", value = excerpt)
+        val locator = Locator(scheme = "epub.cfi", value = excerpt)
         return SearchHit(
             range = LocatorRange(start = locator, end = locator),
             excerpt = excerpt,

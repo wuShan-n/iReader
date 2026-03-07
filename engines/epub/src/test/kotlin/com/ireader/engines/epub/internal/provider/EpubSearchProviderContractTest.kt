@@ -33,8 +33,8 @@ class EpubSearchProviderContractTest {
     fun `isAtOrAfter should not block when schemes differ`() {
         val candidate = readiumLocator(position = 1, progression = 0.1)
         val start = Locator(
-            scheme = "txt.block",
-            value = "100:3"
+            scheme = "txt.anchor",
+            value = "100:3:f:1"
         )
 
         assertTrue(isAtOrAfter(candidate, start))

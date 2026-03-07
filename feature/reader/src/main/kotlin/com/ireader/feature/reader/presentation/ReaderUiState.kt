@@ -65,7 +65,8 @@ data class TocItem(
     val locatorValue: String? = null,
     val href: String? = null,
     val position: Int? = null,
-    val progression: Double? = null
+    val progression: Double? = null,
+    val confidence: Double? = null
 )
 
 data class TocState(
@@ -105,6 +106,7 @@ data class ReaderUiState(
     val currentConfig: RenderConfig? = null,
     val pageTurnMode: PageTurnMode = PageTurnMode.COVER_HORIZONTAL,
     val gestureProfile: ReaderGestureProfile = ReaderGestureProfile.REFLOW,
+    val supportsTextBreakPatches: Boolean = false,
     val pageTransition: PageTurnTransition = PageTurnTransition(),
     val displayPrefs: ReaderDisplayPrefs = ReaderDisplayPrefs(),
     val isNightMode: Boolean = false,

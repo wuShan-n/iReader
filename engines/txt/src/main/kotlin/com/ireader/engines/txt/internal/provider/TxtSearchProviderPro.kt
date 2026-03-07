@@ -2,21 +2,25 @@
 
 package com.ireader.engines.txt.internal.provider
 
-import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
-import com.ireader.engines.txt.internal.open.TxtBookFiles
+import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
+import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
+import com.ireader.engines.txt.internal.runtime.BlockStore
+import com.ireader.engines.txt.internal.runtime.BreakResolver
 import com.ireader.engines.txt.internal.search.TrigramBloomIndex
-import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.provider.SearchProvider
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.min
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -25,13 +29,32 @@ import kotlinx.coroutines.withContext
 
 internal class TxtSearchProviderPro(
     private val files: TxtBookFiles,
-    private val store: Utf16TextStore,
     private val meta: TxtMeta,
-    private val blockIndex: TxtBlockIndex? = null,
+    private val blockIndex: TxtBlockIndex,
+    private val breakResolver: BreakResolver,
+    private val blockStore: BlockStore,
     private val ioDispatcher: CoroutineDispatcher
 ) : SearchProvider {
 
+    private val providerScope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val bloomBuildScheduled = AtomicBoolean(false)
+
+    fun warmup() {
+        if (meta.lengthCodeUnits >= WARMUP_MIN_CODE_UNITS) {
+            scheduleBloomBuild()
+        }
+    }
+
+    fun close() {
+        providerScope.cancel()
+    }
+
+    fun invalidate() {
+        providerScope.coroutineContext.cancelChildren()
+        bloomBuildScheduled.set(false)
+        runCatching { files.searchIdx.delete() }
+        runCatching { files.searchLock.delete() }
+    }
 
     override fun search(query: String, options: SearchOptions): Flow<SearchHit> = channelFlow {
         val normalizedQuery = query.trim()
@@ -43,41 +66,39 @@ internal class TxtSearchProviderPro(
             query = normalizedQuery,
             options = options,
             startOffset = options.startFrom
-                ?.let { TxtBlockLocatorCodec.parseOffset(it, store.lengthChars) }
+                ?.let {
+                    TxtAnchorLocatorCodec.parseOffset(
+                        locator = it,
+                        blockIndex = blockIndex,
+                        expectedRevision = meta.contentRevision,
+                        maxOffset = blockIndex.lengthCodeUnits
+                    )
+                }
                 ?: 0L
         )
         val bloom = TrigramBloomIndex.openIfValid(files.searchIdx, meta)
-
-        if (shouldBuildBloomAsync(bloom, context.query.length)) {
+        if (bloom == null && normalizedQuery.length >= BLOOM_MIN_QUERY_LENGTH) {
             scheduleBloomBuild()
         }
 
-        if (bloom != null && context.query.length >= BLOOM_MIN_QUERY_LENGTH && !meta.hardWrapLikely) {
-            fastSearchWithBloom(
-                bloom = bloom,
-                context = context
-            )
+        if (bloom != null && normalizedQuery.length >= BLOOM_MIN_QUERY_LENGTH) {
+            searchWithBloom(bloom = bloom, context = context)
         } else {
-            streamingScan(context)
+            scanAllBlocks(context)
         }
     }
 
-    private fun shouldBuildBloomAsync(bloom: TrigramBloomIndex?, queryLength: Int): Boolean {
-        return bloom == null &&
-            queryLength >= BLOOM_MIN_QUERY_LENGTH &&
-            meta.lengthChars >= BLOOM_MIN_BOOK_CHARS
-    }
-
-    private fun ProducerScope<SearchHit>.scheduleBloomBuild() {
+    private fun scheduleBloomBuild() {
         if (!bloomBuildScheduled.compareAndSet(false, true)) {
             return
         }
-        launch(ioDispatcher) {
+        providerScope.launch {
             try {
                 TrigramBloomIndex.buildIfNeeded(
                     file = files.searchIdx,
                     lockFile = files.searchLock,
-                    store = store,
+                    blockIndex = blockIndex,
+                    breakResolver = breakResolver,
                     meta = meta,
                     ioDispatcher = ioDispatcher
                 )
@@ -87,222 +108,121 @@ internal class TxtSearchProviderPro(
         }
     }
 
-    private suspend fun ProducerScope<SearchHit>.fastSearchWithBloom(
+    private suspend fun ProducerScope<SearchHit>.searchWithBloom(
         bloom: TrigramBloomIndex,
         context: SearchContext
     ) = withContext(ioDispatcher) {
+        val hashes = bloom.buildQueryTrigramHashes(context.query.lowercase())
+        val scratch = ByteArray(bloom.bitsetBytes())
+        val startBlock = blockIndex.blockIdForOffset(context.startOffset).coerceAtLeast(0)
+        val emittedStarts = LinkedHashSet<Long>()
+        RandomAccessFile(files.searchIdx, "r").use { raf ->
+            for (candidateBlock in startBlock until blockIndex.blockCount) {
+                coroutineContext.ensureActive()
+                if (emittedStarts.size >= context.options.maxHits) {
+                    break
+                }
+                if (!bloom.mayContainAll(raf, candidateBlock, hashes, scratch = scratch)) {
+                    continue
+                }
+                scanCandidateBlock(
+                    blockId = candidateBlock,
+                    context = context,
+                    emittedStarts = emittedStarts
+                )
+            }
+        }
+    }
+
+    private suspend fun ProducerScope<SearchHit>.scanAllBlocks(
+        context: SearchContext
+    ) = withContext(ioDispatcher) {
+        val startBlock = blockIndex.blockIdForOffset(context.startOffset).coerceAtLeast(0)
+        val emittedStarts = LinkedHashSet<Long>()
+        for (candidateBlock in startBlock until blockIndex.blockCount) {
+            coroutineContext.ensureActive()
+            if (emittedStarts.size >= context.options.maxHits) {
+                break
+            }
+            scanCandidateBlock(
+                blockId = candidateBlock,
+                context = context,
+                emittedStarts = emittedStarts
+            )
+        }
+    }
+
+    private suspend fun ProducerScope<SearchHit>.scanCandidateBlock(
+        blockId: Int,
+        context: SearchContext,
+        emittedStarts: MutableSet<Long>
+    ) {
+        val scanPadding = (context.query.length + BLOCK_SCAN_PADDING).coerceAtLeast(2)
+        val rangeStart = (blockIndex.blockStartOffset(blockId) - scanPadding.toLong())
+            .coerceAtLeast(context.startOffset)
+        val rangeEnd = (blockIndex.blockEndOffset(blockId) + scanPadding.toLong())
+            .coerceAtMost(blockIndex.lengthCodeUnits)
+        if (rangeEnd <= rangeStart) {
+            return
+        }
+
+        val projection = breakResolver.projectRange(
+            startOffset = rangeStart,
+            endOffsetExclusive = rangeEnd
+        )
+        if (projection.displayText.isEmpty()) {
+            return
+        }
+
         val matcher = KmpMatcher(
             pattern = context.query.toCharArray(),
             caseSensitive = context.options.caseSensitive
         )
-        val trigramHashes = bloom.buildQueryTrigramHashes(context.query.lowercase())
-        val blocks = bloom.blocksCount()
-        val startBlock = (context.startOffset / bloom.blockChars).toInt().coerceAtLeast(0)
-        val scratchBitset = ByteArray(bloom.bitsetBytes())
-        val state = BloomScanState(
-            matcher = matcher,
-            queryLength = context.query.length,
-            maxHits = context.options.maxHits,
-            startOffset = context.startOffset,
-            wholeWord = context.options.wholeWord
-        )
-
-        RandomAccessFile(files.searchIdx, "r").use { raf ->
-            for (blockIndex in startBlock until blocks) {
-                coroutineContext.ensureActive()
-                if (state.reachedMaxHits()) {
-                    break
-                }
-                if (bloom.mayContainAll(raf, blockIndex, trigramHashes, scratch = scratchBitset)) {
-                    scanBloomBlockWithNeighbors(
-                        bloom = bloom,
-                        blockIndex = blockIndex,
-                        blocksCount = blocks,
-                        state = state
-                    )
-                }
-            }
-        }
-    }
-
-    private suspend fun ProducerScope<SearchHit>.scanBloomBlockWithNeighbors(
-        bloom: TrigramBloomIndex,
-        blockIndex: Int,
-        blocksCount: Int,
-        state: BloomScanState
-    ) {
-        for (candidate in intArrayOf(blockIndex, blockIndex - 1, blockIndex + 1)) {
-            if (state.reachedMaxHits()) {
-                break
-            }
-            scanBloomCandidateBlock(
-                bloom = bloom,
-                blockIndex = candidate,
-                blocksCount = blocksCount,
-                state = state
-            )
-        }
-    }
-
-    private suspend fun ProducerScope<SearchHit>.scanBloomCandidateBlock(
-        blockIndex: Int,
-        blocksCount: Int,
-        bloom: TrigramBloomIndex,
-        state: BloomScanState
-    ) {
-        if (!state.shouldScanBlock(blockIndex, blocksCount)) {
-            return
-        }
-
-        val range = bloom.blockRange(blockIndex)
-        val scanStart = (range.start - (state.queryLength + BLOOM_SCAN_PADDING).toLong())
-            .coerceAtLeast(state.startOffset)
-        val scanEnd = (range.endExclusive + (state.queryLength + BLOOM_SCAN_PADDING).toLong())
-            .coerceAtMost(store.lengthChars)
-        val readLength = (scanEnd - scanStart).toInt().coerceAtLeast(0)
-        if (readLength <= 0) {
-            return
-        }
-
-        val chunk = store.readChars(scanStart, readLength)
-        val searchContext = coroutineContext
-        var canSend = true
-        state.matcher.forEachMatch(chunk) { hitIndex ->
-            searchContext.ensureActive()
-            if (!canSend || state.reachedMaxHits()) {
-                return@forEachMatch false
-            }
-
-            val globalStart = scanStart + hitIndex.toLong()
-            if (globalStart < state.startOffset) {
+        val chars = projection.displayText.toCharArray()
+        matcher.forEachMatch(chars) { matchIndex ->
+            val endIndex = matchIndex + context.query.length
+            if (endIndex > projection.projectedBoundaryToRawOffsets.lastIndex) {
                 return@forEachMatch true
             }
-
-            val passesWordBoundary = !state.wholeWord ||
-                isWholeWord(chars = chunk, start = hitIndex, len = state.queryLength)
-            if (passesWordBoundary && state.canEmit(globalStart)) {
-                val globalEnd = globalStart + state.queryLength.toLong()
-                val excerpt = buildExcerptFromBuffer(chunk, hitIndex, state.queryLength)
-                canSend = emitHit(
-                    startOffset = globalStart,
-                    endOffset = globalEnd,
-                    excerpt = excerpt
+            val globalStart = projection.projectedBoundaryToRawOffsets[matchIndex]
+            val globalEnd = projection.projectedBoundaryToRawOffsets[endIndex]
+            if (globalStart < context.startOffset) {
+                return@forEachMatch true
+            }
+            if (globalEnd <= globalStart) {
+                return@forEachMatch true
+            }
+            if (context.options.wholeWord && !isWholeWord(chars, matchIndex, context.query.length)) {
+                return@forEachMatch true
+            }
+            if (!emittedStarts.add(globalStart)) {
+                return@forEachMatch true
+            }
+            val sent = trySend(
+                SearchHit(
+                    range = TxtAnchorLocatorCodec.rangeForOffsets(
+                        startOffset = globalStart,
+                        endOffset = globalEnd,
+                        blockIndex = blockIndex,
+                        revision = meta.contentRevision
+                    ),
+                    excerpt = buildExcerpt(projection.displayText, matchIndex, context.query.length),
+                    sectionTitle = null
                 )
-                if (canSend) {
-                    state.markEmitted()
-                }
-            }
-            canSend && !state.reachedMaxHits()
-        }
-    }
-
-    private suspend fun ProducerScope<SearchHit>.streamingScan(
-        context: SearchContext
-    ) = withContext(ioDispatcher) {
-        val pattern = context.query.toCharArray()
-        val matcher = KmpMatcher(pattern = pattern, caseSensitive = context.options.caseSensitive)
-        val overlap = (pattern.size - 1).coerceAtLeast(0)
-        val maxHits = context.options.maxHits
-
-        var carry = CharArray(0)
-        var cursor = context.startOffset
-        var emitted = 0
-        var keepScanning = true
-
-        while (keepScanning && cursor < store.lengthChars && emitted < maxHits) {
-            coroutineContext.ensureActive()
-            val readCount = min(STREAM_CHUNK_SIZE.toLong(), store.lengthChars - cursor).toInt()
-            val chunk = store.readChars(cursor, readCount)
-            if (chunk.isEmpty()) {
-                keepScanning = false
-            } else {
-                val merged = mergeChunks(carry, chunk)
-                val mergedStart = cursor - carry.size.toLong()
-                val searchContext = coroutineContext
-                var canSend = true
-                matcher.forEachMatch(merged) { matchIndex ->
-                    searchContext.ensureActive()
-                    if (!canSend || emitted >= maxHits) {
-                        return@forEachMatch false
-                    }
-                    val globalStart = mergedStart + matchIndex.toLong()
-                    val candidate = StreamingCandidate(
-                        matchIndex = matchIndex,
-                        globalStart = globalStart,
-                        carrySize = carry.size
-                    )
-                    val eligible = isEligibleStreamingHit(
-                        candidate = candidate,
-                        merged = merged,
-                        context = context,
-                        queryLength = pattern.size
-                    )
-                    if (eligible) {
-                        val globalEnd = globalStart + pattern.size.toLong()
-                        val excerpt = buildExcerptFromBuffer(merged, matchIndex, pattern.size)
-                        canSend = emitHit(
-                            startOffset = globalStart,
-                            endOffset = globalEnd,
-                            excerpt = excerpt
-                        )
-                        if (canSend) {
-                            emitted++
-                        }
-                    }
-                    canSend && emitted < maxHits
-                }
-                keepScanning = canSend
-                carry = keepTrailingOverlap(merged, overlap)
-            }
-            cursor += readCount.toLong()
-        }
-    }
-
-    private fun ProducerScope<SearchHit>.emitHit(
-        startOffset: Long,
-        endOffset: Long,
-        excerpt: String
-    ): Boolean {
-        val sent = trySend(
-            SearchHit(
-                range = TxtBlockLocatorCodec.rangeForOffsets(
-                    startOffset = startOffset,
-                    endOffset = endOffset,
-                    maxOffset = store.lengthChars
-                ),
-                excerpt = excerpt,
-                sectionTitle = null
             )
-        )
-        return sent.isSuccess
+            sent.isSuccess && emittedStarts.size < context.options.maxHits
+        }
     }
 
-    private fun isEligibleStreamingHit(
-        candidate: StreamingCandidate,
-        merged: CharArray,
-        context: SearchContext,
-        queryLength: Int
-    ): Boolean {
-        val startsInCarry = candidate.matchIndex + queryLength <= candidate.carrySize
-        val startsBeforeRequestedOffset = candidate.globalStart < context.startOffset
-        val failsWordBoundary = context.options.wholeWord &&
-            !isWholeWord(chars = merged, start = candidate.matchIndex, len = queryLength)
-        return !startsInCarry && !startsBeforeRequestedOffset && !failsWordBoundary
-    }
-
-    private fun buildExcerptFromBuffer(
-        buffer: CharArray,
+    private fun buildExcerpt(
+        displayText: String,
         matchIndex: Int,
         queryLength: Int
     ): String {
         val center = matchIndex + (queryLength / 2)
         val start = (center - EXCERPT_BEFORE).coerceAtLeast(0)
-        val end = (center + EXCERPT_AFTER).coerceAtMost(buffer.size)
-        val length = (end - start).coerceAtLeast(0)
-        if (length <= 0) {
-            return ""
-        }
-        return String(buffer, start, length)
+        val end = (center + EXCERPT_AFTER).coerceAtMost(displayText.length)
+        return displayText.substring(start, end)
             .replace('\n', ' ')
             .trim()
     }
@@ -313,69 +233,13 @@ internal class TxtSearchProviderPro(
         val startOffset: Long
     )
 
-    private data class StreamingCandidate(
-        val matchIndex: Int,
-        val globalStart: Long,
-        val carrySize: Int
-    )
-
-    private data class BloomScanState(
-        val matcher: KmpMatcher,
-        val queryLength: Int,
-        val maxHits: Int,
-        val startOffset: Long,
-        val wholeWord: Boolean,
-        private val emittedStarts: MutableSet<Long> = hashSetOf(),
-        private val scannedBlocks: MutableSet<Int> = hashSetOf()
-    ) {
-        private var emittedCount: Int = 0
-
-        fun reachedMaxHits(): Boolean = emittedCount >= maxHits
-
-        fun shouldScanBlock(blockIndex: Int, blocksCount: Int): Boolean {
-            if (blockIndex < 0 || blockIndex >= blocksCount || reachedMaxHits()) {
-                return false
-            }
-            return scannedBlocks.add(blockIndex)
-        }
-
-        fun canEmit(globalStart: Long): Boolean {
-            if (globalStart < startOffset || !emittedStarts.add(globalStart)) {
-                return false
-            }
-            return true
-        }
-
-        fun markEmitted() {
-            emittedCount++
-        }
-    }
-
     private companion object {
         private const val BLOOM_MIN_QUERY_LENGTH = 3
-        private const val BLOOM_MIN_BOOK_CHARS = 1_000_000L
-        private const val BLOOM_SCAN_PADDING = 8
-        private const val STREAM_CHUNK_SIZE = 64_000
+        private const val BLOCK_SCAN_PADDING = 8
         private const val EXCERPT_BEFORE = 64
         private const val EXCERPT_AFTER = 128
+        private const val WARMUP_MIN_CODE_UNITS = 128_000L
     }
-}
-
-private fun mergeChunks(carry: CharArray, chunk: CharArray): CharArray {
-    val merged = CharArray(carry.size + chunk.size)
-    if (carry.isNotEmpty()) {
-        System.arraycopy(carry, 0, merged, 0, carry.size)
-    }
-    System.arraycopy(chunk, 0, merged, carry.size, chunk.size)
-    return merged
-}
-
-private fun keepTrailingOverlap(merged: CharArray, overlap: Int): CharArray {
-    if (overlap <= 0) {
-        return CharArray(0)
-    }
-    val keep = min(overlap, merged.size)
-    return merged.copyOfRange(merged.size - keep, merged.size)
 }
 
 private fun isWholeWord(chars: CharArray, start: Int, len: Int): Boolean {
