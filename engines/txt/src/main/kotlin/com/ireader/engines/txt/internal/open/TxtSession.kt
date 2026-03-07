@@ -16,6 +16,7 @@ internal class TxtSession(
     controller: ReaderController,
     files: TxtBookFiles,
     meta: TxtMeta,
+    blockIndex: TxtBlockIndex,
     store: Utf16TextStore,
     ioDispatcher: CoroutineDispatcher,
     persistOutline: Boolean,
@@ -30,6 +31,7 @@ internal class TxtSession(
     outline = TxtOutlineProvider(
         files = files,
         meta = meta,
+        blockIndex = blockIndex,
         store = store,
         ioDispatcher = ioDispatcher,
         persistOutline = persistOutline
@@ -38,6 +40,7 @@ internal class TxtSession(
         files = files,
         store = store,
         meta = meta,
+        blockIndex = blockIndex,
         ioDispatcher = ioDispatcher
     ),
     text = TxtTextProvider(

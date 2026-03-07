@@ -1,6 +1,7 @@
 package com.ireader.engines.txt.internal.render
 
 import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.Utf16LeFileWriter
@@ -212,10 +213,10 @@ class TxtControllerTest {
     ): ControllerFixture {
         val dir = Files.createTempDirectory("txt_controller_test").toFile()
         val files = createBookFiles(dir)
-        Utf16LeFileWriter(files.contentU16).use { writer ->
+        Utf16LeFileWriter(files.textStore).use { writer ->
             text.forEach(writer::writeChar)
         }
-        val store = Utf16TextStore(files.contentU16)
+        val store = Utf16TextStore(files.textStore)
         val meta = TxtMeta(
             version = 1,
             sourceUri = "file://test.txt",
@@ -233,10 +234,19 @@ class TxtControllerTest {
             ioDispatcher = Dispatchers.IO,
             profile = SoftBreakTuningProfile.BALANCED
         )
+        TxtBlockIndex.buildIfNeeded(
+            file = files.blockIdx,
+            store = store,
+            meta = meta,
+            ioDispatcher = Dispatchers.IO
+        )
+        val blockIndex = TxtBlockIndex.openIfValid(files.blockIdx, meta)
+            ?: error("Missing block index")
         val controller = TxtController(
             documentKey = "doc-test",
             store = store,
             meta = meta,
+            blockIndex = blockIndex,
             initialLocator = null,
             initialOffset = 0L,
             initialConfig = RenderConfig.ReflowText(),
@@ -261,14 +271,16 @@ class TxtControllerTest {
         return TxtBookFiles(
             bookDir = root,
             lockFile = File(root, "book.lock"),
-            contentU16 = File(root, "content.u16"),
+            textStore = File(root, "text.store"),
             metaJson = File(root, "meta.json"),
-            outlineJson = File(root, "outline.json"),
+            outlineIdx = File(root, "outline.idx"),
             paginationDir = paginationDir,
-            softBreakIdx = File(root, "softbreak.idx"),
-            softBreakLock = File(root, "softbreak.lock"),
-            bloomIdx = File(root, "bloom.idx"),
-            bloomLock = File(root, "bloom.lock")
+            breakMap = File(root, "break.map"),
+            breakLock = File(root, "break.lock"),
+            searchIdx = File(root, "search.idx"),
+            searchLock = File(root, "search.lock"),
+            blockIdx = File(root, "block.idx"),
+            breakPatch = File(root, "break.patch")
         )
     }
 

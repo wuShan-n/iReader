@@ -55,7 +55,7 @@ class SoftBreakStateConsistencyTest {
     ): String {
         val dir = Files.createTempDirectory("txt_softbreak_state_consistency").toFile()
         val files = createBookFiles(dir)
-        Utf16LeFileWriter(files.contentU16).use { writer ->
+        Utf16LeFileWriter(files.textStore).use { writer ->
             raw.forEach(writer::writeChar)
         }
         val profile = SoftBreakTuningProfile.BALANCED
@@ -78,7 +78,7 @@ class SoftBreakStateConsistencyTest {
                 profile = profile
             )
             val index = SoftBreakIndex.openIfValid(
-                file = files.softBreakIdx,
+                file = files.breakMap,
                 meta = meta,
                 profile = profile,
                 rulesVersion = SoftBreakRuleConfig.forProfile(profile).rulesVersion
@@ -106,14 +106,16 @@ class SoftBreakStateConsistencyTest {
         return TxtBookFiles(
             bookDir = root,
             lockFile = File(root, "book.lock"),
-            contentU16 = File(root, "content.u16"),
+            textStore = File(root, "text.store"),
             metaJson = File(root, "meta.json"),
-            outlineJson = File(root, "outline.json"),
+            outlineIdx = File(root, "outline.idx"),
             paginationDir = paginationDir,
-            softBreakIdx = File(root, "softbreak.idx"),
-            softBreakLock = File(root, "softbreak.lock"),
-            bloomIdx = File(root, "bloom.idx"),
-            bloomLock = File(root, "bloom.lock")
+            breakMap = File(root, "break.map"),
+            breakLock = File(root, "break.lock"),
+            searchIdx = File(root, "search.idx"),
+            searchLock = File(root, "search.lock"),
+            blockIdx = File(root, "block.idx"),
+            breakPatch = File(root, "break.patch")
         )
     }
 }

@@ -4,6 +4,7 @@ package com.ireader.engines.txt.internal.provider
 
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.search.TrigramBloomIndex
 import com.ireader.engines.txt.internal.store.Utf16TextStore
@@ -26,6 +27,7 @@ internal class TxtSearchProviderPro(
     private val files: TxtBookFiles,
     private val store: Utf16TextStore,
     private val meta: TxtMeta,
+    private val blockIndex: TxtBlockIndex? = null,
     private val ioDispatcher: CoroutineDispatcher
 ) : SearchProvider {
 
@@ -44,13 +46,13 @@ internal class TxtSearchProviderPro(
                 ?.let { TxtBlockLocatorCodec.parseOffset(it, store.lengthChars) }
                 ?: 0L
         )
-        val bloom = TrigramBloomIndex.openIfValid(files.bloomIdx, meta)
+        val bloom = TrigramBloomIndex.openIfValid(files.searchIdx, meta)
 
         if (shouldBuildBloomAsync(bloom, context.query.length)) {
             scheduleBloomBuild()
         }
 
-        if (bloom != null && context.query.length >= BLOOM_MIN_QUERY_LENGTH) {
+        if (bloom != null && context.query.length >= BLOOM_MIN_QUERY_LENGTH && !meta.hardWrapLikely) {
             fastSearchWithBloom(
                 bloom = bloom,
                 context = context
@@ -73,8 +75,8 @@ internal class TxtSearchProviderPro(
         launch(ioDispatcher) {
             try {
                 TrigramBloomIndex.buildIfNeeded(
-                    file = files.bloomIdx,
-                    lockFile = files.bloomLock,
+                    file = files.searchIdx,
+                    lockFile = files.searchLock,
                     store = store,
                     meta = meta,
                     ioDispatcher = ioDispatcher
@@ -105,7 +107,7 @@ internal class TxtSearchProviderPro(
             wholeWord = context.options.wholeWord
         )
 
-        RandomAccessFile(files.bloomIdx, "r").use { raf ->
+        RandomAccessFile(files.searchIdx, "r").use { raf ->
             for (blockIndex in startBlock until blocks) {
                 coroutineContext.ensureActive()
                 if (state.reachedMaxHits()) {

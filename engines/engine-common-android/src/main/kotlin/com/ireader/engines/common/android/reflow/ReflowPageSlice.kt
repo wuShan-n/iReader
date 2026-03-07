@@ -4,5 +4,6 @@ data class ReflowPageSlice(
     val startOffset: Long,
     val endOffset: Long,
     val text: CharSequence,
-    val continuesParagraph: Boolean = false
+    val continuesParagraph: Boolean = false,
+    val projectedBoundaryToRawOffsets: LongArray? = null
 )

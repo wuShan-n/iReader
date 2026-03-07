@@ -2,9 +2,9 @@ package com.ireader.engines.txt.internal.softbreak
 
 import com.ireader.engines.common.android.reflow.ReflowSoftBreakIndex
 import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
-import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.common.io.readStringUtf8
 import com.ireader.engines.common.io.readVarLongOrNull
+import com.ireader.engines.txt.internal.open.TxtMeta
 import java.io.Closeable
 import java.io.File
 import java.io.RandomAccessFile
@@ -30,8 +30,8 @@ internal class SoftBreakIndex private constructor(
     )
 
     companion object {
-        private const val MAGIC = "SBX1"
-        private const val VERSION = 6
+        private const val MAGIC = "BRK1"
+        private const val VERSION = 7
 
         fun openIfValid(
             file: File,
@@ -58,16 +58,16 @@ internal class SoftBreakIndex private constructor(
                 val lengthChars = raf.readLong()
                 val newlineCount = raf.readLong()
                 val sampleHash = raf.readStringUtf8()
-                val profileRaw = raf.readStringUtf8()
-                val fileProfile = SoftBreakTuningProfile.fromStorageValue(profileRaw)
-                val fileRulesVersion = raf.readInt()
+                val storedProfileRaw = raf.readStringUtf8()
+                val storedProfile = SoftBreakTuningProfile.fromStorageValue(storedProfileRaw)
+                val storedRulesVersion = raf.readInt()
                 val indexOffset = raf.readLong()
 
-                if (lengthChars != meta.lengthChars || sampleHash != meta.sampleHash) {
+                if (lengthChars != meta.lengthCodeUnits || sampleHash != meta.sampleHash) {
                     raf.close()
                     return null
                 }
-                if (fileProfile != profile || fileRulesVersion != rulesVersion) {
+                if (storedRulesVersion != rulesVersion) {
                     raf.close()
                     return null
                 }
@@ -97,8 +97,8 @@ internal class SoftBreakIndex private constructor(
                     lengthChars = lengthChars,
                     newlineCount = newlineCount,
                     sampleHash = sampleHash,
-                    profile = fileProfile,
-                    rulesVersion = fileRulesVersion,
+                    profile = storedProfile.takeIf { it == profile } ?: storedProfile,
+                    rulesVersion = storedRulesVersion,
                     blocks = blocks
                 )
             } catch (_: Throwable) {
@@ -113,6 +113,16 @@ internal class SoftBreakIndex private constructor(
         endChar: Long,
         consumer: (offset: Long, isSoft: Boolean) -> Unit
     ) {
+        forEachStateInRange(startChar, endChar) { offset, state ->
+            consumer(offset, state.isSoft)
+        }
+    }
+
+    fun forEachStateInRange(
+        startChar: Long,
+        endChar: Long,
+        consumer: (offset: Long, state: BreakMapState) -> Unit
+    ) {
         if (blocks.isEmpty()) {
             return
         }
@@ -125,7 +135,6 @@ internal class SoftBreakIndex private constructor(
         if (first >= blocks.size) {
             return
         }
-
         for (index in first until blocks.size) {
             val block = blocks[index]
             if (block.firstOffset >= end) {
@@ -136,6 +145,14 @@ internal class SoftBreakIndex private constructor(
             }
             decodeBlockAndVisit(block, start, end, consumer)
         }
+    }
+
+    fun stateAt(offset: Long): BreakMapState? {
+        var found: BreakMapState? = null
+        forEachStateInRange(offset, offset + 1L) { _, state ->
+            found = state
+        }
+        return found
     }
 
     private fun findFirstBlockByLastOffset(start: Long): Int {
@@ -158,23 +175,20 @@ internal class SoftBreakIndex private constructor(
         block: BlockMeta,
         start: Long,
         end: Long,
-        consumer: (offset: Long, isSoft: Boolean) -> Unit
+        consumer: (offset: Long, state: BreakMapState) -> Unit
     ) {
         raf.seek(block.filePos)
         val count = raf.readInt()
         val firstOffset = raf.readLong()
-
-        val flagsLen = (count + 7) / 8
-        val flags = ByteArray(flagsLen)
-        raf.readFully(flags)
+        val states = ByteArray(count)
+        raf.readFully(states)
 
         var offset = firstOffset
-        for (i in 0 until count) {
+        for (index in 0 until count) {
             if (offset in start until end) {
-                val isSoft = ((flags[i ushr 3].toInt() ushr (i and 7)) and 1) == 1
-                consumer(offset, isSoft)
+                consumer(offset, BreakMapState.fromStorageCode(states[index].toInt()))
             }
-            if (i < count - 1) {
+            if (index < count - 1) {
                 val delta = raf.readVarLongOrNull() ?: break
                 offset = max(offset + delta, offset)
             }

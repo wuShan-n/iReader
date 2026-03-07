@@ -110,11 +110,14 @@ class ReflowPaginator(
         var measuredText = ""
         var rawLength = 0
         var measuredRaw = ""
+        var measuredWindow = ReflowTextWindow.identity("")
         val textLayouter = textLayouter()
 
         while (true) {
             val toRead = min(windowChars.toLong(), source.lengthChars - start).toInt()
-            val raw = source.readString(start, toRead)
+            val window = source.readWindow(start, toRead)
+            measuredWindow = window
+            val raw = window.rawText
             rawLength = raw.length
             measuredRaw = raw
             if (rawLength == 0) {
@@ -127,6 +130,7 @@ class ReflowPaginator(
             }
 
             val display = when {
+                window.displayText != window.rawText -> window.displayText
                 !hardWrapLikely -> SoftBreakProcessor.renderRawPreservingBreaks(
                     rawText = raw,
                     paragraphSpacingPx = paragraphSpacingPx,
@@ -163,7 +167,14 @@ class ReflowPaginator(
                     paragraphSpacingPx = paragraphSpacingPx
                 )
             )
-            measuredEnd = measure.endChar.coerceIn(0, rawLength)
+            measuredEnd = when {
+                window.displayText != window.rawText -> {
+                    val projectedEnd = measure.endChar.coerceIn(0, window.displayText.length)
+                    window.projectedBoundaryToRawIndex[projectedEnd].coerceIn(0, rawLength)
+                }
+
+                else -> measure.endChar.coerceIn(0, rawLength)
+            }
 
             val consumedAllWindow = measuredEnd >= rawLength
             val reachedDocumentEnd = start + rawLength >= source.lengthChars
@@ -182,13 +193,22 @@ class ReflowPaginator(
                 pageStartOffset = start
             ).coerceIn(1, measuredEnd)
         }
+        var projectedEnd = measuredEnd
+        if (measuredWindow.rawBoundaryToProjectedIndex.isNotEmpty()) {
+            projectedEnd = measuredWindow.rawBoundaryToProjectedIndex[measuredEnd.coerceIn(
+                0,
+                measuredWindow.rawBoundaryToProjectedIndex.lastIndex
+            )]
+        }
         var end = start + measuredEnd.toLong()
         if (end <= start) {
             end = (start + 1L).coerceAtMost(source.lengthChars)
             measuredEnd = (end - start).toInt()
-            measuredText = measuredText.substring(0, measuredEnd)
+            projectedEnd = minOf(projectedEnd, measuredText.length)
+            measuredText = measuredText.substring(0, projectedEnd)
         } else {
-            measuredText = measuredText.substring(0, measuredEnd)
+            projectedEnd = projectedEnd.coerceIn(0, measuredText.length)
+            measuredText = measuredText.substring(0, projectedEnd)
         }
 
         if (isDebugLoggingEnabled()) {
@@ -209,6 +229,13 @@ class ReflowPaginator(
             )
         }
 
+        val projectedBoundaryToRawOffsets = LongArray(projectedEnd + 1)
+        for (index in 0..projectedEnd) {
+            val localRaw = measuredWindow.projectedBoundaryToRawIndex
+                .getOrElse(index) { measuredWindow.projectedBoundaryToRawIndex.lastOrNull() ?: 0 }
+            projectedBoundaryToRawOffsets[index] = start + localRaw.toLong()
+        }
+
         return ReflowPageSlice(
             startOffset = start,
             endOffset = end,
@@ -218,8 +245,11 @@ class ReflowPaginator(
                 endOffset = end,
                 raw = measuredRaw,
                 display = measuredText,
-                measuredEnd = measuredEnd
-            )
+                measuredEnd = measuredEnd,
+                projectedEnd = projectedEnd,
+                rawBoundaryToProjectedIndex = measuredWindow.rawBoundaryToProjectedIndex
+            ),
+            projectedBoundaryToRawOffsets = projectedBoundaryToRawOffsets
         )
     }
 
@@ -408,17 +438,25 @@ internal fun reflowPageContinuesParagraph(
     endOffset: Long,
     raw: String,
     display: CharSequence,
-    measuredEnd: Int
+    measuredEnd: Int,
+    projectedEnd: Int = measuredEnd,
+    rawBoundaryToProjectedIndex: IntArray = IntArray(raw.length + 1) { it }
 ): Boolean {
     if (measuredEnd <= 0 || endOffset >= sourceLength) {
         return false
     }
-    val lastIndex = measuredEnd - 1
-    if (lastIndex !in raw.indices || lastIndex !in 0 until display.length) {
+    val lastRawIndex = measuredEnd - 1
+    if (lastRawIndex !in raw.indices) {
         return false
     }
-    if (raw[lastIndex] != '\n') {
+    if (raw[lastRawIndex] != '\n') {
         return true
     }
-    return display[lastIndex] != '\n'
+    val projectedStart = rawBoundaryToProjectedIndex[lastRawIndex].coerceIn(0, display.length)
+    val projectedStop = rawBoundaryToProjectedIndex[measuredEnd].coerceIn(0, display.length)
+    if (projectedStop <= projectedStart) {
+        return true
+    }
+    val visibleIndex = (projectedEnd - 1).coerceIn(0, display.length - 1)
+    return display[visibleIndex] != '\n'
 }

@@ -54,7 +54,12 @@ internal class TxtDocument(
         )
 
     private val store: Utf16TextStore by lazy {
-        Utf16TextStore(files.contentU16)
+        Utf16TextStore(files.textStore)
+    }
+
+    private val blockIndex: TxtBlockIndex by lazy {
+        TxtBlockIndex.openIfValid(files.blockIdx, meta)
+            ?: error("Missing or invalid block index at ${files.blockIdx.absolutePath}")
     }
 
     override suspend fun metadata(): ReaderResult<DocumentMetadata> {
@@ -63,7 +68,7 @@ internal class TxtDocument(
                 title = source.displayName?.substringBeforeLast('.'),
                 extra = mapOf(
                     "charset" to meta.originalCharset,
-                    "lengthChars" to meta.lengthChars.toString()
+                    "lengthCodeUnits" to meta.lengthCodeUnits.toString()
                 )
             )
         )
@@ -90,6 +95,7 @@ internal class TxtDocument(
                     documentKey = id.value,
                     store = store,
                     meta = meta,
+                    blockIndex = blockIndex,
                     initialLocator = initialLocator,
                     initialOffset = initialOffset,
                     initialConfig = effectiveConfig,
@@ -106,6 +112,7 @@ internal class TxtDocument(
                         controller = controller,
                         files = files,
                         meta = meta,
+                        blockIndex = blockIndex,
                         store = store,
                         ioDispatcher = ioDispatcher,
                         persistOutline = persistOutline,

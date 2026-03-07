@@ -17,6 +17,9 @@ import com.ireader.engines.common.hash.Hashing
 import com.ireader.engines.txt.internal.encoding.EncodingDetector
 import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.replaceFileAtomically
+import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
+import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
+import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.DocumentId
@@ -42,7 +45,7 @@ internal class TxtOpener(
 ) {
 
     private val encodingDetector = EncodingDetector()
-    private val schemaVersion = 6
+    private val schemaVersion = 7
 
     suspend fun open(source: DocumentSource, options: OpenOptions): ReaderResult<TxtOpenResult> {
         return withContext(ioDispatcher) {
@@ -101,14 +104,16 @@ internal class TxtOpener(
         return TxtBookFiles(
             bookDir = bookDir,
             lockFile = File(bookDir, "build.lock"),
-            contentU16 = File(bookDir, "content.u16"),
+            textStore = File(bookDir, "text.store"),
             metaJson = File(bookDir, "meta.json"),
-            outlineJson = File(bookDir, "outline.json"),
+            outlineIdx = File(bookDir, "outline.idx"),
             paginationDir = File(bookDir, "pagemap"),
-            softBreakIdx = File(bookDir, "softbreak.idx"),
-            softBreakLock = File(bookDir, "softbreak.lock"),
-            bloomIdx = File(bookDir, "tri_bloom.idx"),
-            bloomLock = File(bookDir, "tri_bloom.lock")
+            breakMap = File(bookDir, "break.map"),
+            breakLock = File(bookDir, "break.lock"),
+            searchIdx = File(bookDir, "search.idx"),
+            searchLock = File(bookDir, "search.lock"),
+            blockIdx = File(bookDir, "block.idx"),
+            breakPatch = File(bookDir, "break.patch")
         )
     }
 
@@ -118,7 +123,7 @@ internal class TxtOpener(
         sampleHash: String,
         expectedCharset: String
     ): TxtMeta? {
-        if (!files.contentU16.exists() || !files.metaJson.exists()) {
+        if (!files.textStore.exists() || !files.metaJson.exists()) {
             return null
         }
 
@@ -136,7 +141,7 @@ internal class TxtOpener(
             return null
         }
 
-        val contentBytes = files.contentU16.length()
+        val contentBytes = files.textStore.length()
         if (contentBytes <= 0L || contentBytes % 2L != 0L) {
             return null
         }
@@ -153,8 +158,11 @@ internal class TxtOpener(
             return null
         }
 
-        val expectedChars = contentBytes / 2L
-        if (meta.lengthChars != expectedChars) {
+        val expectedCodeUnits = contentBytes / 2L
+        if (meta.lengthCodeUnits != expectedCodeUnits) {
+            return null
+        }
+        if (!files.blockIdx.exists() || !files.breakMap.exists()) {
             return null
         }
         return meta
@@ -167,12 +175,12 @@ internal class TxtOpener(
         charsetName: String
     ): TxtMeta {
         val charset = java.nio.charset.Charset.forName(charsetName)
-        val temp = File(files.bookDir, "content.u16.tmp")
+        val temp = File(files.bookDir, "text.store.tmp")
         prepareTempFile(temp)
 
         val content = writeUtf16Content(source = source, charset = charset, temp = temp)
 
-        replaceFileAtomically(tempFile = temp, targetFile = files.contentU16)
+        replaceFileAtomically(tempFile = temp, targetFile = files.textStore)
 
         val meta = TxtMeta(
             version = schemaVersion,
@@ -182,6 +190,7 @@ internal class TxtOpener(
             sampleHash = sampleHash,
             originalCharset = charset.name(),
             lengthChars = content.lengthChars,
+            lengthCodeUnits = content.lengthChars,
             hardWrapLikely = content.hardWrapLikely,
             createdAtEpochMs = System.currentTimeMillis()
         )
@@ -189,6 +198,21 @@ internal class TxtOpener(
         prepareTempFile(metaTemp)
         metaTemp.writeText(meta.toJson().toString())
         replaceFileAtomically(tempFile = metaTemp, targetFile = files.metaJson)
+
+        Utf16TextStore(files.textStore).use { store ->
+            TxtBlockIndex.buildIfNeeded(
+                file = files.blockIdx,
+                store = store,
+                meta = meta,
+                ioDispatcher = ioDispatcher
+            )
+        }
+        SoftBreakIndexBuilder.buildIfNeeded(
+            files = files,
+            meta = meta,
+            ioDispatcher = ioDispatcher,
+            profile = SoftBreakTuningProfile.BALANCED
+        )
         return meta
     }
 

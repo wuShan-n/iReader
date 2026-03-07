@@ -44,9 +44,9 @@ class TrigramBloomIndexTest {
             append("needle marker\n")
             repeat(35_000) { append("abcdefg hijklmn opqrst uvwxyz\n") }
         }
-        writeUtf16Text(files.contentU16, text)
+        writeUtf16Text(files.textStore, text)
 
-        val store = Utf16TextStore(files.contentU16)
+        val store = Utf16TextStore(files.textStore)
         val meta = TxtMeta(
             version = 1,
             sourceUri = "file://book.txt",
@@ -61,19 +61,19 @@ class TrigramBloomIndexTest {
 
         try {
             TrigramBloomIndex.buildIfNeeded(
-                file = files.bloomIdx,
-                lockFile = files.bloomLock,
+                file = files.searchIdx,
+                lockFile = files.searchLock,
                 store = store,
                 meta = meta,
                 ioDispatcher = Dispatchers.IO
             )
-            val opened = TrigramBloomIndex.openIfValid(files.bloomIdx, meta)
+            val opened = TrigramBloomIndex.openIfValid(files.searchIdx, meta)
             checkNotNull(opened)
 
             val hashes = opened.buildQueryTrigramHashes("needle")
             val scratch = ByteArray(opened.bitsetBytes())
 
-            RandomAccessFile(files.bloomIdx, "r").use { raf ->
+            RandomAccessFile(files.searchIdx, "r").use { raf ->
                 var compared = 0
                 for (blockIndex in 0 until opened.blocksCount()) {
                     val legacy = opened.mayContainAll(raf, blockIndex, hashes)

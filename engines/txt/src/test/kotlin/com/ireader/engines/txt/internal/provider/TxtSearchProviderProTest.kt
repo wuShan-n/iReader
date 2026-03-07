@@ -66,13 +66,13 @@ class TxtSearchProviderProTest {
         )
         try {
             TrigramBloomIndex.buildIfNeeded(
-                file = fixture.files.bloomIdx,
-                lockFile = fixture.files.bloomLock,
+                file = fixture.files.searchIdx,
+                lockFile = fixture.files.searchLock,
                 store = fixture.store,
                 meta = fixture.meta,
                 ioDispatcher = Dispatchers.IO
             )
-            assertTrue(fixture.files.bloomIdx.exists())
+            assertTrue(fixture.files.searchIdx.exists())
 
             val provider = TxtSearchProviderPro(
                 files = fixture.files,
@@ -110,8 +110,8 @@ class TxtSearchProviderProTest {
     private fun createFixture(text: String, sampleHash: String): SearchFixture {
         val root = Files.createTempDirectory("txt_search_provider").toFile()
         val files = createBookFiles(root)
-        writeUtf16Text(files.contentU16, text)
-        val store = Utf16TextStore(files.contentU16)
+        writeUtf16Text(files.textStore, text)
+        val store = Utf16TextStore(files.textStore)
         return SearchFixture(
             text = text,
             files = files,

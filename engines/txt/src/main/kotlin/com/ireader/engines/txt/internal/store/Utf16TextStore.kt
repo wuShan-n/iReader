@@ -4,59 +4,68 @@ package com.ireader.engines.txt.internal.store
 
 import java.io.Closeable
 import java.io.File
-import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 import kotlin.math.min
 
 internal class Utf16TextStore(
-    file: File
+    file: File,
+    private val chunkSizeCodeUnits: Int = DEFAULT_CHUNK_SIZE_CODE_UNITS,
+    private val maxCachedChunks: Int = DEFAULT_MAX_CACHED_CHUNKS
 ) : Closeable {
 
-    private val raf = RandomAccessFile(file, "r")
-    private val channel: FileChannel = raf.channel
-    val lengthChars: Long = channel.size() / 2L
+    private val channel: FileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ)
+    val lengthCodeUnits: Long = channel.size() / 2L
+    val lengthChars: Long
+        get() = lengthCodeUnits
+
+    private val chunkCache = LinkedHashMap<Long, CharArray>(
+        maxCachedChunks.coerceAtLeast(2),
+        0.75f,
+        true
+    )
+    private val cacheLock = Any()
 
     fun readChars(start: Long, count: Int): CharArray {
-        if (count <= 0 || lengthChars <= 0L) {
+        if (count <= 0 || lengthCodeUnits <= 0L) {
             return CharArray(0)
         }
 
-        val alignedStart = alignStart(start.coerceIn(0L, lengthChars))
-        val available = (lengthChars - alignedStart).coerceAtLeast(0L)
+        val alignedStart = alignStart(start.coerceIn(0L, lengthCodeUnits))
+        val available = (lengthCodeUnits - alignedStart).coerceAtLeast(0L)
         if (available == 0L) {
             return CharArray(0)
         }
 
-        var requestedChars = min(count.toLong(), available).toInt()
-        requestedChars = alignCount(alignedStart, requestedChars)
-        if (requestedChars <= 0) {
+        var requestedCodeUnits = min(count.toLong(), available).toInt()
+        requestedCodeUnits = alignCount(alignedStart, requestedCodeUnits)
+        if (requestedCodeUnits <= 0) {
             return CharArray(0)
         }
 
-        val bytesToRead = requestedChars * 2
-        val bytes = acquireReadBuffer(bytesToRead)
-        var positionBytes = alignedStart * 2L
-
-        while (bytes.hasRemaining()) {
-            val readNow = channel.read(bytes, positionBytes)
-            if (readNow <= 0) {
+        val out = CharArray(requestedCodeUnits)
+        var cursor = alignedStart
+        var copied = 0
+        while (copied < requestedCodeUnits) {
+            val chunkId = chunkIdForOffset(cursor)
+            val chunk = loadChunk(chunkId)
+            if (chunk.isEmpty()) {
                 break
             }
-            positionBytes += readNow.toLong()
+            val chunkStart = chunkId * chunkSizeCodeUnits.toLong()
+            val inChunk = (cursor - chunkStart).toInt().coerceAtLeast(0)
+            if (inChunk >= chunk.size) {
+                break
+            }
+            val toCopy = min(requestedCodeUnits - copied, chunk.size - inChunk)
+            chunk.copyInto(out, destinationOffset = copied, startIndex = inChunk, endIndex = inChunk + toCopy)
+            copied += toCopy
+            cursor += toCopy.toLong()
         }
-        bytes.flip()
 
-        val charCount = bytes.remaining() / 2
-        if (charCount <= 0) {
-            return CharArray(0)
-        }
-        bytes.limit(charCount * 2)
-
-        val out = CharArray(charCount)
-        bytes.asCharBuffer().get(out, 0, charCount)
-        return out
+        return if (copied == out.size) out else out.copyOf(copied)
     }
 
     fun readString(start: Long, count: Int): String {
@@ -65,20 +74,22 @@ internal class Utf16TextStore(
     }
 
     fun readAround(center: Long, before: Int, after: Int): String {
-        val safeCenter = center.coerceIn(0L, lengthChars)
+        val safeCenter = center.coerceIn(0L, lengthCodeUnits)
         val start = (safeCenter - before.toLong()).coerceAtLeast(0L)
-        val end = (safeCenter + after.toLong()).coerceAtMost(lengthChars)
+        val end = (safeCenter + after.toLong()).coerceAtMost(lengthCodeUnits)
         val count = (end - start).toInt().coerceAtLeast(0)
         return readString(start, count)
     }
 
     override fun close() {
+        synchronized(cacheLock) {
+            chunkCache.clear()
+        }
         channel.close()
-        raf.close()
     }
 
     private fun alignStart(start: Long): Long {
-        if (start <= 0L || start >= lengthChars) {
+        if (start <= 0L || start >= lengthCodeUnits) {
             return start
         }
         val current = readSingle(start) ?: return start
@@ -95,7 +106,7 @@ internal class Utf16TextStore(
 
     private fun alignCount(start: Long, requested: Int): Int {
         val end = start + requested
-        if (requested <= 0 || end <= 0L || end >= lengthChars) {
+        if (requested <= 0 || end <= 0L || end >= lengthCodeUnits) {
             return requested
         }
 
@@ -111,44 +122,99 @@ internal class Utf16TextStore(
     }
 
     private fun readSingle(index: Long): Char? {
-        if (index < 0L || index >= lengthChars) {
+        if (index < 0L || index >= lengthCodeUnits) {
             return null
         }
-
-        val bytes = checkNotNull(singleCharBufferTL.get())
-        bytes.clear()
-        val read = channel.read(bytes, index * 2L)
-        if (read != 2) {
+        val chunk = loadChunk(chunkIdForOffset(index))
+        if (chunk.isEmpty()) {
             return null
         }
-        bytes.flip()
-        return bytes.char
+        val chunkStart = chunkIdForOffset(index) * chunkSizeCodeUnits.toLong()
+        val localIndex = (index - chunkStart).toInt()
+        return chunk.getOrNull(localIndex)
     }
 
-    private fun acquireReadBuffer(requiredBytes: Int): ByteBuffer {
-        var buffer = checkNotNull(readBufferTL.get())
-        if (requiredBytes > buffer.capacity() && requiredBytes <= MAX_TL_READ_BUFFER_BYTES) {
-            buffer = ByteBuffer.allocateDirect(requiredBytes).order(ByteOrder.LITTLE_ENDIAN)
-            readBufferTL.set(buffer)
+    private fun loadChunk(chunkId: Long): CharArray {
+        synchronized(cacheLock) {
+            chunkCache[chunkId]?.also { return it }
         }
-        if (requiredBytes > buffer.capacity()) {
-            return ByteBuffer.allocate(requiredBytes).order(ByteOrder.LITTLE_ENDIAN)
+        val chunk = readChunkFromChannel(chunkId)
+        synchronized(cacheLock) {
+            chunkCache[chunkId] = chunk
+            trimCacheIfNeeded()
         }
-        buffer.clear()
-        buffer.limit(requiredBytes)
-        return buffer
+        prefetchNeighbor(chunkId + 1L)
+        return chunk
+    }
+
+    private fun prefetchNeighbor(chunkId: Long) {
+        if (chunkId < 0L) {
+            return
+        }
+        synchronized(cacheLock) {
+            if (chunkCache.containsKey(chunkId) || chunkCache.size >= maxCachedChunks) {
+                return
+            }
+        }
+        val chunkStart = chunkId * chunkSizeCodeUnits.toLong()
+        if (chunkStart >= lengthCodeUnits) {
+            return
+        }
+        val chunk = readChunkFromChannel(chunkId)
+        synchronized(cacheLock) {
+            if (!chunkCache.containsKey(chunkId)) {
+                chunkCache[chunkId] = chunk
+                trimCacheIfNeeded()
+            }
+        }
+    }
+
+    private fun trimCacheIfNeeded() {
+        while (chunkCache.size > maxCachedChunks) {
+            val iterator = chunkCache.entries.iterator()
+            if (!iterator.hasNext()) {
+                break
+            }
+            val eldest = iterator.next()
+            chunkCache.remove(eldest.key)
+        }
+    }
+
+    private fun readChunkFromChannel(chunkId: Long): CharArray {
+        val chunkStartCodeUnits = chunkId * chunkSizeCodeUnits.toLong()
+        if (chunkStartCodeUnits >= lengthCodeUnits) {
+            return CharArray(0)
+        }
+        val chunkLengthCodeUnits = min(
+            chunkSizeCodeUnits.toLong(),
+            lengthCodeUnits - chunkStartCodeUnits
+        ).toInt()
+        val byteCount = chunkLengthCodeUnits * 2
+        val buffer = ByteBuffer.allocate(byteCount).order(ByteOrder.LITTLE_ENDIAN)
+        var position = chunkStartCodeUnits * 2L
+        while (buffer.hasRemaining()) {
+            val read = channel.read(buffer, position)
+            if (read <= 0) {
+                break
+            }
+            position += read.toLong()
+        }
+        buffer.flip()
+        val charCount = buffer.remaining() / 2
+        if (charCount <= 0) {
+            return CharArray(0)
+        }
+        val out = CharArray(charCount)
+        buffer.asCharBuffer().get(out, 0, charCount)
+        return out
+    }
+
+    private fun chunkIdForOffset(offset: Long): Long {
+        return offset.coerceAtLeast(0L) / chunkSizeCodeUnits.toLong()
     }
 
     private companion object {
-        private const val DEFAULT_TL_READ_BUFFER_BYTES = 256 * 1024
-        private const val MAX_TL_READ_BUFFER_BYTES = 1024 * 1024
-
-        private val readBufferTL: ThreadLocal<ByteBuffer> = ThreadLocal.withInitial {
-            ByteBuffer.allocateDirect(DEFAULT_TL_READ_BUFFER_BYTES).order(ByteOrder.LITTLE_ENDIAN)
-        }
-
-        private val singleCharBufferTL: ThreadLocal<ByteBuffer> = ThreadLocal.withInitial {
-            ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN)
-        }
+        private const val DEFAULT_CHUNK_SIZE_CODE_UNITS = 128 * 1024
+        private const val DEFAULT_MAX_CACHED_CHUNKS = 6
     }
 }

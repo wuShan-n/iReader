@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.provider
 
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.engines.txt.testing.createBookFiles
@@ -28,12 +29,16 @@ class TxtOutlineProviderTest {
             append("第2章 发展\n")
             append("这里是后续正文。\n")
         }
-        writeUtf16Text(files.contentU16, text)
-        val store = Utf16TextStore(files.contentU16)
+        writeUtf16Text(files.textStore, text)
+        val store = Utf16TextStore(files.textStore)
         try {
+            TxtBlockIndex.buildIfNeeded(files.blockIdx, store, createMeta(store.lengthChars, text.length.toLong(), "outline-cache"), Dispatchers.IO)
+            val blockIndex = TxtBlockIndex.openIfValid(files.blockIdx, createMeta(store.lengthChars, text.length.toLong(), "outline-cache"))
+                ?: error("Missing block index")
             val provider = TxtOutlineProvider(
                 files = files,
                 meta = createMeta(store.lengthChars, text.length.toLong(), sampleHash = "outline-cache"),
+                blockIndex = blockIndex,
                 store = store,
                 ioDispatcher = Dispatchers.IO,
                 persistOutline = true
@@ -42,7 +47,7 @@ class TxtOutlineProviderTest {
             val first = provider.getOutline().requireOk()
             assertTrue(first.isNotEmpty())
 
-            files.outlineJson.writeText("{broken")
+            files.outlineIdx.writeText("{broken")
 
             val second = provider.getOutline().requireOk()
             assertTrue(second.isNotEmpty())
@@ -57,12 +62,16 @@ class TxtOutlineProviderTest {
         val root = Files.createTempDirectory("txt_outline_chunk_boundary").toFile()
         val files = createBookFiles(root)
         val text = "A".repeat(63_997) + "\n第123章 跨块标题\n正文继续"
-        writeUtf16Text(files.contentU16, text)
-        val store = Utf16TextStore(files.contentU16)
+        writeUtf16Text(files.textStore, text)
+        val store = Utf16TextStore(files.textStore)
         try {
+            TxtBlockIndex.buildIfNeeded(files.blockIdx, store, createMeta(store.lengthChars, text.length.toLong(), "outline-boundary"), Dispatchers.IO)
+            val blockIndex = TxtBlockIndex.openIfValid(files.blockIdx, createMeta(store.lengthChars, text.length.toLong(), "outline-boundary"))
+                ?: error("Missing block index")
             val provider = TxtOutlineProvider(
                 files = files,
                 meta = createMeta(store.lengthChars, text.length.toLong(), sampleHash = "outline-boundary"),
+                blockIndex = blockIndex,
                 store = store,
                 ioDispatcher = Dispatchers.IO,
                 persistOutline = false

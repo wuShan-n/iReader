@@ -190,7 +190,7 @@ class TxtOpenPipelineTest {
             val meta = readSingleMeta(cacheDir)
 
             assertTrue(meta.getBoolean("hardWrapLikely"))
-            assertEquals(6, meta.getInt("version"))
+            assertEquals(7, meta.getInt("version"))
             cacheDir.deleteRecursively()
         }
     }
@@ -209,7 +209,7 @@ class TxtOpenPipelineTest {
             val meta = readSingleMeta(cacheDir)
 
             assertTrue(meta.getBoolean("hardWrapLikely"))
-            assertEquals(6, meta.getInt("version"))
+            assertEquals(7, meta.getInt("version"))
             cacheDir.deleteRecursively()
         }
     }
@@ -236,7 +236,7 @@ class TxtOpenPipelineTest {
             engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
             val rebuiltMeta = readSingleMeta(cacheDir)
 
-            assertEquals(6, rebuiltMeta.getInt("version"))
+            assertEquals(7, rebuiltMeta.getInt("version"))
             assertTrue(rebuiltMeta.getLong("createdAtEpochMs") > firstCreatedAt)
             cacheDir.deleteRecursively()
         }
@@ -262,7 +262,7 @@ class TxtOpenPipelineTest {
             engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
             val rebuiltMeta = readSingleMeta(cacheDir)
 
-            assertEquals(6, rebuiltMeta.getInt("version"))
+            assertEquals(7, rebuiltMeta.getInt("version"))
             assertTrue(rebuiltMeta.getLong("createdAtEpochMs") > firstCreatedAt)
             cacheDir.deleteRecursively()
         }

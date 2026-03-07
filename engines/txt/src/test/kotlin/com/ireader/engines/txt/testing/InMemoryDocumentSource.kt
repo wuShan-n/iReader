@@ -29,14 +29,16 @@ internal fun createBookFiles(root: File): TxtBookFiles {
     return TxtBookFiles(
         bookDir = root,
         lockFile = File(root, "book.lock"),
-        contentU16 = File(root, "content.u16"),
+        textStore = File(root, "text.store"),
         metaJson = File(root, "meta.json"),
-        outlineJson = File(root, "outline.json"),
+        outlineIdx = File(root, "outline.idx"),
         paginationDir = paginationDir,
-        softBreakIdx = File(root, "softbreak.idx"),
-        softBreakLock = File(root, "softbreak.lock"),
-        bloomIdx = File(root, "bloom.idx"),
-        bloomLock = File(root, "bloom.lock")
+        breakMap = File(root, "break.map"),
+        breakLock = File(root, "break.lock"),
+        searchIdx = File(root, "search.idx"),
+        searchLock = File(root, "search.lock"),
+        blockIdx = File(root, "block.idx"),
+        breakPatch = File(root, "break.patch")
     )
 }
 

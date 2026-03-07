@@ -104,7 +104,7 @@ class TxtAutoEncodingRegressionTest {
     private fun readSingleCacheContent(cacheDir: File): String {
         val matches = cacheDir
             .walkTopDown()
-            .filter { it.isFile && it.name == "content.u16" }
+            .filter { it.isFile && it.name == "text.store" }
             .toList()
         assertEquals(1, matches.size)
         val file = matches.firstOrNull()

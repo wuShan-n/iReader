@@ -21,10 +21,10 @@ import com.ireader.engines.common.cache.LruCache
 import com.ireader.engines.txt.internal.link.LinkDetector
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.provider.ChapterDetector
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
-import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.annotation.Decoration
 import com.ireader.reader.api.error.ReaderError
@@ -100,6 +100,7 @@ internal class TxtController(
     private val documentKey: String,
     private val store: Utf16TextStore,
     private val meta: TxtMeta,
+    private val blockIndex: TxtBlockIndex,
     private val initialLocator: Locator?,
     initialOffset: Long,
     initialConfig: RenderConfig.ReflowText,
@@ -118,16 +119,10 @@ internal class TxtController(
     ),
     dispatcher = defaultDispatcher
 ) {
-
-    private val softBreakEnabled: Boolean = meta.hardWrapLikely
     private var softBreakProfile: SoftBreakTuningProfile = resolveSoftBreakProfile(initialConfig)
-    private var softBreakIndex: SoftBreakIndex? = if (softBreakEnabled) {
-        openSoftBreakIndex(softBreakProfile)
-    } else {
-        null
-    }
+    private var softBreakIndex: SoftBreakIndex = openSoftBreakIndex(softBreakProfile)
     private val paginator = ReflowPaginator(
-        source = TxtTextSource(store),
+        source = TxtTextSource(store) { softBreakIndex },
         hardWrapLikely = meta.hardWrapLikely,
         softBreakIndex = softBreakIndex,
         pageEndAdjuster = TxtPageEndAdjuster(ChapterDetector())
@@ -161,25 +156,10 @@ internal class TxtController(
     private var currentConfig: RenderConfig.ReflowText = initialConfig
 
     init {
-        if (!softBreakEnabled) {
-            logInfo(
-                TAG,
-                "soft-break disabled for non-hard-wrap document; using raw newline rendering"
-            )
-        } else if (softBreakIndex == null) {
-            logInfo(
-                TAG,
-                "soft-break index unavailable at open; using runtime classifier until build completes " +
-                    "profile=${softBreakProfile.storageValue} hardWrapLikely=${meta.hardWrapLikely}"
-            )
-            buildSoftBreakIndexAsync(softBreakProfile)
-        } else {
-            logInfo(
-                TAG,
-                "soft-break index loaded from cache profile=${softBreakProfile.storageValue} " +
-                    "lengthChars=${store.lengthChars}"
-            )
-        }
+        logInfo(
+            TAG,
+            "break map loaded profile=${softBreakProfile.storageValue} lengthChars=${store.lengthChars}"
+        )
         observeAnnotationChangesIfNeeded()
     }
 
@@ -223,18 +203,15 @@ internal class TxtController(
             stateMutable.value = stateMutable.value.copy(config = sanitized)
             val newProfile = resolveSoftBreakProfile(sanitized)
             val profileChanged = newProfile != softBreakProfile
-            if (softBreakEnabled && profileChanged) {
+            if (profileChanged) {
                 softBreakProfile = newProfile
-                runCatching { softBreakIndex?.close() }
+                runCatching { softBreakIndex.close() }
                 softBreakIndex = openSoftBreakIndex(newProfile)
                 logInfo(
                     TAG,
-                    "soft-break profile switched to=${newProfile.storageValue} hasIndex=${softBreakIndex != null}"
+                    "break map switched to profile=${newProfile.storageValue}"
                 )
                 paginator.setSoftBreakIndex(softBreakIndex)
-                if (softBreakIndex == null) {
-                    buildSoftBreakIndexAsync(newProfile)
-                }
             }
             invalidatePaginationLocked()
             reloadPaginationIndexIfNeededLocked()
@@ -372,7 +349,7 @@ internal class TxtController(
         runCatching { paginationIndex.saveIfDirty() }
             .onFailure { logWarn(TAG, "TXT controller failed to save pagination index", it) }
         annotationObserverJob?.cancel()
-        runCatching { softBreakIndex?.close() }
+        runCatching { softBreakIndex.close() }
             .onFailure { logWarn(TAG, "TXT controller failed to close soft-break index", it) }
     }
 
@@ -380,53 +357,17 @@ internal class TxtController(
         return SoftBreakTuningProfile.fromStorageValue(config.extra[SOFT_BREAK_PROFILE_EXTRA_KEY])
     }
 
-    private fun openSoftBreakIndex(profile: SoftBreakTuningProfile): SoftBreakIndex? {
+    private fun openSoftBreakIndex(profile: SoftBreakTuningProfile): SoftBreakIndex {
         val ruleConfig = SoftBreakRuleConfig.forProfile(profile)
-        return SoftBreakIndex.openIfValid(
-            file = files.softBreakIdx,
+        return requireNotNull(
+            SoftBreakIndex.openIfValid(
+            file = files.breakMap,
             meta = meta,
             profile = profile,
             rulesVersion = ruleConfig.rulesVersion
-        )
-    }
-
-    private fun buildSoftBreakIndexAsync(profile: SoftBreakTuningProfile) {
-        if (!softBreakEnabled) {
-            return
-        }
-        launchSafely("soft-break-index") {
-            SoftBreakIndexBuilder.buildIfNeeded(
-                files = files,
-                meta = meta,
-                ioDispatcher = ioDispatcher,
-                profile = profile
             )
-            val loaded = openSoftBreakIndex(profile)
-            mutex.withLock {
-                if (profile != softBreakProfile) {
-                    runCatching { loaded?.close() }
-                    return@withLock
-                }
-                softBreakIndex?.close()
-                softBreakIndex = loaded
-                if (loaded == null) {
-                    logWarn(
-                        TAG,
-                        "soft-break index build completed but index still unavailable " +
-                            "profile=${profile.storageValue}",
-                        null
-                    )
-                } else {
-                    logInfo(
-                        TAG,
-                        "soft-break index activated profile=${profile.storageValue} " +
-                            "lengthChars=${loaded.lengthChars} newlineCount=${loaded.newlineCount} " +
-                            "rulesVersion=${loaded.rulesVersion}; clearing page caches"
-                    )
-                }
-                paginator.setSoftBreakIndex(loaded)
-                invalidatePaginationLocked()
-            }
+        ) {
+            "Missing break map at ${files.breakMap.absolutePath} for profile=${profile.storageValue}"
         }
     }
 
@@ -495,7 +436,8 @@ internal class TxtController(
                 continuesParagraph = slice.continuesParagraph,
                 range = pageRange,
                 renderTimeMs = renderTimeMs,
-                cacheHit = cacheHit
+                cacheHit = cacheHit,
+                projectedBoundaryToRawOffsets = slice.projectedBoundaryToRawOffsets
             )
         )
     }
@@ -505,14 +447,19 @@ internal class TxtController(
             startOffset = snapshot.startOffset,
             endOffset = snapshot.endOffset,
             text = snapshot.text,
-            range = snapshot.range
+            range = snapshot.range,
+            projectedBoundaryToRawOffsets = snapshot.projectedBoundaryToRawOffsets
         )
         val page = RenderPage(
             id = snapshot.id,
             locator = snapshot.locator,
             content = RenderContent.Text(
                 text = snapshot.text,
-                mapping = TxtTextMapping(snapshot.startOffset, snapshot.endOffset),
+                mapping = TxtTextMapping(
+                    pageStart = snapshot.startOffset,
+                    pageEnd = snapshot.endOffset,
+                    projectedBoundaryToRawOffsets = snapshot.projectedBoundaryToRawOffsets
+                ),
                 justifyVisibleLastLine = snapshot.continuesParagraph
             ),
             links = extras.links,
@@ -531,12 +478,14 @@ internal class TxtController(
         startOffset: Long,
         endOffset: Long,
         text: CharSequence,
-        range: LocatorRange
+        range: LocatorRange,
+        projectedBoundaryToRawOffsets: LongArray?
     ): PageExtras {
         val links = linksFor(
             startOffset = startOffset,
             endOffset = endOffset,
-            text = text
+            text = text,
+            projectedBoundaryToRawOffsets = projectedBoundaryToRawOffsets
         )
         val decorations = decorationsFor(
             startOffset = startOffset,
@@ -549,7 +498,8 @@ internal class TxtController(
     private suspend fun linksFor(
         startOffset: Long,
         endOffset: Long,
-        text: CharSequence
+        text: CharSequence,
+        projectedBoundaryToRawOffsets: LongArray?
     ): List<DocumentLink> {
         val key = PageRangeKey(startOffset = startOffset, endOffset = endOffset)
         mutex.withLock {
@@ -558,7 +508,8 @@ internal class TxtController(
         val detected = LinkDetector.detect(
             text = text,
             pageStartOffset = startOffset,
-            maxOffset = store.lengthChars
+            maxOffset = store.lengthChars,
+            projectedBoundaryToRawOffsets = projectedBoundaryToRawOffsets
         )
         return mutex.withLock {
             pageLinksCache[key] ?: detected.also { pageLinksCache[key] = it }
@@ -627,7 +578,8 @@ internal class TxtController(
         val continuesParagraph: Boolean,
         val range: LocatorRange,
         val renderTimeMs: Long,
-        val cacheHit: Boolean
+        val cacheHit: Boolean,
+        val projectedBoundaryToRawOffsets: LongArray?
     )
 
     private fun updateStateLocked() {
@@ -667,7 +619,7 @@ internal class TxtController(
         pageCompletionJob = launchSafely("page-map-completion") {
             completePageMapForward(
                 constraints = constraintsLocal,
-                maxPages = 24,
+                maxPages = 6,
                 batchSize = PAGE_COMPLETION_BATCH_SIZE,
                 expectedGeneration = expectedGeneration
             )
@@ -937,7 +889,7 @@ internal class TxtController(
 
     private companion object {
         private const val TAG = "TxtController"
-        private const val PAGE_COMPLETION_BATCH_SIZE = 1
+        private const val PAGE_COMPLETION_BATCH_SIZE = 2
 
         private fun logInfo(tag: String, message: String) {
             runCatching { Log.i(tag, message) }

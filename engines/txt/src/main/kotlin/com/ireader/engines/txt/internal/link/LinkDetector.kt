@@ -15,6 +15,7 @@ internal object LinkDetector {
         text: CharSequence,
         pageStartOffset: Long,
         maxOffset: Long,
+        projectedBoundaryToRawOffsets: LongArray? = null,
         max: Int = 20
     ): List<DocumentLink> {
         if (text.isEmpty()) {
@@ -52,8 +53,20 @@ internal object LinkDetector {
                 return
             }
 
-            val globalStart = (pageStartOffset + clampedStart.toLong()).coerceAtMost(maxOffset)
-            val globalEnd = (pageStartOffset + clampedEnd.toLong()).coerceAtMost(maxOffset)
+            val globalStart = if (projectedBoundaryToRawOffsets == null) {
+                (pageStartOffset + clampedStart.toLong()).coerceAtMost(maxOffset)
+            } else {
+                projectedBoundaryToRawOffsets
+                    .getOrElse(clampedStart) { projectedBoundaryToRawOffsets.last() }
+                    .coerceAtMost(maxOffset)
+            }
+            val globalEnd = if (projectedBoundaryToRawOffsets == null) {
+                (pageStartOffset + clampedEnd.toLong()).coerceAtMost(maxOffset)
+            } else {
+                projectedBoundaryToRawOffsets
+                    .getOrElse(clampedEnd) { projectedBoundaryToRawOffsets.last() }
+                    .coerceAtMost(maxOffset)
+            }
             if (globalEnd <= globalStart) {
                 return
             }

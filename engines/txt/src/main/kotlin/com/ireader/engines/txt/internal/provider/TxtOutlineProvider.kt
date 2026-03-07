@@ -7,6 +7,7 @@ import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.replaceFileAtomically
 import com.ireader.engines.txt.internal.locator.TxtBlockLocatorCodec
 import com.ireader.engines.txt.internal.open.TxtBookFiles
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.error.ReaderResult
@@ -24,6 +25,7 @@ import org.json.JSONObject
 internal class TxtOutlineProvider(
     private val files: TxtBookFiles,
     private val meta: TxtMeta,
+    private val blockIndex: TxtBlockIndex,
     private val store: Utf16TextStore,
     private val ioDispatcher: CoroutineDispatcher,
     private val persistOutline: Boolean
@@ -55,7 +57,7 @@ internal class TxtOutlineProvider(
     }
 
     private fun loadFromCache(): List<OutlineNode>? {
-        val file = files.outlineJson
+        val file = files.outlineIdx
         if (!file.exists()) {
             return null
         }
@@ -105,18 +107,18 @@ internal class TxtOutlineProvider(
             put("sampleHash", meta.sampleHash)
             put("items", items)
         }
-        val temp = java.io.File(files.bookDir, "outline.json.tmp")
+        val temp = java.io.File(files.bookDir, "outline.idx.tmp")
         prepareTempFile(temp)
         temp.writeText(root.toString())
-        replaceFileAtomically(tempFile = temp, targetFile = files.outlineJson)
+        replaceFileAtomically(tempFile = temp, targetFile = files.outlineIdx)
     }
 
     private suspend fun detectOutline(): List<OutlineNode> {
         val out = ArrayList<OutlineNode>(64)
         val seen = HashSet<String>()
-        val chunkChars = 64_000
         val lineBuffer = StringBuilder(256)
         var cursor = 0L
+        var blockId = 0
 
         fun emitLineIfChapter(startOffset: Long) {
             val line = lineBuffer.toString().trim()
@@ -135,7 +137,11 @@ internal class TxtOutlineProvider(
         var currentLineStart = 0L
         while (cursor < store.lengthChars) {
             coroutineContext.ensureActive()
-            val readCount = min(chunkChars.toLong(), store.lengthChars - cursor).toInt()
+            val readCount = if (blockId < blockIndex.blockCount) {
+                (blockIndex.blockEndOffset(blockId) - cursor).toInt().coerceAtLeast(0)
+            } else {
+                min(DEFAULT_CHUNK_CHARS.toLong(), store.lengthChars - cursor).toInt()
+            }
             val chunk = store.readChars(cursor, readCount)
             if (chunk.isEmpty()) {
                 break
@@ -153,6 +159,7 @@ internal class TxtOutlineProvider(
                 }
             }
             cursor += readCount.toLong()
+            blockId++
         }
 
         if (lineBuffer.isNotEmpty()) {
@@ -163,5 +170,6 @@ internal class TxtOutlineProvider(
 
     private companion object {
         private const val MAX_OUTLINE_ITEMS = 300
+        private const val DEFAULT_CHUNK_CHARS = 64_000
     }
 }

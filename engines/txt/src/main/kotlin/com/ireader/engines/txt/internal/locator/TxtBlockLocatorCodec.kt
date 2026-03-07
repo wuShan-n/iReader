@@ -1,13 +1,13 @@
 package com.ireader.engines.txt.internal.locator
 
+import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
 import com.ireader.reader.model.LocatorSchemes
 
 /**
  * TXT locator format:
- * - preferred: scheme=txt.offset, value="<utf16Offset>"
- * - legacy: scheme=txt.block, value="<blockStartOffset>:<charOffsetInBlock>"
+ * - scheme=txt.offset, value="<utf16CodeUnitOffset>"
  */
 internal object TxtBlockLocatorCodec {
 
@@ -39,7 +39,6 @@ internal object TxtBlockLocatorCodec {
     fun parseOffset(locator: Locator): Long? {
         return when (locator.scheme) {
             LocatorSchemes.TXT_OFFSET -> parseOffsetValue(locator.value)
-            LocatorSchemes.TXT_BLOCK -> parseLegacyBlockOffsetValue(locator.value)
             else -> null
         }
     }
@@ -54,22 +53,33 @@ internal object TxtBlockLocatorCodec {
         return offset.takeIf { it >= 0L }
     }
 
-    fun parseLegacyBlockOffsetValue(value: String): Long? {
-        val separator = value.indexOf(':')
-        if (separator <= 0 || separator >= value.lastIndex) {
-            return null
-        }
-        val blockStart = value.substring(0, separator).toLongOrNull() ?: return null
-        val inBlock = value.substring(separator + 1).toLongOrNull() ?: return null
-        if (blockStart < 0L || inBlock < 0L || inBlock >= BLOCK_CHARS) {
-            return null
-        }
-        val sum = blockStart + inBlock
-        if (sum < blockStart) {
-            return null
-        }
-        return sum
+    fun anchorForOffset(
+        offset: Long,
+        maxOffset: Long,
+        blockIndex: TxtBlockIndex,
+        revision: Int,
+        affinity: TextAnchorAffinity = TextAnchorAffinity.FORWARD
+    ): TextAnchor {
+        val safe = offset.coerceIn(0L, maxOffset.coerceAtLeast(0L))
+        return blockIndex.anchorForOffset(
+            offset = safe,
+            revision = revision,
+            affinity = affinity
+        )
     }
 
-    private const val BLOCK_CHARS = 2048L
+    fun parseAnchor(
+        locator: Locator,
+        maxOffset: Long,
+        blockIndex: TxtBlockIndex,
+        revision: Int,
+        affinity: TextAnchorAffinity = TextAnchorAffinity.FORWARD
+    ): TextAnchor? {
+        val offset = parseOffset(locator, maxOffset) ?: return null
+        return blockIndex.anchorForOffset(
+            offset = offset,
+            revision = revision,
+            affinity = affinity
+        )
+    }
 }

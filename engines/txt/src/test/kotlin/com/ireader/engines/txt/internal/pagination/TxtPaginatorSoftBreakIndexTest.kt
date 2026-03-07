@@ -12,6 +12,10 @@ import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.TextLayoutInput
+import com.ireader.reader.api.render.TextLayoutMeasureResult
+import com.ireader.reader.api.render.TextLayouter
+import com.ireader.reader.api.render.TextLayouterFactory
 import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +38,7 @@ class TxtPaginatorSoftBreakIndexTest {
         val dir = Files.createTempDirectory("txt_paginator_softbreak").toFile()
         val files = createBookFiles(dir)
         val text = buildSoftWrappedText()
-        Utf16LeFileWriter(files.contentU16).use { writer ->
+        Utf16LeFileWriter(files.textStore).use { writer ->
             text.forEach(writer::writeChar)
         }
         val meta = TxtMeta(
@@ -57,19 +61,20 @@ class TxtPaginatorSoftBreakIndexTest {
                 profile = SOFT_BREAK_PROFILE
             )
             val softBreakIndex = SoftBreakIndex.openIfValid(
-                file = files.softBreakIdx,
+                file = files.breakMap,
                 meta = meta,
                 profile = SOFT_BREAK_PROFILE,
                 rulesVersion = softBreakRulesVersion()
             )
             assertNotNull(softBreakIndex)
             softBreakIndex!!.use { index ->
-                Utf16TextStore(files.contentU16).use { store ->
+                Utf16TextStore(files.textStore).use { store ->
                     val paginator = ReflowPaginator(
                         source = TxtTextSource(store),
                         hardWrapLikely = meta.hardWrapLikely,
                         softBreakIndex = index
                     )
+                    paginator.setTextLayouterFactory(TestTextLayouterFactory)
                     val page = paginator.pageAt(
                         startOffset = 0L,
                         config = RenderConfig.ReflowText(),
@@ -88,16 +93,17 @@ class TxtPaginatorSoftBreakIndexTest {
         val dir = Files.createTempDirectory("txt_paginator_raw_breaks").toFile()
         val files = createBookFiles(dir)
         val text = buildSoftWrappedText()
-        Utf16LeFileWriter(files.contentU16).use { writer ->
+        Utf16LeFileWriter(files.textStore).use { writer ->
             text.forEach(writer::writeChar)
         }
         try {
-            Utf16TextStore(files.contentU16).use { store ->
+            Utf16TextStore(files.textStore).use { store ->
                 val paginator = ReflowPaginator(
                     source = TxtTextSource(store),
                     hardWrapLikely = false,
                     softBreakIndex = null
                 )
+                paginator.setTextLayouterFactory(TestTextLayouterFactory)
                 val page = paginator.pageAt(
                     startOffset = 0L,
                     config = RenderConfig.ReflowText(),
@@ -118,7 +124,7 @@ class TxtPaginatorSoftBreakIndexTest {
         val line2 = "这是一段稳定长度测试文本用于验证软换行识别继续推进"
         val line3 = "这是一段稳定长度测试文本用于验证分页效果保持一致"
         val text = "$line1\n$line2\n$line3"
-        Utf16LeFileWriter(files.contentU16).use { writer ->
+        Utf16LeFileWriter(files.textStore).use { writer ->
             text.forEach(writer::writeChar)
         }
         val meta = TxtMeta(
@@ -141,7 +147,7 @@ class TxtPaginatorSoftBreakIndexTest {
                 profile = SOFT_BREAK_PROFILE
             )
             val softBreakIndex = SoftBreakIndex.openIfValid(
-                file = files.softBreakIdx,
+                file = files.breakMap,
                 meta = meta,
                 profile = SOFT_BREAK_PROFILE,
                 rulesVersion = softBreakRulesVersion()
@@ -170,7 +176,7 @@ class TxtPaginatorSoftBreakIndexTest {
         val line2 = "  这是一段带缩进的短行文本用于验证分页行为保持一致"
         val line3 = "  这是一段带缩进的短行文本用于验证右侧不再提前断行"
         val text = "$line1\n$line2\n$line3"
-        Utf16LeFileWriter(files.contentU16).use { writer ->
+        Utf16LeFileWriter(files.textStore).use { writer ->
             text.forEach(writer::writeChar)
         }
         val meta = TxtMeta(
@@ -193,7 +199,7 @@ class TxtPaginatorSoftBreakIndexTest {
                 profile = SOFT_BREAK_PROFILE
             )
             val softBreakIndex = SoftBreakIndex.openIfValid(
-                file = files.softBreakIdx,
+                file = files.breakMap,
                 meta = meta,
                 profile = SOFT_BREAK_PROFILE,
                 rulesVersion = softBreakRulesVersion()
@@ -222,7 +228,7 @@ class TxtPaginatorSoftBreakIndexTest {
         val line2 = "    下一行缩进明显增加用于模拟新段落开始"
         val line3 = "    同级缩进继续叙述可按软换行合并"
         val text = "$line1\n$line2\n$line3"
-        Utf16LeFileWriter(files.contentU16).use { writer ->
+        Utf16LeFileWriter(files.textStore).use { writer ->
             text.forEach(writer::writeChar)
         }
         val meta = TxtMeta(
@@ -245,7 +251,7 @@ class TxtPaginatorSoftBreakIndexTest {
                 profile = SOFT_BREAK_PROFILE
             )
             val softBreakIndex = SoftBreakIndex.openIfValid(
-                file = files.softBreakIdx,
+                file = files.breakMap,
                 meta = meta,
                 profile = SOFT_BREAK_PROFILE,
                 rulesVersion = softBreakRulesVersion()
@@ -271,7 +277,7 @@ class TxtPaginatorSoftBreakIndexTest {
         val dir = Files.createTempDirectory("txt_softbreak_profile_mismatch").toFile()
         val files = createBookFiles(dir)
         val text = buildSoftWrappedText()
-        Utf16LeFileWriter(files.contentU16).use { writer ->
+        Utf16LeFileWriter(files.textStore).use { writer ->
             text.forEach(writer::writeChar)
         }
         val meta = TxtMeta(
@@ -295,19 +301,19 @@ class TxtPaginatorSoftBreakIndexTest {
             )
 
             val valid = SoftBreakIndex.openIfValid(
-                file = files.softBreakIdx,
+                file = files.breakMap,
                 meta = meta,
                 profile = SOFT_BREAK_PROFILE,
                 rulesVersion = softBreakRulesVersion()
             )
             val wrongProfile = SoftBreakIndex.openIfValid(
-                file = files.softBreakIdx,
+                file = files.breakMap,
                 meta = meta,
                 profile = SoftBreakTuningProfile.STRICT,
                 rulesVersion = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.STRICT).rulesVersion
             )
             val wrongRulesVersion = SoftBreakIndex.openIfValid(
-                file = files.softBreakIdx,
+                file = files.breakMap,
                 meta = meta,
                 profile = SOFT_BREAK_PROFILE,
                 rulesVersion = softBreakRulesVersion() + 1
@@ -315,7 +321,8 @@ class TxtPaginatorSoftBreakIndexTest {
 
             valid?.close()
             assertNotNull(valid)
-            assertNull(wrongProfile)
+            wrongProfile?.close()
+            assertNotNull(wrongProfile)
             assertNull(wrongRulesVersion)
         } finally {
             dir.deleteRecursively()
@@ -346,14 +353,16 @@ class TxtPaginatorSoftBreakIndexTest {
         return TxtBookFiles(
             bookDir = root,
             lockFile = File(root, "book.lock"),
-            contentU16 = File(root, "content.u16"),
+            textStore = File(root, "text.store"),
             metaJson = File(root, "meta.json"),
-            outlineJson = File(root, "outline.json"),
+            outlineIdx = File(root, "outline.idx"),
             paginationDir = paginationDir,
-            softBreakIdx = File(root, "softbreak.idx"),
-            softBreakLock = File(root, "softbreak.lock"),
-            bloomIdx = File(root, "bloom.idx"),
-            bloomLock = File(root, "bloom.lock")
+            breakMap = File(root, "break.map"),
+            breakLock = File(root, "break.lock"),
+            searchIdx = File(root, "search.idx"),
+            searchLock = File(root, "search.lock"),
+            blockIdx = File(root, "block.idx"),
+            breakPatch = File(root, "break.patch")
         )
     }
     private fun softBreakRulesVersion(): Int {
@@ -362,5 +371,55 @@ class TxtPaginatorSoftBreakIndexTest {
 
     private companion object {
         private val SOFT_BREAK_PROFILE = SoftBreakTuningProfile.BALANCED
+        private val TestTextLayouterFactory = object : TextLayouterFactory {
+            override val environmentKey: String = "txt-paginator-test"
+
+            override fun create(cacheSize: Int): TextLayouter {
+                return object : TextLayouter {
+                    override fun measure(
+                        text: CharSequence,
+                        input: TextLayoutInput
+                    ): TextLayoutMeasureResult {
+                        if (text.isEmpty() || input.widthPx <= 0 || input.heightPx <= 0) {
+                            return TextLayoutMeasureResult(0, 0, -1)
+                        }
+                        val charsPerLine = (input.widthPx / 28).coerceAtLeast(8)
+                        val lineHeightPx = 54
+                        val maxLines = (input.heightPx / lineHeightPx).coerceAtLeast(1)
+                        var line = 0
+                        var column = 0
+                        var endChar = 0
+                        for (index in text.indices) {
+                            if (line >= maxLines) {
+                                break
+                            }
+                            val ch = text[index]
+                            if (ch == '\n') {
+                                endChar = index + 1
+                                line++
+                                column = 0
+                                continue
+                            }
+                            if (column >= charsPerLine) {
+                                line++
+                                column = 0
+                                if (line >= maxLines) {
+                                    break
+                                }
+                            }
+                            column++
+                            endChar = index + 1
+                        }
+                        val visibleLineCount = when {
+                            endChar <= 0 -> 0
+                            line >= maxLines -> maxLines
+                            column > 0 -> line + 1
+                            else -> line.coerceAtLeast(1)
+                        }
+                        return TextLayoutMeasureResult(endChar, visibleLineCount, visibleLineCount - 1)
+                    }
+                }
+            }
+        }
     }
 }

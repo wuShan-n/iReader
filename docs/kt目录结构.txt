@@ -1,0 +1,1591 @@
+# Kotlin 目录结构（已排除测试目录）
+
+.
+├── app
+│   └── src
+│       └── main
+│           └── java
+│               └── com
+│                   └── ireader
+│                       ├── di
+│                       │   ├── annotation
+│                       │   │   └── RoomAnnotationStore.kt
+│                       │   ├── AnnotationStoreModule.kt
+│                       │   ├── LocatorCodecModule.kt
+│                       │   └── ReaderRuntimeModule.kt
+│                       ├── IReaderApplication.kt
+│                       └── MainActivity.kt
+├── build
+│   ├── context-bridge
+│   │   └── txt_snapshot_staging
+│   │       └── src
+│   │           └── main
+│   │               └── kotlin
+│   │                   └── com
+│   │                       └── ireader
+│   │                           └── engines
+│   │                               └── txt
+│   │                                   ├── internal
+│   │                                   │   ├── controller
+│   │                                   │   │   ├── LocatorConfig.kt
+│   │                                   │   │   ├── TxtController.kt
+│   │                                   │   │   ├── TxtLocatorMapper.kt
+│   │                                   │   │   ├── TxtNavigationHistory.kt
+│   │                                   │   │   ├── TxtPageSliceCache.kt
+│   │                                   │   │   └── TxtTextMapping.kt
+│   │                                   │   ├── open
+│   │                                   │   │   ├── TxtCharsetDetector.kt
+│   │                                   │   │   ├── TxtDocument.kt
+│   │                                   │   │   └── TxtTextNormalizer.kt
+│   │                                   │   ├── paging
+│   │                                   │   │   ├── IntArrayList.kt
+│   │                                   │   │   ├── KeyHash.kt
+│   │                                   │   │   ├── PageStartsCodec.kt
+│   │                                   │   │   ├── PageStartsIndex.kt
+│   │                                   │   │   ├── PaginationCache.kt
+│   │                                   │   │   ├── RenderKey.kt
+│   │                                   │   │   ├── TxtLastPositionStore.kt
+│   │                                   │   │   ├── TxtPager.kt
+│   │                                   │   │   └── TxtPaginationStore.kt
+│   │                                   │   ├── provider
+│   │                                   │   │   ├── InMemoryAnnotationProvider.kt
+│   │                                   │   │   ├── TxtOutlineCache.kt
+│   │                                   │   │   ├── TxtOutlineProvider.kt
+│   │                                   │   │   ├── TxtOutlineTreeBuilder.kt
+│   │                                   │   │   ├── TxtSearchProvider.kt
+│   │                                   │   │   └── TxtTextProvider.kt
+│   │                                   │   ├── session
+│   │                                   │   │   └── TxtSession.kt
+│   │                                   │   ├── storage
+│   │                                   │   │   ├── BomUtil.kt
+│   │                                   │   │   ├── ChunkIndex.kt
+│   │                                   │   │   ├── IndexedTxtTextStore.kt
+│   │                                   │   │   ├── InMemoryTxtTextStore.kt
+│   │                                   │   │   ├── TxtTextStore.kt
+│   │                                   │   │   └── TxtTextStoreFactory.kt
+│   │                                   │   └── util
+│   │                                   │       └── ReaderErrors.kt
+│   │                                   ├── TxtEngine.kt
+│   │                                   └── TxtEngineConfig.kt
+│   ├── readium-src-inspect
+│   │   └── org
+│   │       └── readium
+│   │           └── r2
+│   │               ├── navigator
+│   │               │   ├── epub
+│   │               │   │   ├── EpubNavigatorFactory.kt
+│   │               │   │   ├── EpubNavigatorFragment.kt
+│   │               │   │   ├── EpubNavigatorViewModel.kt
+│   │               │   │   ├── EpubPreferences.kt
+│   │               │   │   └── EpubSettings.kt
+│   │               │   ├── preferences
+│   │               │   │   └── Types.kt
+│   │               │   ├── DecorableNavigator.kt
+│   │               │   ├── Navigator.kt
+│   │               │   ├── SelectableNavigator.kt
+│   │               │   └── VisualNavigator.kt
+│   │               ├── shared
+│   │               │   ├── publication
+│   │               │   │   ├── services
+│   │               │   │   │   ├── search
+│   │               │   │   │   │   ├── SearchService.kt
+│   │               │   │   │   │   └── StringSearchService.kt
+│   │               │   │   │   ├── ContentProtectionService.kt
+│   │               │   │   │   ├── LocatorService.kt
+│   │               │   │   │   └── PositionsService.kt
+│   │               │   │   ├── Contributor.kt
+│   │               │   │   ├── Link.kt
+│   │               │   │   ├── Locator.kt
+│   │               │   │   ├── Manifest.kt
+│   │               │   │   ├── Metadata.kt
+│   │               │   │   └── Publication.kt
+│   │               │   └── util
+│   │               │       ├── asset
+│   │               │       │   └── AssetRetriever.kt
+│   │               │       ├── http
+│   │               │       │   └── DefaultHttpClient.kt
+│   │               │       ├── mediatype
+│   │               │       │   └── MediaType.kt
+│   │               │       └── Url.kt
+│   │               └── streamer
+│   │                   ├── parser
+│   │                   │   └── PublicationParser.kt
+│   │                   └── PublicationOpener.kt
+│   └── tmp
+│       ├── readium-src-nav
+│       │   └── org
+│       │       └── readium
+│       │           └── r2
+│       │               └── navigator
+│       │                   ├── epub
+│       │                   │   ├── extensions
+│       │                   │   │   └── Decoration.kt
+│       │                   │   └── EpubNavigatorFragment.kt
+│       │                   ├── preferences
+│       │                   │   └── Configurable.kt
+│       │                   ├── DecorableNavigator.kt
+│       │                   └── SelectableNavigator.kt
+│       ├── readium-src-shared
+│       │   └── org
+│       │       └── readium
+│       │           └── r2
+│       │               └── shared
+│       │                   ├── accessibility
+│       │                   │   ├── AccessibilityDisplayString.kt
+│       │                   │   └── AccessibilityMetadataDisplayGuide.kt
+│       │                   ├── extensions
+│       │                   │   ├── Bitmap.kt
+│       │                   │   ├── ByteArray.kt
+│       │                   │   ├── ContentResolver.kt
+│       │                   │   ├── Exception.kt
+│       │                   │   ├── File.kt
+│       │                   │   ├── Float.kt
+│       │                   │   ├── Flow.kt
+│       │                   │   ├── InputStream.kt
+│       │                   │   ├── Iterable.kt
+│       │                   │   ├── JSON.kt
+│       │                   │   ├── LongRange.kt
+│       │                   │   ├── Map.kt
+│       │                   │   ├── String.kt
+│       │                   │   └── URL.kt
+│       │                   ├── opds
+│       │                   │   ├── Acquisition.kt
+│       │                   │   ├── Availability.kt
+│       │                   │   ├── Copies.kt
+│       │                   │   ├── Facet.kt
+│       │                   │   ├── Feed.kt
+│       │                   │   ├── Group.kt
+│       │                   │   ├── Holds.kt
+│       │                   │   ├── OpdsMetadata.kt
+│       │                   │   └── Price.kt
+│       │                   ├── publication
+│       │                   │   ├── encryption
+│       │                   │   │   ├── Encryption.kt
+│       │                   │   │   └── Properties.kt
+│       │                   │   ├── epub
+│       │                   │   │   ├── EpubEncryptionParser.kt
+│       │                   │   │   ├── EpubLayout.kt
+│       │                   │   │   ├── Presentation.kt
+│       │                   │   │   ├── Properties.kt
+│       │                   │   │   └── Publication.kt
+│       │                   │   ├── html
+│       │                   │   │   ├── DomRange.kt
+│       │                   │   │   └── Locator.kt
+│       │                   │   ├── opds
+│       │                   │   │   ├── Properties.kt
+│       │                   │   │   └── Publication.kt
+│       │                   │   ├── presentation
+│       │                   │   │   ├── Metadata.kt
+│       │                   │   │   ├── Presentation.kt
+│       │                   │   │   └── Properties.kt
+│       │                   │   ├── protection
+│       │                   │   │   ├── ContentProtection.kt
+│       │                   │   │   └── FallbackContentProtection.kt
+│       │                   │   ├── services
+│       │                   │   │   ├── content
+│       │                   │   │   │   ├── iterators
+│       │                   │   │   │   │   ├── HtmlResourceContentIterator.kt
+│       │                   │   │   │   │   └── PublicationContentIterator.kt
+│       │                   │   │   │   ├── Content.kt
+│       │                   │   │   │   ├── ContentService.kt
+│       │                   │   │   │   └── ContentTokenizer.kt
+│       │                   │   │   ├── search
+│       │                   │   │   │   ├── SearchService.kt
+│       │                   │   │   │   └── StringSearchService.kt
+│       │                   │   │   ├── CacheService.kt
+│       │                   │   │   ├── ContentProtectionService.kt
+│       │                   │   │   ├── CoverService.kt
+│       │                   │   │   ├── LocatorService.kt
+│       │                   │   │   └── PositionsService.kt
+│       │                   │   ├── Accessibility.kt
+│       │                   │   ├── Collection.kt
+│       │                   │   ├── Contributor.kt
+│       │                   │   ├── Href.kt
+│       │                   │   ├── HrefNormalizer.kt
+│       │                   │   ├── Link.kt
+│       │                   │   ├── LocalizedString.kt
+│       │                   │   ├── Locator.kt
+│       │                   │   ├── Manifest.kt
+│       │                   │   ├── ManifestTransformer.kt
+│       │                   │   ├── Metadata.kt
+│       │                   │   ├── Properties.kt
+│       │                   │   ├── Publication.kt
+│       │                   │   ├── PublicationCollection.kt
+│       │                   │   ├── PublicationServicesHolder.kt
+│       │                   │   ├── ReadingProgression.kt
+│       │                   │   ├── Subject.kt
+│       │                   │   └── Tdm.kt
+│       │                   ├── util
+│       │                   │   ├── archive
+│       │                   │   │   ├── ArchiveOpener.kt
+│       │                   │   │   └── ArchiveProperties.kt
+│       │                   │   ├── asset
+│       │                   │   │   ├── Asset.kt
+│       │                   │   │   ├── AssetRetriever.kt
+│       │                   │   │   ├── AssetSniffer.kt
+│       │                   │   │   └── Defaults.kt
+│       │                   │   ├── cache
+│       │                   │   │   └── Cache.kt
+│       │                   │   ├── content
+│       │                   │   │   ├── ContentResolverError.kt
+│       │                   │   │   ├── ContentResource.kt
+│       │                   │   │   └── ContentResourceFactory.kt
+│       │                   │   ├── data
+│       │                   │   │   ├── Buffering.kt
+│       │                   │   │   ├── Caching.kt
+│       │                   │   │   ├── Container.kt
+│       │                   │   │   ├── Decoding.kt
+│       │                   │   │   ├── InputStream.kt
+│       │                   │   │   └── Reading.kt
+│       │                   │   ├── file
+│       │                   │   │   ├── DirectoryContainer.kt
+│       │                   │   │   ├── FileResource.kt
+│       │                   │   │   ├── FileResourceFactory.kt
+│       │                   │   │   └── FileSystemError.kt
+│       │                   │   ├── format
+│       │                   │   │   ├── Format.kt
+│       │                   │   │   ├── Sniffers.kt
+│       │                   │   │   └── Sniffing.kt
+│       │                   │   ├── http
+│       │                   │   │   ├── DefaultHttpClient.kt
+│       │                   │   │   ├── HttpClient.kt
+│       │                   │   │   ├── HttpContainer.kt
+│       │                   │   │   ├── HttpError.kt
+│       │                   │   │   ├── HttpHeaders.kt
+│       │                   │   │   ├── HttpRequest.kt
+│       │                   │   │   ├── HttpResource.kt
+│       │                   │   │   ├── HttpResourceFactory.kt
+│       │                   │   │   ├── HttpResponse.kt
+│       │                   │   │   ├── HttpStatus.kt
+│       │                   │   │   └── ProblemDetails.kt
+│       │                   │   ├── io
+│       │                   │   │   └── CountingInputStream.kt
+│       │                   │   ├── logging
+│       │                   │   │   └── WarningLogger.kt
+│       │                   │   ├── mediatype
+│       │                   │   │   └── MediaType.kt
+│       │                   │   ├── pdf
+│       │                   │   │   └── PdfDocument.kt
+│       │                   │   ├── resource
+│       │                   │   │   ├── content
+│       │                   │   │   │   └── ResourceContentExtractor.kt
+│       │                   │   │   ├── BufferingResource.kt
+│       │                   │   │   ├── FallbackResource.kt
+│       │                   │   │   ├── FileProperties.kt
+│       │                   │   │   ├── InMemoryResource.kt
+│       │                   │   │   ├── LazyResource.kt
+│       │                   │   │   ├── Resource.kt
+│       │                   │   │   ├── ResourceFactory.kt
+│       │                   │   │   ├── SingleResourceContainer.kt
+│       │                   │   │   ├── StringResource.kt
+│       │                   │   │   ├── SynchronizedResource.kt
+│       │                   │   │   ├── TransformingContainer.kt
+│       │                   │   │   └── TransformingResource.kt
+│       │                   │   ├── tokenizer
+│       │                   │   │   ├── TextTokenizer.kt
+│       │                   │   │   └── Tokenizer.kt
+│       │                   │   ├── units
+│       │                   │   │   └── Hertz.kt
+│       │                   │   ├── xml
+│       │                   │   │   └── XmlParser.kt
+│       │                   │   ├── zip
+│       │                   │   │   ├── BufferedReadableChannel.kt
+│       │                   │   │   ├── CachingReadableChannel.kt
+│       │                   │   │   ├── FileZipArchiveProvider.kt
+│       │                   │   │   ├── FileZipContainer.kt
+│       │                   │   │   ├── ReadableChannelAdapter.kt
+│       │                   │   │   ├── StreamingZipArchiveProvider.kt
+│       │                   │   │   ├── StreamingZipContainer.kt
+│       │                   │   │   └── ZipArchiveOpener.kt
+│       │                   │   ├── Benchmarking.kt
+│       │                   │   ├── Closeable.kt
+│       │                   │   ├── CoroutineQueue.kt
+│       │                   │   ├── CursorList.kt
+│       │                   │   ├── Either.kt
+│       │                   │   ├── Error.kt
+│       │                   │   ├── Instant.kt
+│       │                   │   ├── Language.kt
+│       │                   │   ├── Lazy.kt
+│       │                   │   ├── MapCompanion.kt
+│       │                   │   ├── MemoryObserver.kt
+│       │                   │   ├── SingleJob.kt
+│       │                   │   ├── Try.kt
+│       │                   │   ├── URITemplate.kt
+│       │                   │   └── Url.kt
+│       │                   ├── JSONable.kt
+│       │                   ├── MediaOverlayNode.kt
+│       │                   ├── MediaOverlays.kt
+│       │                   └── OptIn.kt
+│       └── readium-src-streamer
+│           └── org
+│               └── readium
+│                   └── r2
+│                       └── streamer
+│                           ├── extensions
+│                           │   ├── Container.kt
+│                           │   ├── File.kt
+│                           │   ├── StringExt.kt
+│                           │   └── Url.kt
+│                           ├── parser
+│                           │   ├── audio
+│                           │   │   ├── AudioLocatorService.kt
+│                           │   │   └── AudioParser.kt
+│                           │   ├── epub
+│                           │   │   ├── AccessibilityAdapter.kt
+│                           │   │   ├── ClockValueParser.kt
+│                           │   │   ├── Constants.kt
+│                           │   │   ├── EpubDeobfuscator.kt
+│                           │   │   ├── EpubParser.kt
+│                           │   │   ├── EpubPositionsService.kt
+│                           │   │   ├── ManifestAdapter.kt
+│                           │   │   ├── MetadataAdapter.kt
+│                           │   │   ├── MetadataListHelpers.kt
+│                           │   │   ├── MetadataParser.kt
+│                           │   │   ├── NavigationDocumentParser.kt
+│                           │   │   ├── NcxParser.kt
+│                           │   │   ├── PackageDocument.kt
+│                           │   │   ├── PresentationAdapter.kt
+│                           │   │   ├── PropertyDataType.kt
+│                           │   │   ├── ResourceAdapter.kt
+│                           │   │   └── SmilParser.kt
+│                           │   ├── image
+│                           │   │   └── ImageParser.kt
+│                           │   ├── pdf
+│                           │   │   ├── PdfParser.kt
+│                           │   │   └── PdfPositionsService.kt
+│                           │   ├── readium
+│                           │   │   ├── LcpdfPositionsService.kt
+│                           │   │   └── ReadiumWebPubParser.kt
+│                           │   └── PublicationParser.kt
+│                           └── PublicationOpener.kt
+├── build-logic
+│   └── convention
+│       ├── build
+│       │   └── generated-sources
+│       │       ├── kotlin-dsl-accessors
+│       │       │   └── kotlin
+│       │       │       └── gradle
+│       │       │           └── kotlin
+│       │       │               └── dsl
+│       │       │                   └── accessors
+│       │       │                       ├── _1fecaaa69017c0b639000a1c9113da6f
+│       │       │                       │   ├── Accessors1fs3wrxdosf2ka31sf0gje7j1.kt
+│       │       │                       │   ├── Accessors1o14lwohrtsl26y7sjpg5nxh9.kt
+│       │       │                       │   ├── Accessors1vc5ojqnd7f0dgmcaq6blw3np.kt
+│       │       │                       │   ├── Accessors22lqpdpak3qpmy37wqy1qw17l.kt
+│       │       │                       │   ├── Accessors25okzv3t5f9ndaxmr2gbbk6r6.kt
+│       │       │                       │   ├── Accessors2fk7drs3cyp11dqshko5v1iq4.kt
+│       │       │                       │   ├── Accessors2g5epxeyye0j2zlp62h6aad2o.kt
+│       │       │                       │   ├── Accessors2g7vjsrso8j52iodhg0tff11g.kt
+│       │       │                       │   ├── Accessors2nqf0jd7tnlgoaus469s3yzvo.kt
+│       │       │                       │   ├── Accessors2qky2eojh91w0xj5jyia7c9lt.kt
+│       │       │                       │   ├── Accessors2y3qmtkmk3qb3zvtsnb7mkugk.kt
+│       │       │                       │   ├── Accessors30t2f6yfiutsmabi1tmq15qw8.kt
+│       │       │                       │   ├── Accessors337zjoz5qsbasch1okns2ran3.kt
+│       │       │                       │   ├── Accessors37tjhwvheu8bq0e6jokqe7tfx.kt
+│       │       │                       │   ├── Accessors3erpdjb5xlzct19ari9o1ualn.kt
+│       │       │                       │   ├── Accessors3g8bczlt7g0zdc4zg06md12mz.kt
+│       │       │                       │   ├── Accessors3lcthf961f3cqifvliyumu99f.kt
+│       │       │                       │   ├── Accessors3op0r6ttwyzgkfcu84v2ovb1d.kt
+│       │       │                       │   ├── Accessors3u8ph69ek2e5jp540mhz6dpxe.kt
+│       │       │                       │   ├── Accessors3z43w53nnfonayurfzc8m4wnj.kt
+│       │       │                       │   ├── Accessors400p2vbr8w1trtjqiz0qkgrnl.kt
+│       │       │                       │   ├── Accessors40f42suo4q76qw1urne49eo0m.kt
+│       │       │                       │   ├── Accessors44ybqista0s8gs1bcwfnka55k.kt
+│       │       │                       │   ├── Accessors4iyx9zxz4zi6yifd0x0vb2nqn.kt
+│       │       │                       │   ├── Accessors4qehku0p9fscm3xeaddworifc.kt
+│       │       │                       │   ├── Accessors4sewldgh518tpm34zx6sg3cq5.kt
+│       │       │                       │   ├── Accessors4utk9s9wkq1gwnfaumz2ci2i4.kt
+│       │       │                       │   ├── Accessors4vifg8gzy2a7k2v5ombthh1q1.kt
+│       │       │                       │   ├── Accessors4xjj5cwoccnv1ueo1z57aygvy.kt
+│       │       │                       │   ├── Accessors4xsvbsv0xr5dr62eja7ywms6f.kt
+│       │       │                       │   ├── Accessors4xvfemd9lvpi9b8esvyj9whba.kt
+│       │       │                       │   ├── Accessors4yaxtnbpkg64y49crl7pfoiph.kt
+│       │       │                       │   ├── Accessors54jzbiw56ns2oqpcbh1elzsro.kt
+│       │       │                       │   ├── Accessors5ahnjddwfewopj5p9tcumx3nz.kt
+│       │       │                       │   ├── Accessors5igw27crtgawysfpsiujyw959.kt
+│       │       │                       │   ├── Accessors5n84r8d0wlgk7ty6rfnleln5a.kt
+│       │       │                       │   ├── Accessors67q0lajwq7wg74m3cz5jc3ayu.kt
+│       │       │                       │   ├── Accessors6opw1s7r61hstwgakg6doc02s.kt
+│       │       │                       │   ├── Accessors6su2os1zvten8f40s35jyjjy6.kt
+│       │       │                       │   ├── Accessors6vdwjhcp8dvjsg2xoo69liytf.kt
+│       │       │                       │   ├── Accessors755qfgs1mebxgj2rkmtzq31iw.kt
+│       │       │                       │   ├── Accessors75xkem3lde4pem4br2cwiigyl.kt
+│       │       │                       │   ├── Accessors76y3pwxxefugsdk4ysgb6ees0.kt
+│       │       │                       │   ├── Accessors7aku3vjeg8daft93gf2grwhmt.kt
+│       │       │                       │   ├── Accessors7gwyi5l0uer6owf7iu635a0ml.kt
+│       │       │                       │   ├── Accessors7hfc7mtl7c7yydyful1vy1qzh.kt
+│       │       │                       │   ├── Accessors7x4qu5531xu7ktfs12jo4ysdn.kt
+│       │       │                       │   ├── Accessors85xt4dym90vciqd6uu6787r45.kt
+│       │       │                       │   ├── Accessors8caod4ihvpfyvapqxjgvkn3f3.kt
+│       │       │                       │   ├── Accessors8r3pzu8s5dgb513rury213rqp.kt
+│       │       │                       │   ├── Accessors8td4devrrwikhzxu1to1g92gq.kt
+│       │       │                       │   ├── Accessors98whoj51ui4r5h8p91zbn54pj.kt
+│       │       │                       │   ├── Accessors9adivy4f6l6d8g56phbztb03m.kt
+│       │       │                       │   ├── Accessors9tta56tlj7j7pbo2zpo3u1i94.kt
+│       │       │                       │   ├── Accessors9vima736ghgz222gu2to8zzdx.kt
+│       │       │                       │   ├── Accessors9vrma8vzwnl7z03k8r27uyhsp.kt
+│       │       │                       │   ├── Accessorsakm04274c22y1kwaaolwod9e9.kt
+│       │       │                       │   ├── Accessorsapq585jv1zsyn7qca8uyk26wa.kt
+│       │       │                       │   ├── Accessorsarn1h9iwtq4k7nkbaatlvxnbc.kt
+│       │       │                       │   ├── Accessorsatwx21vsjp6j3aqvlsnr74s73.kt
+│       │       │                       │   ├── Accessorsaw6xvodoeo2covzpy09nd0l1t.kt
+│       │       │                       │   ├── Accessorsb79i79k7aviornwuvyq7l346v.kt
+│       │       │                       │   ├── Accessorsbgzxaj6m8nz804ucgw3h4se8t.kt
+│       │       │                       │   ├── Accessorsbhj18kij3h6d7ssnuczhux6xm.kt
+│       │       │                       │   ├── Accessorsbinuh2dmy82szfgqwl4ef9ib0.kt
+│       │       │                       │   ├── Accessorsbu4celzmx94h5ebu8epruan0b.kt
+│       │       │                       │   ├── Accessorsbxw74g3otztqb39ge6a61agcw.kt
+│       │       │                       │   ├── Accessorsc0ibcv0380rfgbcgtea3zbicr.kt
+│       │       │                       │   ├── Accessorsc45ut2seuz3sbidt6jo530i2m.kt
+│       │       │                       │   ├── Accessorscezdufs7l7p6s9szrj0wtc3s7.kt
+│       │       │                       │   ├── Accessorscg6dv71k933p3puh25cs07s0a.kt
+│       │       │                       │   ├── Accessorscke8mzg7m3ox0h0d2xjigp6y5.kt
+│       │       │                       │   ├── Accessorscmejyt0dpu7fa2wz9lzfkhl96.kt
+│       │       │                       │   ├── Accessorscrn1jef4u3rcf4o72a8wsn7n0.kt
+│       │       │                       │   ├── Accessorsd9m6fkxq7ghqiwg81lfnu9t5.kt
+│       │       │                       │   ├── Accessorsd9v5jc44ay2w45lzvv9lvk5an.kt
+│       │       │                       │   ├── Accessorsdbt921k4ba3xhu4lycg5hkfe6.kt
+│       │       │                       │   ├── Accessorsdmsy3k8cm773hjrapu8p7awn7.kt
+│       │       │                       │   ├── Accessorsdqbo1shju2fvsk7apjsbytiyr.kt
+│       │       │                       │   ├── Accessorsdrmm11332nlkjzc9h83jsq6zx.kt
+│       │       │                       │   ├── Accessorse1map9aawudc3lc4td9g7tnda.kt
+│       │       │                       │   ├── Accessorse70wsgfmvqexvoyfpbz2vul7z.kt
+│       │       │                       │   ├── Accessorsechirmfpk0ykh1a173w9hvgpi.kt
+│       │       │                       │   ├── Accessorsecqt5ls3z468l1nhixbd6bnh.kt
+│       │       │                       │   ├── Accessorsefaf4qyddh684d3vhn1r8m4c8.kt
+│       │       │                       │   ├── Accessorserpuo9ri63i4ut3d5pyptv112.kt
+│       │       │                       │   ├── Accessorsex8wf65fx8jjukhb9w181r613.kt
+│       │       │                       │   ├── Accessorsexiottiqdoq5rm4qirwgv19fl.kt
+│       │       │                       │   ├── Accessorsf11l8bkjl2p5umjgiuxwmgh3s.kt
+│       │       │                       │   ├── Accessorsf3x1gshl0cel3bf2lk4k7ip0z.kt
+│       │       │                       │   ├── Accessorsnmns7jvnets03na1atu2vvoj.kt
+│       │       │                       │   ├── Accessorsru6gx7sfokphljom41w3ebxj.kt
+│       │       │                       │   ├── Accessorsspgwg3tig051v3x33c5t7bdc.kt
+│       │       │                       │   ├── AnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── ApiConfigurationAccessors.kt
+│       │       │                       │   ├── ApiElementsConfigurationAccessors.kt
+│       │       │                       │   ├── ArchivesConfigurationAccessors.kt
+│       │       │                       │   ├── CompileClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── CompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── DefaultConfigurationAccessors.kt
+│       │       │                       │   ├── ImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── ImplementationDependenciesMetadataConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinBuildToolsApiClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinCompilerClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinCompilerPluginClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinCompilerPluginClasspathMainConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinCompilerPluginClasspathTestConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinInternalAbiValidationConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinKlibCommonizerClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinNativeCompilerPluginClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinScriptDefConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinScriptDefExtensionsConfigurationAccessors.kt
+│       │       │                       │   ├── MainSourceElementsConfigurationAccessors.kt
+│       │       │                       │   ├── RuntimeClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── RuntimeElementsConfigurationAccessors.kt
+│       │       │                       │   ├── RuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestCompileClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── TestCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestImplementationDependenciesMetadataConfigurationAccessors.kt
+│       │       │                       │   ├── TestKotlinScriptDefConfigurationAccessors.kt
+│       │       │                       │   ├── TestKotlinScriptDefExtensionsConfigurationAccessors.kt
+│       │       │                       │   ├── TestResultsElementsForTestConfigurationAccessors.kt
+│       │       │                       │   ├── TestRuntimeClasspathConfigurationAccessors.kt
+│       │       │                       │   └── TestRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       ├── _3dfc63a612bb7993dc38df28b51798c6
+│       │       │                       │   ├── Accessors1173czsa7ja7w2mexw2ir8vxk.kt
+│       │       │                       │   ├── Accessors18mx1krkuc90esnomzbpb11g7.kt
+│       │       │                       │   ├── Accessors18qi9wbsz544quoiasm22ab71.kt
+│       │       │                       │   ├── Accessors1aoccg48dufdlqc0rl3hfsup0.kt
+│       │       │                       │   ├── Accessors1cuq4o4r2kj55gdpj6gk3cifu.kt
+│       │       │                       │   ├── Accessors1fs3wrxdosf2ka31sf0gje7j1.kt
+│       │       │                       │   ├── Accessors1pbwrpwa46bma0nhq5pvoup5x.kt
+│       │       │                       │   ├── Accessors1vc5ojqnd7f0dgmcaq6blw3np.kt
+│       │       │                       │   ├── Accessors27be6p69bhuzdtp70lxmtto7a.kt
+│       │       │                       │   ├── Accessors2cavy9tiocqxe3jj6td9tu45r.kt
+│       │       │                       │   ├── Accessors2g5epxeyye0j2zlp62h6aad2o.kt
+│       │       │                       │   ├── Accessors2pq4qbkgw08kp7jgu7kiayrk9.kt
+│       │       │                       │   ├── Accessors2qky2eojh91w0xj5jyia7c9lt.kt
+│       │       │                       │   ├── Accessors2sci8yewa96g0fyfhouaecr70.kt
+│       │       │                       │   ├── Accessors2y3qmtkmk3qb3zvtsnb7mkugk.kt
+│       │       │                       │   ├── Accessors30t2f6yfiutsmabi1tmq15qw8.kt
+│       │       │                       │   ├── Accessors39yytnr3xv8rjlrstfbzh8pp7.kt
+│       │       │                       │   ├── Accessors3erpdjb5xlzct19ari9o1ualn.kt
+│       │       │                       │   ├── Accessors3ff5178yd3tfz7cmjkootwwt8.kt
+│       │       │                       │   ├── Accessors3jt14nlnogwinkjtel30afhb4.kt
+│       │       │                       │   ├── Accessors3k3m07x2cnwcqo7oawsqxr192.kt
+│       │       │                       │   ├── Accessors3op0r6ttwyzgkfcu84v2ovb1d.kt
+│       │       │                       │   ├── Accessors3pz29iapgi6zl1s45x2okpfzf.kt
+│       │       │                       │   ├── Accessors3rz1mcc6o29wq8y55f2fy0sff.kt
+│       │       │                       │   ├── Accessors3tejglvjtecf6hu28l2xi2i15.kt
+│       │       │                       │   ├── Accessors3z43w53nnfonayurfzc8m4wnj.kt
+│       │       │                       │   ├── Accessors400p2vbr8w1trtjqiz0qkgrnl.kt
+│       │       │                       │   ├── Accessors41aw2ng8yahs7za1x82h6ffz8.kt
+│       │       │                       │   ├── Accessors44q8gz5xnfo96796l15qiwx0v.kt
+│       │       │                       │   ├── Accessors4iyx9zxz4zi6yifd0x0vb2nqn.kt
+│       │       │                       │   ├── Accessors4o40hwh7mbvaviscb2y7kw5jx.kt
+│       │       │                       │   ├── Accessors4peqkolg83a8rpss92bksm3rr.kt
+│       │       │                       │   ├── Accessors4qehku0p9fscm3xeaddworifc.kt
+│       │       │                       │   ├── Accessors4vifg8gzy2a7k2v5ombthh1q1.kt
+│       │       │                       │   ├── Accessors4wnk7encunccqh6o2w4utblp.kt
+│       │       │                       │   ├── Accessors4xsvbsv0xr5dr62eja7ywms6f.kt
+│       │       │                       │   ├── Accessors4yaxtnbpkg64y49crl7pfoiph.kt
+│       │       │                       │   ├── Accessors52i7ipmkiv8wig0xnxgzaiued.kt
+│       │       │                       │   ├── Accessors55y09rcymhok36mbzpl3idfub.kt
+│       │       │                       │   ├── Accessors5ahnjddwfewopj5p9tcumx3nz.kt
+│       │       │                       │   ├── Accessors5dsbm02chpefcwvpz3wzdur8u.kt
+│       │       │                       │   ├── Accessors5g8b4xr3h3udr02nqnpc0s99v.kt
+│       │       │                       │   ├── Accessors5igw27crtgawysfpsiujyw959.kt
+│       │       │                       │   ├── Accessors5n84r8d0wlgk7ty6rfnleln5a.kt
+│       │       │                       │   ├── Accessors5uod9b4wbm5ksn3u9km286z0.kt
+│       │       │                       │   ├── Accessors5zkw0pjyx4h2ioq94y7pr24zl.kt
+│       │       │                       │   ├── Accessors60lj5856i2tijfj2e85oblbr.kt
+│       │       │                       │   ├── Accessors61kov99om1lnxmyq7nrdnwe8o.kt
+│       │       │                       │   ├── Accessors6uvbj0b888v10k9awdksjpa1e.kt
+│       │       │                       │   ├── Accessors6xxk1z5t85qxm42bokz0ruxq7.kt
+│       │       │                       │   ├── Accessors755qfgs1mebxgj2rkmtzq31iw.kt
+│       │       │                       │   ├── Accessors7aku3vjeg8daft93gf2grwhmt.kt
+│       │       │                       │   ├── Accessors7n3vp8839ld0xhiu7wd2r1d91.kt
+│       │       │                       │   ├── Accessors7q803rnf3erz4sjumywias9ci.kt
+│       │       │                       │   ├── Accessors7tjndw5dv7mzft439ljcweyxb.kt
+│       │       │                       │   ├── Accessors7uppfq36rtxz55r6ichuy5s25.kt
+│       │       │                       │   ├── Accessors87ap2xullvrl5slfxppy00733.kt
+│       │       │                       │   ├── Accessors8c06hsrp9obh3k3x8d8esyon.kt
+│       │       │                       │   ├── Accessors8g8q0rlv9fmjeq4kh1pwpag9k.kt
+│       │       │                       │   ├── Accessors8jigku96o3h8yrpg9shz7f6w3.kt
+│       │       │                       │   ├── Accessors8td4devrrwikhzxu1to1g92gq.kt
+│       │       │                       │   ├── Accessors8x1288ogjya7usjn5dpazl1ll.kt
+│       │       │                       │   ├── Accessors92zw5fab9m6z2unbub7d4xbat.kt
+│       │       │                       │   ├── Accessors96evzc85mt8gmqakz3w5nbmth.kt
+│       │       │                       │   ├── Accessors98whoj51ui4r5h8p91zbn54pj.kt
+│       │       │                       │   ├── Accessors9d7tr195yo6t36nxv672kzau4.kt
+│       │       │                       │   ├── Accessors9mkn0up732w3htvamou69sdmi.kt
+│       │       │                       │   ├── Accessors9p6p9mdxlv5hox8z3udxn5dko.kt
+│       │       │                       │   ├── Accessors9tta56tlj7j7pbo2zpo3u1i94.kt
+│       │       │                       │   ├── Accessors9ue4tregnprbs6p824l74vfsr.kt
+│       │       │                       │   ├── Accessors9vima736ghgz222gu2to8zzdx.kt
+│       │       │                       │   ├── Accessorsaae8pe6xoygqqjn2ucbbg7auc.kt
+│       │       │                       │   ├── Accessorsakm04274c22y1kwaaolwod9e9.kt
+│       │       │                       │   ├── Accessorsapq585jv1zsyn7qca8uyk26wa.kt
+│       │       │                       │   ├── Accessorsawqb7nftcwravf337vc54ar3x.kt
+│       │       │                       │   ├── Accessorsayixzj45zw7mfwx6pag68jcsx.kt
+│       │       │                       │   ├── Accessorsb1ngz3weyjoas51nb7hk56v9a.kt
+│       │       │                       │   ├── Accessorsb4gkqrw0tj1sodw80f17l65ee.kt
+│       │       │                       │   ├── Accessorsbb09k6f0e70kui44t8hkezd80.kt
+│       │       │                       │   ├── Accessorsbcn9qh6pkcisxe6wua1p7txiv.kt
+│       │       │                       │   ├── Accessorsbdvaus7ty8g2vsjjcpdrwb08f.kt
+│       │       │                       │   ├── Accessorsbinuh2dmy82szfgqwl4ef9ib0.kt
+│       │       │                       │   ├── Accessorsbq1s7hmwspncjr4675bps0uu0.kt
+│       │       │                       │   ├── Accessorsbu4celzmx94h5ebu8epruan0b.kt
+│       │       │                       │   ├── Accessorsbxs87wijtbxbvpg679njri68e.kt
+│       │       │                       │   ├── Accessorsbyjwlb4x74jsdh5ebc6q40o0j.kt
+│       │       │                       │   ├── Accessorsc56gxp8227bgo400yi861xqul.kt
+│       │       │                       │   ├── Accessorsc704m4fpq6lccp5nw8f0d3mzy.kt
+│       │       │                       │   ├── Accessorschp5wfx6vuociaip7dyhnugcd.kt
+│       │       │                       │   ├── Accessorsckmresffwhju47hcnllt1ggs6.kt
+│       │       │                       │   ├── Accessorscmejyt0dpu7fa2wz9lzfkhl96.kt
+│       │       │                       │   ├── Accessorscn4vc8bpy3vvehjv9wxygewtf.kt
+│       │       │                       │   ├── Accessorscos8dg81v85o3lll35bb03wlq.kt
+│       │       │                       │   ├── Accessorscrbmd2dtip5urbk53zkvzivnm.kt
+│       │       │                       │   ├── Accessorscrn1jef4u3rcf4o72a8wsn7n0.kt
+│       │       │                       │   ├── Accessorsd4t3aonewmjlodxu4o0jb6ay0.kt
+│       │       │                       │   ├── Accessorsd767xgrydq0k2ghkmtsocv36t.kt
+│       │       │                       │   ├── Accessorsd9m6fkxq7ghqiwg81lfnu9t5.kt
+│       │       │                       │   ├── Accessorsde1zmz51bq0xlr19otdopf44v.kt
+│       │       │                       │   ├── Accessorsdrmm11332nlkjzc9h83jsq6zx.kt
+│       │       │                       │   ├── Accessorse3frbfhetr4o4k4pi9ck3xq53.kt
+│       │       │                       │   ├── Accessorse7hifog0thg0un6pqc8nrzvb8.kt
+│       │       │                       │   ├── Accessorsefaf4qyddh684d3vhn1r8m4c8.kt
+│       │       │                       │   ├── Accessorsegmjsl5a7larj07z49u653jtu.kt
+│       │       │                       │   ├── Accessorsejgvccwv4wel1zr2rdq6mcdt9.kt
+│       │       │                       │   ├── Accessorsem4n1bpcju4rtfgsb4e5t7z6k.kt
+│       │       │                       │   ├── Accessorserpuo9ri63i4ut3d5pyptv112.kt
+│       │       │                       │   ├── Accessorsexiottiqdoq5rm4qirwgv19fl.kt
+│       │       │                       │   ├── Accessorsez12sirl3hhbanjldmtgy7eug.kt
+│       │       │                       │   ├── Accessorsf11l8bkjl2p5umjgiuxwmgh3s.kt
+│       │       │                       │   ├── Accessorsf2dmt7j4b6zf7h6v6t1p19cag.kt
+│       │       │                       │   ├── Accessorspgr89rwkrunrf19at948xgnb.kt
+│       │       │                       │   ├── Accessorsrg2bovr8zakwt54cl58ejntg.kt
+│       │       │                       │   ├── Accessorsupjn0h716j16skce9j4spwor.kt
+│       │       │                       │   ├── AndroidJdkImageConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestDebugAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestDebugCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestDebugImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestDebugRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestReleaseAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestReleaseCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestReleaseImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestReleaseRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestUtilConfigurationAccessors.kt
+│       │       │                       │   ├── AnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── ApiConfigurationAccessors.kt
+│       │       │                       │   ├── ArchivesConfigurationAccessors.kt
+│       │       │                       │   ├── CompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── CompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── CoreLibraryDesugaringConfigurationAccessors.kt
+│       │       │                       │   ├── DebugAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── DebugApiConfigurationAccessors.kt
+│       │       │                       │   ├── DebugCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── DebugCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── DebugImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── DebugRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── DefaultConfigurationAccessors.kt
+│       │       │                       │   ├── ImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinBuildToolsApiClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinCompilerClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinCompilerPluginClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── LintChecksConfigurationAccessors.kt
+│       │       │                       │   ├── LintPublishConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseApiConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── RuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestDebugAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestDebugCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestDebugImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestDebugRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestReleaseAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestReleaseCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestReleaseImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestReleaseRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   └── TestRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       ├── _73fc14a4de891331f2b21e0a43f53547
+│       │       │                       │   ├── Accessors2g5epxeyye0j2zlp62h6aad2o.kt
+│       │       │                       │   ├── Accessors4xsvbsv0xr5dr62eja7ywms6f.kt
+│       │       │                       │   ├── Accessors637vts4szmhio8suq1gubvgzu.kt
+│       │       │                       │   ├── Accessors7nfkpul0nill7e8q1wqv7iy9p.kt
+│       │       │                       │   ├── Accessorsbinuh2dmy82szfgqwl4ef9ib0.kt
+│       │       │                       │   ├── Accessorsbu4celzmx94h5ebu8epruan0b.kt
+│       │       │                       │   └── Accessorsefaf4qyddh684d3vhn1r8m4c8.kt
+│       │       │                       ├── _b47b47dbdc0fcc8c6195eeefe53b59f4
+│       │       │                       │   ├── Accessors1173czsa7ja7w2mexw2ir8vxk.kt
+│       │       │                       │   ├── Accessors18mx1krkuc90esnomzbpb11g7.kt
+│       │       │                       │   ├── Accessors18qi9wbsz544quoiasm22ab71.kt
+│       │       │                       │   ├── Accessors1aoccg48dufdlqc0rl3hfsup0.kt
+│       │       │                       │   ├── Accessors1cuq4o4r2kj55gdpj6gk3cifu.kt
+│       │       │                       │   ├── Accessors1fs3wrxdosf2ka31sf0gje7j1.kt
+│       │       │                       │   ├── Accessors1pbwrpwa46bma0nhq5pvoup5x.kt
+│       │       │                       │   ├── Accessors1vc5ojqnd7f0dgmcaq6blw3np.kt
+│       │       │                       │   ├── Accessors27be6p69bhuzdtp70lxmtto7a.kt
+│       │       │                       │   ├── Accessors2cavy9tiocqxe3jj6td9tu45r.kt
+│       │       │                       │   ├── Accessors2g5epxeyye0j2zlp62h6aad2o.kt
+│       │       │                       │   ├── Accessors2pq4qbkgw08kp7jgu7kiayrk9.kt
+│       │       │                       │   ├── Accessors2qky2eojh91w0xj5jyia7c9lt.kt
+│       │       │                       │   ├── Accessors2sci8yewa96g0fyfhouaecr70.kt
+│       │       │                       │   ├── Accessors2y3qmtkmk3qb3zvtsnb7mkugk.kt
+│       │       │                       │   ├── Accessors30t2f6yfiutsmabi1tmq15qw8.kt
+│       │       │                       │   ├── Accessors32vsyrw8pztvou2kczwy9mk8u.kt
+│       │       │                       │   ├── Accessors39yytnr3xv8rjlrstfbzh8pp7.kt
+│       │       │                       │   ├── Accessors3erpdjb5xlzct19ari9o1ualn.kt
+│       │       │                       │   ├── Accessors3jt14nlnogwinkjtel30afhb4.kt
+│       │       │                       │   ├── Accessors3k3m07x2cnwcqo7oawsqxr192.kt
+│       │       │                       │   ├── Accessors3op0r6ttwyzgkfcu84v2ovb1d.kt
+│       │       │                       │   ├── Accessors3pz29iapgi6zl1s45x2okpfzf.kt
+│       │       │                       │   ├── Accessors3rz1mcc6o29wq8y55f2fy0sff.kt
+│       │       │                       │   ├── Accessors3tejglvjtecf6hu28l2xi2i15.kt
+│       │       │                       │   ├── Accessors3z43w53nnfonayurfzc8m4wnj.kt
+│       │       │                       │   ├── Accessors400p2vbr8w1trtjqiz0qkgrnl.kt
+│       │       │                       │   ├── Accessors41aw2ng8yahs7za1x82h6ffz8.kt
+│       │       │                       │   ├── Accessors44q8gz5xnfo96796l15qiwx0v.kt
+│       │       │                       │   ├── Accessors4iyx9zxz4zi6yifd0x0vb2nqn.kt
+│       │       │                       │   ├── Accessors4o40hwh7mbvaviscb2y7kw5jx.kt
+│       │       │                       │   ├── Accessors4qehku0p9fscm3xeaddworifc.kt
+│       │       │                       │   ├── Accessors4vifg8gzy2a7k2v5ombthh1q1.kt
+│       │       │                       │   ├── Accessors4wnk7encunccqh6o2w4utblp.kt
+│       │       │                       │   ├── Accessors4xsvbsv0xr5dr62eja7ywms6f.kt
+│       │       │                       │   ├── Accessors4yaxtnbpkg64y49crl7pfoiph.kt
+│       │       │                       │   ├── Accessors52i7ipmkiv8wig0xnxgzaiued.kt
+│       │       │                       │   ├── Accessors55y09rcymhok36mbzpl3idfub.kt
+│       │       │                       │   ├── Accessors5ahnjddwfewopj5p9tcumx3nz.kt
+│       │       │                       │   ├── Accessors5dsbm02chpefcwvpz3wzdur8u.kt
+│       │       │                       │   ├── Accessors5g8b4xr3h3udr02nqnpc0s99v.kt
+│       │       │                       │   ├── Accessors5igw27crtgawysfpsiujyw959.kt
+│       │       │                       │   ├── Accessors5n84r8d0wlgk7ty6rfnleln5a.kt
+│       │       │                       │   ├── Accessors5uod9b4wbm5ksn3u9km286z0.kt
+│       │       │                       │   ├── Accessors5zkw0pjyx4h2ioq94y7pr24zl.kt
+│       │       │                       │   ├── Accessors60lj5856i2tijfj2e85oblbr.kt
+│       │       │                       │   ├── Accessors61kov99om1lnxmyq7nrdnwe8o.kt
+│       │       │                       │   ├── Accessors62oq6kl5uwaz5l567ckewkxvd.kt
+│       │       │                       │   ├── Accessors6uvbj0b888v10k9awdksjpa1e.kt
+│       │       │                       │   ├── Accessors755qfgs1mebxgj2rkmtzq31iw.kt
+│       │       │                       │   ├── Accessors7aku3vjeg8daft93gf2grwhmt.kt
+│       │       │                       │   ├── Accessors7cddnu26duc8nxp06w1clhaoe.kt
+│       │       │                       │   ├── Accessors7n3vp8839ld0xhiu7wd2r1d91.kt
+│       │       │                       │   ├── Accessors7q803rnf3erz4sjumywias9ci.kt
+│       │       │                       │   ├── Accessors7tjndw5dv7mzft439ljcweyxb.kt
+│       │       │                       │   ├── Accessors7uppfq36rtxz55r6ichuy5s25.kt
+│       │       │                       │   ├── Accessors87ap2xullvrl5slfxppy00733.kt
+│       │       │                       │   ├── Accessors8c06hsrp9obh3k3x8d8esyon.kt
+│       │       │                       │   ├── Accessors8g8q0rlv9fmjeq4kh1pwpag9k.kt
+│       │       │                       │   ├── Accessors8jigku96o3h8yrpg9shz7f6w3.kt
+│       │       │                       │   ├── Accessors8td4devrrwikhzxu1to1g92gq.kt
+│       │       │                       │   ├── Accessors8x1288ogjya7usjn5dpazl1ll.kt
+│       │       │                       │   ├── Accessors92zw5fab9m6z2unbub7d4xbat.kt
+│       │       │                       │   ├── Accessors96evzc85mt8gmqakz3w5nbmth.kt
+│       │       │                       │   ├── Accessors98whoj51ui4r5h8p91zbn54pj.kt
+│       │       │                       │   ├── Accessors9d7tr195yo6t36nxv672kzau4.kt
+│       │       │                       │   ├── Accessors9mkn0up732w3htvamou69sdmi.kt
+│       │       │                       │   ├── Accessors9p6p9mdxlv5hox8z3udxn5dko.kt
+│       │       │                       │   ├── Accessors9tta56tlj7j7pbo2zpo3u1i94.kt
+│       │       │                       │   ├── Accessors9ue4tregnprbs6p824l74vfsr.kt
+│       │       │                       │   ├── Accessors9vima736ghgz222gu2to8zzdx.kt
+│       │       │                       │   ├── Accessorsaae8pe6xoygqqjn2ucbbg7auc.kt
+│       │       │                       │   ├── Accessorsakm04274c22y1kwaaolwod9e9.kt
+│       │       │                       │   ├── Accessorsapq585jv1zsyn7qca8uyk26wa.kt
+│       │       │                       │   ├── Accessorsawqb7nftcwravf337vc54ar3x.kt
+│       │       │                       │   ├── Accessorsayixzj45zw7mfwx6pag68jcsx.kt
+│       │       │                       │   ├── Accessorsb1ngz3weyjoas51nb7hk56v9a.kt
+│       │       │                       │   ├── Accessorsb4gkqrw0tj1sodw80f17l65ee.kt
+│       │       │                       │   ├── Accessorsbb09k6f0e70kui44t8hkezd80.kt
+│       │       │                       │   ├── Accessorsbcn9qh6pkcisxe6wua1p7txiv.kt
+│       │       │                       │   ├── Accessorsbdvaus7ty8g2vsjjcpdrwb08f.kt
+│       │       │                       │   ├── Accessorsbinuh2dmy82szfgqwl4ef9ib0.kt
+│       │       │                       │   ├── Accessorsbq1s7hmwspncjr4675bps0uu0.kt
+│       │       │                       │   ├── Accessorsbu4celzmx94h5ebu8epruan0b.kt
+│       │       │                       │   ├── Accessorsbxs87wijtbxbvpg679njri68e.kt
+│       │       │                       │   ├── Accessorsbyjwlb4x74jsdh5ebc6q40o0j.kt
+│       │       │                       │   ├── Accessorsc704m4fpq6lccp5nw8f0d3mzy.kt
+│       │       │                       │   ├── Accessorschp5wfx6vuociaip7dyhnugcd.kt
+│       │       │                       │   ├── Accessorsckmresffwhju47hcnllt1ggs6.kt
+│       │       │                       │   ├── Accessorscmejyt0dpu7fa2wz9lzfkhl96.kt
+│       │       │                       │   ├── Accessorscn4vc8bpy3vvehjv9wxygewtf.kt
+│       │       │                       │   ├── Accessorscos8dg81v85o3lll35bb03wlq.kt
+│       │       │                       │   ├── Accessorscrbmd2dtip5urbk53zkvzivnm.kt
+│       │       │                       │   ├── Accessorscrn1jef4u3rcf4o72a8wsn7n0.kt
+│       │       │                       │   ├── Accessorsd4t3aonewmjlodxu4o0jb6ay0.kt
+│       │       │                       │   ├── Accessorsd767xgrydq0k2ghkmtsocv36t.kt
+│       │       │                       │   ├── Accessorsd9m6fkxq7ghqiwg81lfnu9t5.kt
+│       │       │                       │   ├── Accessorsde1zmz51bq0xlr19otdopf44v.kt
+│       │       │                       │   ├── Accessorsdrmm11332nlkjzc9h83jsq6zx.kt
+│       │       │                       │   ├── Accessorsdtllks838a9bmyjpxgd81empu.kt
+│       │       │                       │   ├── Accessorse3frbfhetr4o4k4pi9ck3xq53.kt
+│       │       │                       │   ├── Accessorse7hifog0thg0un6pqc8nrzvb8.kt
+│       │       │                       │   ├── Accessorsefaf4qyddh684d3vhn1r8m4c8.kt
+│       │       │                       │   ├── Accessorsegmjsl5a7larj07z49u653jtu.kt
+│       │       │                       │   ├── Accessorsejgvccwv4wel1zr2rdq6mcdt9.kt
+│       │       │                       │   ├── Accessorsem4n1bpcju4rtfgsb4e5t7z6k.kt
+│       │       │                       │   ├── Accessorserpuo9ri63i4ut3d5pyptv112.kt
+│       │       │                       │   ├── Accessorsexiottiqdoq5rm4qirwgv19fl.kt
+│       │       │                       │   ├── Accessorsez12sirl3hhbanjldmtgy7eug.kt
+│       │       │                       │   ├── Accessorsf11l8bkjl2p5umjgiuxwmgh3s.kt
+│       │       │                       │   ├── Accessorsf2dmt7j4b6zf7h6v6t1p19cag.kt
+│       │       │                       │   ├── Accessorspgr89rwkrunrf19at948xgnb.kt
+│       │       │                       │   ├── Accessorsrg2bovr8zakwt54cl58ejntg.kt
+│       │       │                       │   ├── Accessorsupjn0h716j16skce9j4spwor.kt
+│       │       │                       │   ├── AndroidJdkImageConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestDebugAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestDebugCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestDebugImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestDebugRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestReleaseAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestReleaseCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestReleaseImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestReleaseRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── AndroidTestUtilConfigurationAccessors.kt
+│       │       │                       │   ├── AnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── ApiConfigurationAccessors.kt
+│       │       │                       │   ├── ArchivesConfigurationAccessors.kt
+│       │       │                       │   ├── CompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── CompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── CoreLibraryDesugaringConfigurationAccessors.kt
+│       │       │                       │   ├── DebugAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── DebugApiConfigurationAccessors.kt
+│       │       │                       │   ├── DebugCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── DebugCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── DebugImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── DebugRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── DefaultConfigurationAccessors.kt
+│       │       │                       │   ├── ImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinBuildToolsApiClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinCompilerClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── KotlinCompilerPluginClasspathConfigurationAccessors.kt
+│       │       │                       │   ├── LintChecksConfigurationAccessors.kt
+│       │       │                       │   ├── LintPublishConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseApiConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── ReleaseRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── RuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestDebugAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestDebugCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestDebugImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestDebugRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesDebugRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseCompileOnlyApiConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesReleaseRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestFixturesRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestReleaseAnnotationProcessorConfigurationAccessors.kt
+│       │       │                       │   ├── TestReleaseCompileOnlyConfigurationAccessors.kt
+│       │       │                       │   ├── TestReleaseImplementationConfigurationAccessors.kt
+│       │       │                       │   ├── TestReleaseRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       │   └── TestRuntimeOnlyConfigurationAccessors.kt
+│       │       │                       └── _c4797de79829d8764cd1d19432473560
+│       │       │                           ├── Accessors2g5epxeyye0j2zlp62h6aad2o.kt
+│       │       │                           ├── Accessors4xsvbsv0xr5dr62eja7ywms6f.kt
+│       │       │                           ├── Accessors55me7wpst1rz9iws7sgcife9r.kt
+│       │       │                           ├── Accessors7ju5cypm5ugoivea57dfcjxg8.kt
+│       │       │                           ├── Accessorsbinuh2dmy82szfgqwl4ef9ib0.kt
+│       │       │                           ├── Accessorsbu4celzmx94h5ebu8epruan0b.kt
+│       │       │                           ├── Accessorsdhvf2040nzvlwfhyi96ibc1ms.kt
+│       │       │                           ├── Accessorsefaf4qyddh684d3vhn1r8m4c8.kt
+│       │       │                           └── KspConfigurationAccessors.kt
+│       │       ├── kotlin-dsl-external-plugin-spec-builders
+│       │       │   └── kotlin
+│       │       │       └── gradle
+│       │       │           └── kotlin
+│       │       │               └── dsl
+│       │       │                   └── plugins
+│       │       │                       └── _280b7b7b0fe2ccf090448bf142742752
+│       │       │                           └── PluginSpecBuilders.kt
+│       │       └── kotlin-dsl-plugins
+│       │           └── kotlin
+│       │               ├── Ireader_android_applicationPlugin.kt
+│       │               ├── Ireader_android_composePlugin.kt
+│       │               ├── Ireader_android_hiltPlugin.kt
+│       │               ├── Ireader_android_libraryPlugin.kt
+│       │               └── Ireader_kotlin_libraryPlugin.kt
+│       └── src
+│           └── main
+│               └── kotlin
+│                   └── com
+│                       └── ireader
+│                           └── buildlogic
+│                               ├── plugins
+│                               │   ├── AndroidApplicationConventionPlugin.kt
+│                               │   ├── AndroidComposeConventionPlugin.kt
+│                               │   ├── AndroidFeatureConventionPlugin.kt
+│                               │   ├── AndroidHiltConventionPlugin.kt
+│                               │   ├── AndroidLibraryConventionPlugin.kt
+│                               │   ├── DependencyGuardPlugin.kt
+│                               │   ├── KotlinLibraryConventionPlugin.kt
+│                               │   └── QualityConventionPlugin.kt
+│                               ├── AndroidConfig.kt
+│                               └── Libs.kt
+├── core
+│   ├── common
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── common
+│   │                               └── CoreCommonMarker.kt
+│   ├── common-android
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── common
+│   │                               └── android
+│   │                                   ├── surface
+│   │                                   │   ├── DefaultFragmentRenderSurface.kt
+│   │                                   │   └── FragmentRenderSurface.kt
+│   │                                   ├── typography
+│   │                                   │   ├── ReflowTypographyAndroidMapper.kt
+│   │                                   │   └── VisibleLastLineJustifier.kt
+│   │                                   └── CoreCommonAndroidMarker.kt
+│   ├── data
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── data
+│   │                               ├── book
+│   │                               │   ├── BookIndexer.kt
+│   │                               │   ├── BookMaintenanceScheduler.kt
+│   │                               │   ├── BookModels.kt
+│   │                               │   ├── BookRepo.kt
+│   │                               │   ├── JsonLocatorCodec.kt
+│   │                               │   ├── LibraryBookItem.kt
+│   │                               │   ├── LibraryQuery.kt
+│   │                               │   ├── LibrarySort.kt
+│   │                               │   ├── LibrarySqlBuilder.kt
+│   │                               │   ├── LocatorCodec.kt
+│   │                               │   ├── LocatorJsonCodec.kt
+│   │                               │   └── ProgressRepo.kt
+│   │                               └── importing
+│   │                                   ├── ImportItemRepo.kt
+│   │                                   └── ImportJobRepo.kt
+│   ├── database
+│   │   ├── build
+│   │   │   ├── generated
+│   │   │   │   └── ksp
+│   │   │   │       └── debug
+│   │   │   │           └── kotlin
+│   │   │   │               └── com
+│   │   │   │                   └── ireader
+│   │   │   │                       └── core
+│   │   │   │                           └── database
+│   │   │   │                               ├── annotation
+│   │   │   │                               │   └── AnnotationDao_Impl.kt
+│   │   │   │                               ├── book
+│   │   │   │                               │   └── BookDao_Impl.kt
+│   │   │   │                               ├── collection
+│   │   │   │                               │   ├── BookCollectionDao_Impl.kt
+│   │   │   │                               │   └── CollectionDao_Impl.kt
+│   │   │   │                               ├── importing
+│   │   │   │                               │   ├── ImportItemDao_Impl.kt
+│   │   │   │                               │   └── ImportJobDao_Impl.kt
+│   │   │   │                               ├── progress
+│   │   │   │                               │   └── ProgressDao_Impl.kt
+│   │   │   │                               └── ReaderDatabase_Impl.kt
+│   │   │   └── kspCaches
+│   │   │       └── debug
+│   │   │           └── backups
+│   │   │               └── kotlin
+│   │   │                   └── com
+│   │   │                       └── ireader
+│   │   │                           └── core
+│   │   │                               └── database
+│   │   │                                   ├── annotation
+│   │   │                                   │   └── AnnotationDao_Impl.kt
+│   │   │                                   ├── book
+│   │   │                                   │   └── BookDao_Impl.kt
+│   │   │                                   ├── collection
+│   │   │                                   │   ├── BookCollectionDao_Impl.kt
+│   │   │                                   │   └── CollectionDao_Impl.kt
+│   │   │                                   ├── importing
+│   │   │                                   │   ├── ImportItemDao_Impl.kt
+│   │   │                                   │   └── ImportJobDao_Impl.kt
+│   │   │                                   ├── progress
+│   │   │                                   │   └── ProgressDao_Impl.kt
+│   │   │                                   └── ReaderDatabase_Impl.kt
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── database
+│   │                               ├── annotation
+│   │                               │   ├── AnnotationDao.kt
+│   │                               │   └── AnnotationEntity.kt
+│   │                               ├── book
+│   │                               │   ├── BookDao.kt
+│   │                               │   ├── BookEntity.kt
+│   │                               │   ├── BookFtsEntity.kt
+│   │                               │   └── LibraryBookRow.kt
+│   │                               ├── collection
+│   │                               │   ├── BookCollectionDao.kt
+│   │                               │   ├── BookCollectionEntity.kt
+│   │                               │   ├── CollectionDao.kt
+│   │                               │   └── CollectionEntity.kt
+│   │                               ├── importing
+│   │                               │   ├── ImportItemDao.kt
+│   │                               │   ├── ImportItemEntity.kt
+│   │                               │   ├── ImportItemStatus.kt
+│   │                               │   ├── ImportJobDao.kt
+│   │                               │   ├── ImportJobEntity.kt
+│   │                               │   └── ImportStatus.kt
+│   │                               ├── progress
+│   │                               │   ├── ProgressDao.kt
+│   │                               │   └── ProgressEntity.kt
+│   │                               ├── DatabaseModule.kt
+│   │                               ├── DbConverters.kt
+│   │                               └── ReaderDatabase.kt
+│   ├── datastore
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── datastore
+│   │                               ├── reader
+│   │                               │   ├── DatastoreReaderSettingsStore.kt
+│   │                               │   ├── ReaderDisplayPrefs.kt
+│   │                               │   ├── ReaderSettingsModule.kt
+│   │                               │   └── ReaderSettingsStore.kt
+│   │                               └── DatastoreModuleMarker.kt
+│   ├── designsystem
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── designsystem
+│   │                               ├── IReaderTheme.kt
+│   │                               ├── PrototypeIcons.kt
+│   │                               └── ReaderTokens.kt
+│   ├── files
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── files
+│   │                               ├── di
+│   │                               │   ├── BookSourceResolverModule.kt
+│   │                               │   ├── FileAccessModule.kt
+│   │                               │   └── ImportModule.kt
+│   │                               ├── hash
+│   │                               │   └── Fingerprint.kt
+│   │                               ├── importing
+│   │                               │   ├── DefaultImportManager.kt
+│   │                               │   ├── DuplicateStrategy.kt
+│   │                               │   ├── ImportJobState.kt
+│   │                               │   ├── ImportManager.kt
+│   │                               │   ├── ImportRequest.kt
+│   │                               │   └── ImportWorkScheduler.kt
+│   │                               ├── permission
+│   │                               │   ├── UriPermissionGateway.kt
+│   │                               │   └── UriPermissionStore.kt
+│   │                               ├── scan
+│   │                               │   └── TreeScanner.kt
+│   │                               ├── source
+│   │                               │   ├── BookSourceResolver.kt
+│   │                               │   ├── ContentUriDocumentSource.kt
+│   │                               │   ├── DefaultBookSourceResolver.kt
+│   │                               │   ├── DocumentSource.kt
+│   │                               │   ├── FileDocumentSource.kt
+│   │                               │   └── UriDocumentSourceFactory.kt
+│   │                               └── storage
+│   │                                   └── BookStorage.kt
+│   ├── model
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── reader
+│   │                           └── model
+│   │                               ├── annotation
+│   │                               │   └── Annotation.kt
+│   │                               ├── BookFormat.kt
+│   │                               ├── DocumentCapabilities.kt
+│   │                               ├── DocumentId.kt
+│   │                               ├── DocumentMetadata.kt
+│   │                               ├── Geometry.kt
+│   │                               ├── Link.kt
+│   │                               ├── Locator.kt
+│   │                               ├── OutlineNode.kt
+│   │                               └── Progression.kt
+│   ├── navigation
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── navigation
+│   │                               └── AppRoutes.kt
+│   ├── reader
+│   │   ├── api
+│   │   │   └── src
+│   │   │       └── main
+│   │   │           └── kotlin
+│   │   │               └── com
+│   │   │                   └── ireader
+│   │   │                       └── reader
+│   │   │                           └── api
+│   │   │                               ├── annotation
+│   │   │                               │   └── Decoration.kt
+│   │   │                               ├── engine
+│   │   │                               │   ├── EngineRegistry.kt
+│   │   │                               │   ├── ReaderDocument.kt
+│   │   │                               │   ├── ReaderEngine.kt
+│   │   │                               │   └── ReaderSession.kt
+│   │   │                               ├── error
+│   │   │                               │   ├── ReaderError.kt
+│   │   │                               │   ├── ReaderResult.kt
+│   │   │                               │   └── ReaderResultExt.kt
+│   │   │                               ├── open
+│   │   │                               │   └── OpenOptions.kt
+│   │   │                               ├── provider
+│   │   │                               │   ├── AnnotationProvider.kt
+│   │   │                               │   ├── AnnotationStore.kt
+│   │   │                               │   ├── BlockingResourceProvider.kt
+│   │   │                               │   ├── OutlineProvider.kt
+│   │   │                               │   ├── ResourceProvider.kt
+│   │   │                               │   ├── SearchProvider.kt
+│   │   │                               │   ├── SelectionController.kt
+│   │   │                               │   ├── SelectionProvider.kt
+│   │   │                               │   └── TextProvider.kt
+│   │   │                               └── render
+│   │   │                                   ├── LayoutConstraints.kt
+│   │   │                                   ├── ReaderController.kt
+│   │   │                                   ├── ReflowSpacingConstraints.kt
+│   │   │                                   ├── ReflowTypography.kt
+│   │   │                                   ├── ReflowTypographySpec.kt
+│   │   │                                   ├── RenderConfig.kt
+│   │   │                                   ├── RenderConfigSanitizer.kt
+│   │   │                                   ├── RenderPage.kt
+│   │   │                                   ├── RenderPolicy.kt
+│   │   │                                   ├── RenderState.kt
+│   │   │                                   ├── RenderSurface.kt
+│   │   │                                   ├── TextMapping.kt
+│   │   │                                   └── TileProvider.kt
+│   │   └── runtime
+│   │       └── src
+│   │           └── main
+│   │               └── kotlin
+│   │                   └── com
+│   │                       └── ireader
+│   │                           └── reader
+│   │                               └── runtime
+│   │                                   ├── error
+│   │                                   │   └── ReaderErrorMapper.kt
+│   │                                   ├── flow
+│   │                                   │   └── ReaderFlowExt.kt
+│   │                                   ├── format
+│   │                                   │   ├── BookFormatDetector.kt
+│   │                                   │   └── DefaultBookFormatDetector.kt
+│   │                                   ├── registry
+│   │                                   │   └── EngineRegistryImpl.kt
+│   │                                   ├── render
+│   │                                   │   └── RenderDefaults.kt
+│   │                                   ├── DefaultReaderRuntime.kt
+│   │                                   ├── ReaderRuntime.kt
+│   │                                   └── ReaderSessionHandle.kt
+│   ├── testing
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── core
+│   │                           └── testing
+│   │                               ├── CoreTestingMarker.kt
+│   │                               └── MainDispatcherRule.kt
+│   └── work
+│       └── src
+│           └── main
+│               └── kotlin
+│                   └── com
+│                       └── ireader
+│                           └── core
+│                               └── work
+│                                   ├── di
+│                                   │   └── WorkModule.kt
+│                                   ├── enrich
+│                                   │   ├── epub
+│                                   │   │   └── EpubZipEnricher.kt
+│                                   │   ├── BitmapDecode.kt
+│                                   │   ├── BitmapIO.kt
+│                                   │   ├── CoverRenderer.kt
+│                                   │   ├── EnrichProgress.kt
+│                                   │   ├── EnrichWorker.kt
+│                                   │   ├── EnrichWorkerInput.kt
+│                                   │   └── ProgressThrottle.kt
+│                                   ├── index
+│                                   │   ├── DefaultBookIndexer.kt
+│                                   │   ├── MissingCheckWorker.kt
+│                                   │   ├── ReindexWorker.kt
+│                                   │   ├── ReindexWorkerInput.kt
+│                                   │   └── WorkBookMaintenanceScheduler.kt
+│                                   ├── notification
+│                                   │   └── ImportForeground.kt
+│                                   ├── ImportErrorMapper.kt
+│                                   ├── ImportWorker.kt
+│                                   ├── WorkImportScheduler.kt
+│                                   └── WorkNames.kt
+├── engines
+│   ├── engine-common
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── engines
+│   │                           └── common
+│   │                               ├── cache
+│   │                               │   └── LruCache.kt
+│   │                               ├── hash
+│   │                               │   └── Hashing.kt
+│   │                               ├── id
+│   │                               │   └── DocumentIds.kt
+│   │                               ├── io
+│   │                               │   ├── AtomicFiles.kt
+│   │                               │   ├── CloseableExt.kt
+│   │                               │   └── Varint.kt
+│   │                               ├── pagination
+│   │                               │   └── PageMap.kt
+│   │                               └── EngineCommonMarker.kt
+│   ├── engine-common-android
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── engines
+│   │                           └── common
+│   │                               └── android
+│   │                                   ├── controller
+│   │                                   │   └── BaseCoroutineReaderController.kt
+│   │                                   ├── error
+│   │                                   │   └── ReaderErrorMapping.kt
+│   │                                   ├── id
+│   │                                   │   └── SourceDocumentIds.kt
+│   │                                   ├── layout
+│   │                                   │   ├── StaticLayoutMeasurer.kt
+│   │                                   │   └── TextPaintFactory.kt
+│   │                                   ├── pagination
+│   │                                   │   └── ReflowPaginationProfile.kt
+│   │                                   ├── reflow
+│   │                                   │   ├── ParagraphSpacingSpan.kt
+│   │                                   │   ├── ReflowPageSlice.kt
+│   │                                   │   ├── ReflowPageSliceCache.kt
+│   │                                   │   ├── ReflowPaginationIndexStore.kt
+│   │                                   │   ├── ReflowPaginator.kt
+│   │                                   │   ├── ReflowSoftBreakIndex.kt
+│   │                                   │   ├── ReflowTextSource.kt
+│   │                                   │   ├── SoftBreakClassifier.kt
+│   │                                   │   ├── SoftBreakProcessor.kt
+│   │                                   │   └── SoftBreakRules.kt
+│   │                                   └── session
+│   │                                       └── BaseReaderSession.kt
+│   ├── epub
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── engines
+│   │                           └── epub
+│   │                               ├── di
+│   │                               │   └── EpubEngineModule.kt
+│   │                               ├── internal
+│   │                               │   ├── controller
+│   │                               │   │   └── EpubController.kt
+│   │                               │   ├── locator
+│   │                               │   │   └── ReadiumLocatorMapper.kt
+│   │                               │   ├── open
+│   │                               │   │   ├── EpubDocument.kt
+│   │                               │   │   ├── EpubLayoutDetector.kt
+│   │                               │   │   └── EpubOpener.kt
+│   │                               │   ├── provider
+│   │                               │   │   ├── EpubAnnotationProvider.kt
+│   │                               │   │   ├── EpubOutlineProvider.kt
+│   │                               │   │   ├── EpubResourceProvider.kt
+│   │                               │   │   ├── EpubSearchProvider.kt
+│   │                               │   │   ├── EpubSelectionProvider.kt
+│   │                               │   │   └── EpubTextProvider.kt
+│   │                               │   ├── readium
+│   │                               │   │   └── ReadiumEpubToolkit.kt
+│   │                               │   ├── render
+│   │                               │   │   ├── EpubDecorationsHost.kt
+│   │                               │   │   └── EpubPreferencesMapper.kt
+│   │                               │   └── session
+│   │                               │       └── EpubSession.kt
+│   │                               └── EpubEngine.kt
+│   ├── pdf
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── engines
+│   │                           └── pdf
+│   │                               ├── di
+│   │                               │   └── PdfEngineModule.kt
+│   │                               ├── internal
+│   │                               │   ├── backend
+│   │                               │   │   ├── pdfium
+│   │                               │   │   │   └── PdfiumBackend.kt
+│   │                               │   │   ├── platform
+│   │                               │   │   │   └── PlatformPdfBackend.kt
+│   │                               │   │   ├── BackendFactory.kt
+│   │                               │   │   ├── PdfBackend.kt
+│   │                               │   │   └── PdfBackendProvider.kt
+│   │                               │   ├── cache
+│   │                               │   │   ├── TileCache.kt
+│   │                               │   │   └── TileInflight.kt
+│   │                               │   ├── open
+│   │                               │   │   ├── OpenedPdf.kt
+│   │                               │   │   ├── PdfCacheFileStore.kt
+│   │                               │   │   ├── PdfDocument.kt
+│   │                               │   │   └── PdfOpener.kt
+│   │                               │   ├── provider
+│   │                               │   │   ├── PdfAnnotationProvider.kt
+│   │                               │   │   ├── PdfOutlineProvider.kt
+│   │                               │   │   ├── PdfSearchProvider.kt
+│   │                               │   │   ├── PdfSelectionManager.kt
+│   │                               │   │   └── PdfTextProvider.kt
+│   │                               │   ├── render
+│   │                               │   │   ├── FitTransform.kt
+│   │                               │   │   ├── PdfController.kt
+│   │                               │   │   └── PdfTileProvider.kt
+│   │                               │   ├── session
+│   │                               │   │   └── PdfSession.kt
+│   │                               │   └── util
+│   │                               │       └── PdfLocators.kt
+│   │                               ├── PdfEngine.kt
+│   │                               └── PdfEngineConfig.kt
+│   └── txt
+│       └── src
+│           └── main
+│               └── kotlin
+│                   └── com
+│                       └── ireader
+│                           └── engines
+│                               └── txt
+│                                   ├── di
+│                                   │   └── TxtEngineModule.kt
+│                                   ├── internal
+│                                   │   ├── encoding
+│                                   │   │   ├── EncodingDetector.kt
+│                                   │   │   └── EncodingScorer.kt
+│                                   │   ├── link
+│                                   │   │   └── LinkDetector.kt
+│                                   │   ├── locator
+│                                   │   │   └── TxtBlockLocatorCodec.kt
+│                                   │   ├── open
+│                                   │   │   ├── TxtBookFiles.kt
+│                                   │   │   ├── TxtDocument.kt
+│                                   │   │   ├── TxtMeta.kt
+│                                   │   │   ├── TxtOpener.kt
+│                                   │   │   ├── TxtOpenResult.kt
+│                                   │   │   ├── TxtSession.kt
+│                                   │   │   └── Utf16LeFileWriter.kt
+│                                   │   ├── provider
+│                                   │   │   ├── ChapterDetector.kt
+│                                   │   │   ├── KmpMatcher.kt
+│                                   │   │   ├── StoredTxtAnnotationProvider.kt
+│                                   │   │   ├── TxtOutlineProvider.kt
+│                                   │   │   ├── TxtSearchProviderPro.kt
+│                                   │   │   ├── TxtSelectionManager.kt
+│                                   │   │   └── TxtTextProvider.kt
+│                                   │   ├── render
+│                                   │   │   ├── TxtController.kt
+│                                   │   │   ├── TxtNavigationState.kt
+│                                   │   │   ├── TxtPageEndAdjuster.kt
+│                                   │   │   ├── TxtTextMapping.kt
+│                                   │   │   └── TxtTextSource.kt
+│                                   │   ├── search
+│                                   │   │   └── TrigramBloomIndex.kt
+│                                   │   ├── softbreak
+│                                   │   │   ├── SoftBreakIndex.kt
+│                                   │   │   └── SoftBreakIndexBuilder.kt
+│                                   │   └── store
+│                                   │       └── Utf16TextStore.kt
+│                                   ├── TxtEngine.kt
+│                                   └── TxtEngineConfig.kt
+├── feature
+│   ├── annotations
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── feature
+│   │                           └── annotations
+│   │                               ├── di
+│   │                               │   └── AnnotationsFeatureModule.kt
+│   │                               ├── domain
+│   │                               │   └── usecase
+│   │                               │       └── ObserveAnnotationsUseCase.kt
+│   │                               ├── navigation
+│   │                               │   └── AnnotationsRoute.kt
+│   │                               ├── presentation
+│   │                               │   └── AnnotationsViewModel.kt
+│   │                               └── ui
+│   │                                   └── AnnotationsScreen.kt
+│   ├── library
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── feature
+│   │                           └── library
+│   │                               ├── di
+│   │                               │   └── LibraryFeatureModule.kt
+│   │                               ├── domain
+│   │                               │   └── usecase
+│   │                               │       ├── AddToCollectionUseCase.kt
+│   │                               │       ├── DeleteBookUseCase.kt
+│   │                               │       ├── LoadLibraryUseCase.kt
+│   │                               │       ├── ObserveCollectionsUseCase.kt
+│   │                               │       ├── ObserveImportJobUseCase.kt
+│   │                               │       ├── ReindexBookUseCase.kt
+│   │                               │       ├── RelinkBookUseCase.kt
+│   │                               │       ├── RunMissingCheckUseCase.kt
+│   │                               │       ├── StartImportUseCase.kt
+│   │                               │       ├── ToggleFavoriteUseCase.kt
+│   │                               │       └── UpdateReadingStatusUseCase.kt
+│   │                               ├── navigation
+│   │                               │   ├── LibraryNavGraph.kt
+│   │                               │   └── LibraryRoute.kt
+│   │                               ├── presentation
+│   │                               │   ├── LibraryUiState.kt
+│   │                               │   └── LibraryViewModel.kt
+│   │                               └── ui
+│   │                                   ├── components
+│   │                                   │   ├── BitmapDecodeExt.kt
+│   │                                   │   ├── BookCover.kt
+│   │                                   │   ├── BookGridItem.kt
+│   │                                   │   └── CoverBitmapCache.kt
+│   │                                   └── LibraryScreen.kt
+│   ├── reader
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── feature
+│   │                           └── reader
+│   │                               ├── domain
+│   │                               │   ├── appearance
+│   │                               │   │   └── ReaderAppearanceConfig.kt
+│   │                               │   └── usecase
+│   │                               │       ├── ObserveEffectiveConfig.kt
+│   │                               │       ├── OpenReaderSession.kt
+│   │                               │       └── SaveReadingProgress.kt
+│   │                               ├── navigation
+│   │                               │   ├── ReaderNavGraph.kt
+│   │                               │   └── ReaderRoute.kt
+│   │                               ├── presentation
+│   │                               │   ├── EpubConfigSupport.kt
+│   │                               │   ├── PageTurnSupport.kt
+│   │                               │   ├── ReaderAnnotationDraftFactory.kt
+│   │                               │   ├── ReaderEffect.kt
+│   │                               │   ├── ReaderGestureInterpreter.kt
+│   │                               │   ├── ReaderHardwareKeyBridge.kt
+│   │                               │   ├── ReaderIntent.kt
+│   │                               │   ├── ReaderInteractionTracker.kt
+│   │                               │   ├── ReaderUiError.kt
+│   │                               │   ├── ReaderUiErrorMapper.kt
+│   │                               │   ├── ReaderUiReducer.kt
+│   │                               │   ├── ReaderUiState.kt
+│   │                               │   ├── ReaderViewModel.kt
+│   │                               │   ├── RenderCoordinator.kt
+│   │                               │   ├── SearchResultAccumulator.kt
+│   │                               │   ├── SessionCoordinator.kt
+│   │                               │   ├── TocPositionResolver.kt
+│   │                               │   └── UiText.kt
+│   │                               ├── ui
+│   │                               │   ├── components
+│   │                               │   │   ├── BitmapPage.kt
+│   │                               │   │   ├── ErrorPane.kt
+│   │                               │   │   ├── PageRenderer.kt
+│   │                               │   │   ├── PasswordDialog.kt
+│   │                               │   │   ├── SearchSheet.kt
+│   │                               │   │   ├── SettingsSheet.kt
+│   │                               │   │   ├── SliderQuantizer.kt
+│   │                               │   │   ├── TextPage.kt
+│   │                               │   │   └── TilesPage.kt
+│   │                               │   ├── ReaderChromeDefaults.kt
+│   │                               │   ├── ReaderScaffold.kt
+│   │                               │   ├── ReaderScreen.kt
+│   │                               │   └── ReaderSurface.kt
+│   │                               └── web
+│   │                                   └── ExternalLinkPolicy.kt
+│   ├── search
+│   │   └── src
+│   │       └── main
+│   │           └── kotlin
+│   │               └── com
+│   │                   └── ireader
+│   │                       └── feature
+│   │                           └── search
+│   │                               ├── di
+│   │                               │   └── SearchFeatureModule.kt
+│   │                               ├── domain
+│   │                               │   └── usecase
+│   │                               │       └── SearchInBookUseCase.kt
+│   │                               ├── navigation
+│   │                               │   └── SearchRoute.kt
+│   │                               ├── presentation
+│   │                               │   └── SearchViewModel.kt
+│   │                               └── ui
+│   │                                   └── SearchScreen.kt
+│   └── settings
+│       └── src
+│           └── main
+│               └── kotlin
+│                   └── com
+│                       └── ireader
+│                           └── feature
+│                               └── settings
+│                                   ├── di
+│                                   │   └── SettingsFeatureModule.kt
+│                                   ├── domain
+│                                   │   └── usecase
+│                                   │       └── ObserveReaderSettingsUseCase.kt
+│                                   ├── navigation
+│                                   │   └── SettingsRoute.kt
+│                                   ├── presentation
+│                                   │   └── SettingsViewModel.kt
+│                                   └── ui
+│                                       └── SettingsScreen.kt
+└── org
+    └── readium
+        └── r2
+            ├── navigator
+            │   └── epub
+            │       ├── css
+            │       │   └── ReadiumCss.kt
+            │       ├── EpubDefaults.kt
+            │       ├── EpubPreferences.kt
+            │       ├── EpubPreferencesEditor.kt
+            │       ├── EpubSettings.kt
+            │       └── EpubSettingsResolver.kt
+            └── shared
+                ├── publication
+                │   └── Locator.kt
+                └── util
+                    ├── mediatype
+                    │   └── MediaType.kt
+                    └── Url.kt

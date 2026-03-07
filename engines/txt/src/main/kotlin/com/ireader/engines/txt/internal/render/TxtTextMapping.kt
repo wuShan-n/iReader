@@ -9,12 +9,12 @@ import com.ireader.reader.model.LocatorRange
 
 internal class TxtTextMapping(
     private val pageStart: Long,
-    private val pageEnd: Long
+    private val pageEnd: Long,
+    private val projectedBoundaryToRawOffsets: LongArray? = null
 ) : TextMapping {
 
     override fun locatorAt(charIndex: Int): Locator {
-        val clamped = charIndex.toLong().coerceAtLeast(0L)
-        val global = (pageStart + clamped).coerceAtMost(pageEnd)
+        val global = rawOffsetForBoundary(charIndex)
         return TxtBlockLocatorCodec.locatorForOffset(global, pageEnd)
     }
 
@@ -23,8 +23,8 @@ internal class TxtTextMapping(
         val localEnd = endChar.coerceAtLeast(0)
         val minLocal = minOf(localStart, localEnd)
         val maxLocal = maxOf(localStart, localEnd)
-        val startGlobal = (pageStart + minLocal.toLong()).coerceAtMost(pageEnd)
-        val endGlobal = (pageStart + maxLocal.toLong()).coerceAtMost(pageEnd)
+        val startGlobal = rawOffsetForBoundary(minLocal)
+        val endGlobal = rawOffsetForBoundary(maxLocal)
         return TxtBlockLocatorCodec.rangeForOffsets(
             startOffset = startGlobal,
             endOffset = endGlobal,
@@ -40,8 +40,38 @@ internal class TxtTextMapping(
         if (minGlobal < pageStart || maxGlobal > pageEnd) {
             return null
         }
-        val localStart = (minGlobal - pageStart).toInt()
-        val localEndExclusive = (maxGlobal - pageStart).toInt()
+        if (projectedBoundaryToRawOffsets == null) {
+            val localStart = (minGlobal - pageStart).toInt()
+            val localEndExclusive = (maxGlobal - pageStart).toInt()
+            return localStart until localEndExclusive
+        }
+        val localStart = lowerBound(projectedBoundaryToRawOffsets, minGlobal)
+        val localEndExclusive = lowerBound(projectedBoundaryToRawOffsets, maxGlobal)
         return localStart until localEndExclusive
+    }
+
+    private fun rawOffsetForBoundary(charIndex: Int): Long {
+        if (projectedBoundaryToRawOffsets == null) {
+            val clamped = charIndex.toLong().coerceAtLeast(0L)
+            return (pageStart + clamped).coerceAtMost(pageEnd)
+        }
+        val safe = charIndex.coerceIn(0, projectedBoundaryToRawOffsets.lastIndex)
+        return projectedBoundaryToRawOffsets[safe].coerceIn(pageStart, pageEnd)
+    }
+
+    private fun lowerBound(boundaries: LongArray, target: Long): Int {
+        var low = 0
+        var high = boundaries.lastIndex
+        var answer = boundaries.lastIndex
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            if (boundaries[mid] >= target) {
+                answer = mid
+                high = mid - 1
+            } else {
+                low = mid + 1
+            }
+        }
+        return answer.coerceIn(0, boundaries.lastIndex)
     }
 }

@@ -10,17 +10,18 @@ package com.ireader.engines.txt.internal.softbreak
 
 import com.ireader.engines.common.android.reflow.SoftBreakClassifier
 import com.ireader.engines.common.android.reflow.SoftBreakClassifierContext
+import com.ireader.engines.common.android.reflow.SoftBreakDecisionReasons
 import com.ireader.engines.common.android.reflow.SoftBreakLineInfo
 import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
 import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
-import com.ireader.engines.txt.internal.open.TxtBookFiles
-import com.ireader.engines.txt.internal.open.TxtMeta
-import com.ireader.engines.txt.internal.provider.ChapterDetector
-import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.replaceFileAtomically
 import com.ireader.engines.common.io.writeStringUtf8
 import com.ireader.engines.common.io.writeVarLong
+import com.ireader.engines.txt.internal.open.TxtBookFiles
+import com.ireader.engines.txt.internal.open.TxtMeta
+import com.ireader.engines.txt.internal.provider.ChapterDetector
+import com.ireader.engines.txt.internal.store.Utf16TextStore
 import java.io.File
 import java.io.RandomAccessFile
 import kotlinx.coroutines.CoroutineDispatcher
@@ -30,8 +31,8 @@ import kotlin.coroutines.coroutineContext
 
 internal object SoftBreakIndexBuilder {
 
-    private const val MAGIC = "SBX1"
-    private const val VERSION = 6
+    private const val MAGIC = "BRK1"
+    private const val VERSION = 7
     private const val BLOCK_NEWLINES = 4096
     private const val MAX_TITLE_CHARS = 80
     private const val CHUNK_CHARS = 128 * 1024
@@ -46,12 +47,12 @@ internal object SoftBreakIndexBuilder {
         ioDispatcher: CoroutineDispatcher,
         profile: SoftBreakTuningProfile
     ) = withContext(ioDispatcher) {
-        val ruleConfig = SoftBreakRuleConfig.forProfile(profile)
-        if (!files.contentU16.exists()) {
+        val ruleConfig = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED)
+        if (!files.textStore.exists()) {
             return@withContext
         }
         SoftBreakIndex.openIfValid(
-            file = files.softBreakIdx,
+            file = files.breakMap,
             meta = meta,
             profile = profile,
             rulesVersion = ruleConfig.rulesVersion
@@ -60,10 +61,10 @@ internal object SoftBreakIndexBuilder {
         }
 
         files.bookDir.mkdirs()
-        RandomAccessFile(files.softBreakLock, "rw").channel.use { lockChannel ->
+        RandomAccessFile(files.breakLock, "rw").channel.use { lockChannel ->
             lockChannel.lock().use {
                 SoftBreakIndex.openIfValid(
-                    file = files.softBreakIdx,
+                    file = files.breakMap,
                     meta = meta,
                     profile = profile,
                     rulesVersion = ruleConfig.rulesVersion
@@ -71,7 +72,7 @@ internal object SoftBreakIndexBuilder {
                     return@withContext
                 }
 
-                val tmp = File(files.bookDir, "softbreak.idx.tmp")
+                val tmp = File(files.bookDir, "break.map.tmp")
                 prepareTempFile(tmp)
                 val blocks = ArrayList<SoftBreakIndex.BlockMeta>(128)
 
@@ -80,7 +81,7 @@ internal object SoftBreakIndexBuilder {
                     raf.write(MAGIC.toByteArray(Charsets.US_ASCII))
                     raf.writeInt(VERSION)
                     raf.writeInt(BLOCK_NEWLINES)
-                    raf.writeLong(meta.lengthChars)
+                    raf.writeLong(meta.lengthCodeUnits)
 
                     val newlineCountPos = raf.filePointer
                     raf.writeLong(0L)
@@ -91,7 +92,7 @@ internal object SoftBreakIndexBuilder {
                     raf.writeLong(0L)
 
                     val offsets = LongArray(BLOCK_NEWLINES)
-                    val flags = BooleanArray(BLOCK_NEWLINES)
+                    val states = ByteArray(BLOCK_NEWLINES)
                     var inBlock = 0
 
                     fun flushBlock() {
@@ -104,16 +105,7 @@ internal object SoftBreakIndexBuilder {
 
                         raf.writeInt(inBlock)
                         raf.writeLong(first)
-
-                        val flagsLen = (inBlock + 7) / 8
-                        val packedFlags = ByteArray(flagsLen)
-                        for (i in 0 until inBlock) {
-                            if (flags[i]) {
-                                packedFlags[i ushr 3] =
-                                    (packedFlags[i ushr 3].toInt() or (1 shl (i and 7))).toByte()
-                            }
-                        }
-                        raf.write(packedFlags)
+                        raf.write(states, 0, inBlock)
 
                         var prev = first
                         for (i in 1 until inBlock) {
@@ -207,7 +199,7 @@ internal object SoftBreakIndexBuilder {
                     )
                     var typicalUpdateCountdown = 0
 
-                    fun isSoftBreak(line0: SoftBreakLineInfo, line1: SoftBreakLineInfo): Boolean {
+                    fun classifyBreak(line0: SoftBreakLineInfo, line1: SoftBreakLineInfo): BreakMapState {
                         if (typicalUpdateCountdown <= 0) {
                             val typical = estimateTypicalLineLength()
                             if (typical != cachedTypicalLineLength) {
@@ -222,19 +214,41 @@ internal object SoftBreakIndexBuilder {
                         } else {
                             typicalUpdateCountdown--
                         }
-                        return SoftBreakClassifier.classify(
+                        if (line0.length == 0 || line1.length == 0) {
+                            return BreakMapState.HARD_PARAGRAPH
+                        }
+                        if (line0.isBoundaryTitle || line1.isBoundaryTitle) {
+                            return BreakMapState.HARD_PARAGRAPH
+                        }
+                        if (line1.startsWithListMarker || line1.startsWithDialogueMarker) {
+                            return BreakMapState.PRESERVE
+                        }
+                        val decision = SoftBreakClassifier.classify(
                             line0 = line0,
                             line1 = line1,
                             context = cachedContext
-                        ).isSoft
+                        )
+                        if (decision.isSoft) {
+                            return chooseSoftState(line0, line1)
+                        }
+                        if ((decision.reasons and SoftBreakDecisionReasons.INDENT_INCREASE) != 0 ||
+                            (decision.reasons and SoftBreakDecisionReasons.INDENT_SHIFT_IN_NORMAL) != 0 ||
+                            (decision.reasons and SoftBreakDecisionReasons.LIST_OR_DIALOGUE_START) != 0
+                        ) {
+                            return BreakMapState.PRESERVE
+                        }
+                        if (!meta.hardWrapLikely && decision.threshold - decision.score <= 1) {
+                            return BreakMapState.UNKNOWN
+                        }
+                        return BreakMapState.HARD_PARAGRAPH
                     }
 
                     data class Pending(val newlineOffset: Long, val line0: SoftBreakLineInfo)
                     var pending: Pending? = null
 
-                    fun recordNewline(offset: Long, isSoft: Boolean) {
+                    fun recordNewline(offset: Long, state: BreakMapState) {
                         offsets[inBlock] = offset
-                        flags[inBlock] = isSoft
+                        states[inBlock] = state.storageCode.toByte()
                         inBlock++
                         newlineCount++
                         if (inBlock >= BLOCK_NEWLINES) {
@@ -242,8 +256,8 @@ internal object SoftBreakIndexBuilder {
                         }
                     }
 
-                    Utf16TextStore(files.contentU16).use { store ->
-                        while (globalOffset < store.lengthChars) {
+                    Utf16TextStore(files.textStore).use { store ->
+                        while (globalOffset < store.lengthCodeUnits) {
                             coroutineContext.ensureActive()
                             val chunk = store.readChars(globalOffset, CHUNK_CHARS)
                             if (chunk.isEmpty()) {
@@ -262,7 +276,7 @@ internal object SoftBreakIndexBuilder {
                                     if (oldPending != null) {
                                         recordNewline(
                                             offset = oldPending.newlineOffset,
-                                            isSoft = isSoftBreak(oldPending.line0, currentLine)
+                                            state = classifyBreak(oldPending.line0, currentLine)
                                         )
                                     }
                                     pending = Pending(newlineOffset = offset, line0 = currentLine)
@@ -280,24 +294,29 @@ internal object SoftBreakIndexBuilder {
                                     }
                                     if (!c.isWhitespace()) {
                                         lastNonSpace = c
-                                    }
-                                    if (lineTitle.length < MAX_TITLE_CHARS) {
-                                        lineTitle.append(c)
+                                        if (lineTitle.length < MAX_TITLE_CHARS) {
+                                            lineTitle.append(c)
+                                        }
+                                    } else if (lineTitle.isNotEmpty() && lineTitle.length < MAX_TITLE_CHARS) {
+                                        lineTitle.append(' ')
                                     }
                                 }
                             }
                             globalOffset += chunk.size.toLong()
                         }
+
+                        val lastLine = finishLineIfHasData()
+                        val oldPending = pending
+                        if (oldPending != null) {
+                            val state = when {
+                                lastLine == null -> BreakMapState.HARD_PARAGRAPH
+                                else -> classifyBreak(oldPending.line0, lastLine)
+                            }
+                            recordNewline(offset = oldPending.newlineOffset, state = state)
+                        }
                     }
 
-                    val trailingLine = finishLineIfHasData()
-                    val pendingLine = pending
-                    if (pendingLine != null) {
-                        val soft = trailingLine != null && isSoftBreak(pendingLine.line0, trailingLine)
-                        recordNewline(pendingLine.newlineOffset, soft)
-                    }
                     flushBlock()
-
                     val indexOffset = raf.filePointer
                     raf.writeInt(blocks.size)
                     for (block in blocks) {
@@ -307,14 +326,50 @@ internal object SoftBreakIndexBuilder {
                         raf.writeInt(block.count)
                     }
 
-                    raf.seek(indexOffsetPos)
-                    raf.writeLong(indexOffset)
                     raf.seek(newlineCountPos)
                     raf.writeLong(newlineCount)
+                    raf.seek(indexOffsetPos)
+                    raf.writeLong(indexOffset)
                 }
 
-                replaceFileAtomically(tempFile = tmp, targetFile = files.softBreakIdx)
+                replaceFileAtomically(tempFile = tmp, targetFile = files.breakMap)
+                if (!files.breakPatch.exists()) {
+                    files.breakPatch.writeText("{}")
+                }
             }
         }
     }
+
+    private fun chooseSoftState(
+        line0: SoftBreakLineInfo,
+        line1: SoftBreakLineInfo
+    ): BreakMapState {
+        val prev = line0.lastNonSpace ?: return BreakMapState.SOFT_SPACE
+        val next = line1.firstNonSpace ?: return BreakMapState.SOFT_SPACE
+        if (shouldJoinWithoutSpace(prev, next)) {
+            return BreakMapState.SOFT_JOIN
+        }
+        return BreakMapState.SOFT_SPACE
+    }
+
+    private fun shouldJoinWithoutSpace(previous: Char, next: Char): Boolean {
+        if (previous == '-' && next.isLetterOrDigit()) {
+            return true
+        }
+        val previousCjk = Character.UnicodeScript.of(previous.code) in CJK_SCRIPTS
+        val nextCjk = Character.UnicodeScript.of(next.code) in CJK_SCRIPTS
+        if (previousCjk && nextCjk) {
+            return true
+        }
+        return previous in NO_SPACE_AFTER || next in NO_SPACE_BEFORE
+    }
+
+    private val NO_SPACE_AFTER = setOf('（', '【', '《', '“', '"', '\'', '「', '『', '—')
+    private val NO_SPACE_BEFORE = setOf('）', '】', '》', '”', '"', '\'', '、', '，', '。', '！', '？', '；', '：')
+    private val CJK_SCRIPTS = setOf(
+        Character.UnicodeScript.HAN,
+        Character.UnicodeScript.HIRAGANA,
+        Character.UnicodeScript.KATAKANA,
+        Character.UnicodeScript.HANGUL
+    )
 }

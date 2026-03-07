@@ -23,17 +23,8 @@ class TxtBlockLocatorCodecTest {
     }
 
     @Test
-    fun `parseOffset should decode legacy txt block`() {
-        val legacy = Locator(LocatorSchemes.TXT_BLOCK, "2048:73")
-        assertEquals(2_121L, TxtBlockLocatorCodec.parseOffset(legacy))
-    }
-
-    @Test
     fun `parseOffset should reject invalid values`() {
-        assertNull(TxtBlockLocatorCodec.parseOffset(Locator(LocatorSchemes.TXT_BLOCK, "a:b")))
-        assertNull(TxtBlockLocatorCodec.parseOffset(Locator(LocatorSchemes.TXT_BLOCK, "20")))
-        assertNull(TxtBlockLocatorCodec.parseOffset(Locator(LocatorSchemes.TXT_BLOCK, "10:-1")))
-        assertNull(TxtBlockLocatorCodec.parseOffset(Locator(LocatorSchemes.TXT_BLOCK, "10:4096")))
+        assertNull(TxtBlockLocatorCodec.parseOffset(Locator(LocatorSchemes.TXT_BLOCK, "2048:73")))
         assertNull(TxtBlockLocatorCodec.parseOffset(Locator(LocatorSchemes.TXT_OFFSET, "-1")))
     }
 }

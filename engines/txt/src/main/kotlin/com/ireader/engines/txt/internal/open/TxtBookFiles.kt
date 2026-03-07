@@ -5,12 +5,14 @@ import java.io.File
 internal data class TxtBookFiles(
     val bookDir: File,
     val lockFile: File,
-    val contentU16: File,
+    val textStore: File,
     val metaJson: File,
-    val outlineJson: File,
+    val outlineIdx: File,
     val paginationDir: File,
-    val softBreakIdx: File,
-    val softBreakLock: File,
-    val bloomIdx: File,
-    val bloomLock: File
+    val breakMap: File,
+    val breakLock: File,
+    val searchIdx: File,
+    val searchLock: File,
+    val blockIdx: File = File(bookDir, "block.idx"),
+    val breakPatch: File = File(bookDir, "break.patch")
 )
