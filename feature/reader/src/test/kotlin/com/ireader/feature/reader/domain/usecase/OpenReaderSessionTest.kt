@@ -3,6 +3,7 @@ package com.ireader.feature.reader.domain.usecase
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
+import com.ireader.core.datastore.reader.ReaderOpenSettingsSnapshot
 import com.ireader.core.datastore.reader.ReaderSettingsStore
 import com.ireader.core.files.source.DocumentSource
 import com.ireader.reader.api.engine.ReaderDocument
@@ -119,9 +120,11 @@ class OpenReaderSessionTest {
         )
 
         assertTrue(result is ReaderResult.Ok)
-        assertEquals(1, store.fixedGetCount)
+        assertEquals(0, store.fixedGetCount)
         assertEquals(0, store.reflowGetCount)
-        val resolvedConfig = runtime.lastResolvedConfig as RenderConfig.FixedPage
+        assertEquals(0, store.displayGetCount)
+        assertEquals(1, store.snapshotGetCount)
+        val resolvedConfig = runtime.lastEffectiveConfig as RenderConfig.FixedPage
         assertEquals(fixedConfig.copy(extra = resolvedConfig.extra), resolvedConfig)
         val resolvedExtra = resolvedConfig.extra
         assertDefaultAppearanceExtras(resolvedExtra)
@@ -139,17 +142,20 @@ class OpenReaderSessionTest {
 
         val result = useCase(
             source = FakeDocumentSource(),
-            options = OpenOptions(),
+            options = OpenOptions(hintFormat = BookFormat.TXT),
             initialLocator = null
         )
 
         assertTrue(result is ReaderResult.Ok)
         assertEquals(0, store.fixedGetCount)
-        assertEquals(1, store.reflowGetCount)
-        val resolvedConfig = runtime.lastResolvedConfig as RenderConfig.ReflowText
+        assertEquals(0, store.reflowGetCount)
+        assertEquals(0, store.displayGetCount)
+        assertEquals(1, store.snapshotGetCount)
+        val resolvedConfig = runtime.lastEffectiveConfig as RenderConfig.ReflowText
         assertEquals(reflowConfig.copy(extra = resolvedConfig.extra), resolvedConfig)
         val resolvedExtra = resolvedConfig.extra
         assertDefaultAppearanceExtras(resolvedExtra)
+        assertEquals(null, runtime.lastResolvedConfig)
     }
 
     private fun fixedCapabilities() = DocumentCapabilities(
@@ -176,6 +182,8 @@ private class FakeReaderSettingsStore(
 ) : ReaderSettingsStore {
     var reflowGetCount = 0
     var fixedGetCount = 0
+    var displayGetCount = 0
+    var snapshotGetCount = 0
 
     override val reflowConfig: Flow<RenderConfig.ReflowText> = flowOf(reflow)
     override val fixedConfig: Flow<RenderConfig.FixedPage> = flowOf(fixed)
@@ -191,7 +199,19 @@ private class FakeReaderSettingsStore(
         return fixed
     }
 
-    override suspend fun getDisplayPrefs(): ReaderDisplayPrefs = display
+    override suspend fun getDisplayPrefs(): ReaderDisplayPrefs {
+        displayGetCount++
+        return display
+    }
+
+    override suspend fun getOpenSettingsSnapshot(): ReaderOpenSettingsSnapshot {
+        snapshotGetCount++
+        return ReaderOpenSettingsSnapshot(
+            reflowConfig = reflow,
+            fixedConfig = fixed,
+            displayPrefs = display
+        )
+    }
 
     override suspend fun setReflowConfig(config: RenderConfig.ReflowText) = Unit
 
@@ -211,6 +231,8 @@ private class FakeRuntime(
     private val capabilitiesForConfig: DocumentCapabilities
 ) : ReaderRuntime {
     var lastResolvedConfig: RenderConfig? = null
+    var lastInitialConfig: RenderConfig? = null
+    var lastEffectiveConfig: RenderConfig? = null
     var lastSource: DocumentSource? = null
     var lastOptions: OpenOptions? = null
     var lastInitialLocator: Locator? = null
@@ -230,11 +252,9 @@ private class FakeRuntime(
         lastSource = source
         lastOptions = options
         lastInitialLocator = initialLocator
-        lastResolvedConfig = when {
-            initialConfig != null -> initialConfig
-            resolveInitialConfig != null -> resolveInitialConfig(capabilitiesForConfig)
-            else -> null
-        }
+        lastInitialConfig = initialConfig
+        lastResolvedConfig = resolveInitialConfig?.invoke(capabilitiesForConfig)
+        lastEffectiveConfig = initialConfig ?: lastResolvedConfig
         return openSessionResult
     }
 

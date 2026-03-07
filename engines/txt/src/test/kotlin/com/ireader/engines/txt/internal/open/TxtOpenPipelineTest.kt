@@ -9,7 +9,13 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.AnnotationQuery
+import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
+import com.ireader.reader.api.render.RenderPolicy
+import com.ireader.reader.api.render.TextLayoutInput
+import com.ireader.reader.api.render.TextLayoutMeasureResult
+import com.ireader.reader.api.render.TextLayouter
+import com.ireader.reader.api.render.TextLayouterFactory
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.annotation.Annotation
 import com.ireader.reader.model.annotation.AnnotationDraft
@@ -190,7 +196,7 @@ class TxtOpenPipelineTest {
             val meta = readSingleMeta(cacheDir)
 
             assertTrue(meta.getBoolean("hardWrapLikely"))
-            assertEquals(7, meta.getInt("version"))
+            assertEquals(8, meta.getInt("version"))
             cacheDir.deleteRecursively()
         }
     }
@@ -209,8 +215,84 @@ class TxtOpenPipelineTest {
             val meta = readSingleMeta(cacheDir)
 
             assertTrue(meta.getBoolean("hardWrapLikely"))
-            assertEquals(7, meta.getInt("version"))
+            assertEquals(8, meta.getInt("version"))
             cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `open should only create minimal artifacts before first render`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_minimal_open").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/minimal-open.txt"),
+                payload = sampleText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            val opened = engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk()
+            try {
+                val bookDir = readSingleMetaFile(cacheDir).parentFile
+                assertTrue(File(bookDir, "text.store").exists())
+                assertTrue(File(bookDir, "meta.json").exists())
+                assertTrue(File(bookDir, "manifest.json").exists())
+                assertFalse(File(bookDir, "block.idx").exists())
+                assertFalse(File(bookDir, "break.map").exists())
+
+                val manifest = readSingleNamedJson(cacheDir, "manifest.json")
+                assertFalse(manifest.getBoolean("blockIndexReady"))
+                assertFalse(manifest.getBoolean("breakMapReady"))
+            } finally {
+                opened.close()
+                cacheDir.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
+    fun `first render should rebuild derived artifacts in background`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_background_artifacts").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/background-artifacts.txt"),
+                payload = sampleText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            val opened = engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk()
+            try {
+                val session = opened.createSession(
+                    initialLocator = null,
+                    initialConfig = RenderConfig.ReflowText()
+                ).requireOk()
+                try {
+                    session.controller.setTextLayouterFactory(PipelineTextLayouterFactory).requireOkUnit()
+                    session.controller.setLayoutConstraints(defaultConstraints()).requireOkUnit()
+                    session.controller.render(RenderPolicy.Default).requireOk()
+                    var artifactsReady = false
+                    repeat(20) {
+                        val manifest = readSingleNamedJson(cacheDir, "manifest.json")
+                        if (manifest.getBoolean("blockIndexReady") && manifest.getBoolean("breakMapReady")) {
+                            artifactsReady = true
+                            return@repeat
+                        }
+                        Thread.sleep(25L)
+                    }
+                    assertTrue(artifactsReady)
+                } finally {
+                    session.close()
+                }
+
+                val bookDir = readSingleMetaFile(cacheDir).parentFile
+                assertTrue(File(bookDir, "block.idx").exists())
+                assertTrue(File(bookDir, "break.map").exists())
+                val manifest = readSingleNamedJson(cacheDir, "manifest.json")
+                assertTrue(manifest.getBoolean("blockIndexReady"))
+                assertTrue(manifest.getBoolean("breakMapReady"))
+            } finally {
+                opened.close()
+                cacheDir.deleteRecursively()
+            }
         }
     }
 
@@ -236,7 +318,7 @@ class TxtOpenPipelineTest {
             engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
             val rebuiltMeta = readSingleMeta(cacheDir)
 
-            assertEquals(7, rebuiltMeta.getInt("version"))
+            assertEquals(8, rebuiltMeta.getInt("version"))
             assertTrue(rebuiltMeta.getLong("createdAtEpochMs") > firstCreatedAt)
             cacheDir.deleteRecursively()
         }
@@ -262,8 +344,68 @@ class TxtOpenPipelineTest {
             engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
             val rebuiltMeta = readSingleMeta(cacheDir)
 
-            assertEquals(7, rebuiltMeta.getInt("version"))
+            assertEquals(8, rebuiltMeta.getInt("version"))
             assertTrue(rebuiltMeta.getLong("createdAtEpochMs") > firstCreatedAt)
+            cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `open should create session when cached block index is corrupted`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_cache_corrupted_block_idx").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/corrupted-block-idx.txt"),
+                payload = sampleText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            val firstCreatedAt = readSingleMeta(cacheDir).getLong("createdAtEpochMs")
+            val bookDir = readSingleMetaFile(cacheDir).parentFile
+            File(bookDir, "block.idx").writeText("corrupted")
+            val reopened = engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk()
+            try {
+                reopened.createSession(
+                    initialLocator = null,
+                    initialConfig = RenderConfig.ReflowText()
+                ).requireOk().close()
+            } finally {
+                reopened.close()
+            }
+
+            val rebuiltMeta = readSingleMeta(cacheDir)
+            assertEquals(firstCreatedAt, rebuiltMeta.getLong("createdAtEpochMs"))
+            cacheDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `open should create session when cached break map is corrupted`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_cache_corrupted_break_map").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/corrupted-break-map.txt"),
+                payload = sampleText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk().close()
+            val firstCreatedAt = readSingleMeta(cacheDir).getLong("createdAtEpochMs")
+            val bookDir = readSingleMetaFile(cacheDir).parentFile
+            File(bookDir, "break.map").writeText("corrupted")
+            val reopened = engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk()
+            try {
+                reopened.createSession(
+                    initialLocator = null,
+                    initialConfig = RenderConfig.ReflowText()
+                ).requireOk().close()
+            } finally {
+                reopened.close()
+            }
+
+            val rebuiltMeta = readSingleMeta(cacheDir)
+            assertEquals(firstCreatedAt, rebuiltMeta.getLong("createdAtEpochMs"))
             cacheDir.deleteRecursively()
         }
     }
@@ -310,12 +452,12 @@ class TxtOpenPipelineTest {
         return JSONObject(readSingleMetaFile(cacheDir).readText())
     }
 
+    private fun readSingleNamedJson(cacheDir: File, name: String): JSONObject {
+        return JSONObject(readSingleNamedFile(cacheDir, name).readText())
+    }
+
     private fun readSingleMetaFile(cacheDir: File): File {
-        val matches = readMetaFiles(cacheDir)
-        assertEquals(1, matches.size)
-        val file = matches.firstOrNull()
-        assertNotNull(file)
-        return file!!
+        return readSingleNamedFile(cacheDir, "meta.json")
     }
 
     private fun readMetaFiles(cacheDir: File): List<File> {
@@ -325,9 +467,33 @@ class TxtOpenPipelineTest {
             .toList()
     }
 
+    private fun readSingleNamedFile(cacheDir: File, name: String): File {
+        val matches = cacheDir
+            .walkTopDown()
+            .filter { it.isFile && it.name == name }
+            .toList()
+        assertEquals(1, matches.size)
+        val file = matches.firstOrNull()
+        assertNotNull(file)
+        return file!!
+    }
+
     private fun <T> ReaderResult<T>.requireOk(): T {
         return (this as? ReaderResult.Ok)?.value
             ?: error("Expected ReaderResult.Ok but was $this")
+    }
+
+    private fun ReaderResult<Unit>.requireOkUnit() {
+        requireOk()
+    }
+
+    private fun defaultConstraints(): LayoutConstraints {
+        return LayoutConstraints(
+            viewportWidthPx = 1080,
+            viewportHeightPx = 1920,
+            density = 3f,
+            fontScale = 1f
+        )
     }
 }
 
@@ -364,4 +530,63 @@ private class NoopAnnotationProvider(
 
     override suspend fun decorationsFor(query: AnnotationQuery): ReaderResult<List<Decoration>> =
         ReaderResult.Ok(emptyList())
+}
+
+private object PipelineTextLayouterFactory : TextLayouterFactory {
+    override val environmentKey: String = "txt-open-pipeline-test"
+
+    override fun create(cacheSize: Int): TextLayouter {
+        return object : TextLayouter {
+            override fun measure(
+                text: CharSequence,
+                input: TextLayoutInput
+            ): TextLayoutMeasureResult {
+                if (text.isEmpty() || input.widthPx <= 0 || input.heightPx <= 0) {
+                    return TextLayoutMeasureResult(
+                        endChar = 0,
+                        lineCount = 0,
+                        lastVisibleLine = -1
+                    )
+                }
+                val charsPerLine = (input.widthPx / 28).coerceAtLeast(8)
+                val lineHeightPx = 54
+                val maxLines = (input.heightPx / lineHeightPx).coerceAtLeast(1)
+                var line = 0
+                var column = 0
+                var endChar = 0
+                for (index in text.indices) {
+                    if (line >= maxLines) {
+                        break
+                    }
+                    val ch = text[index]
+                    if (ch == '\n') {
+                        endChar = index + 1
+                        line++
+                        column = 0
+                        continue
+                    }
+                    if (column >= charsPerLine) {
+                        line++
+                        column = 0
+                        if (line >= maxLines) {
+                            break
+                        }
+                    }
+                    column++
+                    endChar = index + 1
+                }
+                val visibleLineCount = when {
+                    endChar <= 0 -> 0
+                    line >= maxLines -> maxLines
+                    column > 0 -> line + 1
+                    else -> line.coerceAtLeast(1)
+                }
+                return TextLayoutMeasureResult(
+                    endChar = endChar,
+                    lineCount = visibleLineCount,
+                    lastVisibleLine = visibleLineCount - 1
+                )
+            }
+        }
+    }
 }

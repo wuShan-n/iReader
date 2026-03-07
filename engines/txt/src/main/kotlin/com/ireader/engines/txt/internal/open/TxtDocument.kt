@@ -64,7 +64,7 @@ internal class TxtDocument(
 
     private val blockIndex: TxtBlockIndex by lazy {
         TxtBlockIndex.openIfValid(files.blockIdx, meta)
-            ?: error("Missing or invalid block index at ${files.blockIdx.absolutePath}")
+            ?: TxtBlockIndex.minimal(meta)
     }
 
     override suspend fun metadata(): ReaderResult<DocumentMetadata> {
@@ -100,16 +100,12 @@ internal class TxtDocument(
                     ) ?: 0L
                 }.coerceIn(0L, store.lengthChars)
                 val annotationProvider = annotationProviderFactory?.invoke(id)
-                val breakIndex = requireNotNull(
-                    SoftBreakIndex.openIfValid(
-                        file = files.breakMap,
-                        meta = meta,
-                        profile = SoftBreakTuningProfile.BALANCED,
-                        rulesVersion = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED).rulesVersion
-                    )
-                ) {
-                    "Missing or invalid break map at ${files.breakMap.absolutePath}"
-                }
+                val breakIndex = SoftBreakIndex.openIfValid(
+                    file = files.breakMap,
+                    meta = meta,
+                    profile = SoftBreakTuningProfile.BALANCED,
+                    rulesVersion = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED).rulesVersion
+                )
                 val breakResolver = BreakResolver(
                     store = store,
                     files = files,
@@ -147,7 +143,6 @@ internal class TxtDocument(
                         files = files,
                         meta = meta,
                         blockIndex = blockIndex,
-                        breakIndex = breakIndex,
                         breakResolver = breakResolver,
                         blockStore = blockStore,
                         ioDispatcher = ioDispatcher,

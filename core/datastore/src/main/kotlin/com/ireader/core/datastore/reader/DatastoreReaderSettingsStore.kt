@@ -99,100 +99,26 @@ class DatastoreReaderSettingsStore @Inject constructor(
     private val defaultDisplay = ReaderDisplayPrefs()
 
     override val reflowConfig: Flow<RenderConfig.ReflowText> =
-        dataStore.data.map { prefs ->
-            val breakStrategy = prefs[Keys.Reflow.breakStrategy]
-                ?.let(::parseBreakStrategyMode)
-                ?: defaultReflow.breakStrategy
-            val hyphenationMode = prefs[Keys.Reflow.hyphenationMode]
-                ?.let(::parseHyphenationMode)
-                ?: defaultReflow.hyphenationMode
-            val includeFontPadding = prefs[Keys.Reflow.includeFontPadding]
-                ?: defaultReflow.includeFontPadding
-            val pageInsetMode = prefs[Keys.Reflow.pageInsetMode]
-                ?.let(::parsePageInsetMode)
-                ?: defaultReflow.pageInsetMode
-            val pageTurnMode = PageTurnMode.fromStorageValue(
-                prefs[Keys.Reflow.pageTurnMode]
-            )
-            val pageTurnStyle = normalizePageTurnStyleRaw(
-                raw = prefs[Keys.Reflow.pageTurnStyle]
-            )
-            val lineHeightMult = sanitizeLineHeightMult(prefs[Keys.Reflow.lineHeightMult])
-            val paragraphSpacingDp = sanitizeParagraphSpacingDp(prefs[Keys.Reflow.paragraphSpacingDp])
-            val pagePaddingDp = sanitizeHorizontalPaddingDp(prefs[Keys.Reflow.pagePaddingDp])
-            val pagePaddingTopDp = parsePaddingDpPreference(
-                raw = prefs[Keys.Reflow.pagePaddingTopDp],
-                fallback = pagePaddingDp
-            )
-            val pagePaddingBottomDp = parsePaddingDpPreference(
-                raw = prefs[Keys.Reflow.pagePaddingBottomDp],
-                fallback = pagePaddingDp
-            )
-
-            defaultReflow.copy(
-                fontSizeSp = prefs[Keys.Reflow.fontSizeSp] ?: defaultReflow.fontSizeSp,
-                lineHeightMult = lineHeightMult,
-                paragraphSpacingDp = paragraphSpacingDp,
-                pagePaddingDp = pagePaddingDp,
-                fontFamilyName = prefs[Keys.Reflow.fontFamilyName] ?: defaultReflow.fontFamilyName,
-                breakStrategy = breakStrategy,
-                hyphenationMode = hyphenationMode,
-                includeFontPadding = includeFontPadding,
-                pageInsetMode = pageInsetMode,
-                respectPublisherStyles = prefs[Keys.Reflow.respectPublisherStyles]
-                    ?: defaultReflow.respectPublisherStyles,
-                extra = defaultReflow.extra +
-                    (PAGE_TURN_EXTRA_KEY to pageTurnMode.storageValue) +
-                    (PAGE_TURN_STYLE_EXTRA_KEY to pageTurnStyle) +
-                    (PAGE_PADDING_TOP_DP_EXTRA_KEY to pagePaddingTopDp.toString()) +
-                    (PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to pagePaddingBottomDp.toString())
-            )
-        }.distinctUntilChanged()
+        dataStore.data.map(::mapReflowConfig).distinctUntilChanged()
 
     override val fixedConfig: Flow<RenderConfig.FixedPage> =
-        dataStore.data.map { prefs ->
-            val fitName = prefs[Keys.Fixed.fitMode] ?: defaultFixed.fitMode.name
-            val fitMode = runCatching { RenderConfig.FitMode.valueOf(fitName) }
-                .getOrElse { defaultFixed.fitMode }
-
-            defaultFixed.copy(
-                fitMode = fitMode,
-                zoom = prefs[Keys.Fixed.zoom] ?: defaultFixed.zoom,
-                rotationDegrees = prefs[Keys.Fixed.rotationDegrees] ?: defaultFixed.rotationDegrees
-            )
-        }.distinctUntilChanged()
+        dataStore.data.map(::mapFixedConfig).distinctUntilChanged()
 
     override val displayPrefs: Flow<ReaderDisplayPrefs> =
-        dataStore.data.map { prefs ->
-            ReaderDisplayPrefs(
-                brightness = (prefs[Keys.Display.brightness] ?: defaultDisplay.brightness)
-                    .coerceIn(0f, 1f),
-                useSystemBrightness = prefs[Keys.Display.useSystemBrightness]
-                    ?: defaultDisplay.useSystemBrightness,
-                eyeProtection = prefs[Keys.Display.eyeProtection]
-                    ?: defaultDisplay.eyeProtection,
-                nightMode = prefs[Keys.Display.nightMode] ?: defaultDisplay.nightMode,
-                backgroundPreset = ReaderBackgroundPreset.fromStorageValue(
-                    prefs[Keys.Display.backgroundPreset]
-                ),
-                showReadingProgress = prefs[Keys.Display.showReadingProgress]
-                    ?: defaultDisplay.showReadingProgress,
-                fullScreenMode = prefs[Keys.Display.fullScreenMode]
-                    ?: defaultDisplay.fullScreenMode,
-                volumeKeyPagingEnabled = prefs[Keys.Display.volumeKeyPagingEnabled]
-                    ?: defaultDisplay.volumeKeyPagingEnabled,
-                tapZonePreset = TapZonePreset.fromStorageValue(
-                    prefs[Keys.Display.tapZonePreset]
-                ),
-                preventAccidentalTurn = prefs[Keys.Display.preventAccidentalTurn]
-                    ?: defaultDisplay.preventAccidentalTurn
-            )
-        }.distinctUntilChanged()
+        dataStore.data.map(::mapDisplayPrefs).distinctUntilChanged()
 
     override suspend fun getReflowConfig(): RenderConfig.ReflowText = reflowConfig.first()
 
     override suspend fun getFixedConfig(): RenderConfig.FixedPage = fixedConfig.first()
     override suspend fun getDisplayPrefs(): ReaderDisplayPrefs = displayPrefs.first()
+    override suspend fun getOpenSettingsSnapshot(): ReaderOpenSettingsSnapshot {
+        val prefs = dataStore.data.first()
+        return ReaderOpenSettingsSnapshot(
+            reflowConfig = mapReflowConfig(prefs),
+            fixedConfig = mapFixedConfig(prefs),
+            displayPrefs = mapDisplayPrefs(prefs)
+        )
+    }
 
     override suspend fun setReflowConfig(config: RenderConfig.ReflowText) {
         val sanitizedConfig = config.sanitized()
@@ -313,6 +239,94 @@ class DatastoreReaderSettingsStore @Inject constructor(
 
     private fun defaultPageTurnStyleRaw(): String {
         return STYLE_COVER_OVERLAY
+    }
+
+    private fun mapReflowConfig(prefs: Preferences): RenderConfig.ReflowText {
+        val breakStrategy = prefs[Keys.Reflow.breakStrategy]
+            ?.let(::parseBreakStrategyMode)
+            ?: defaultReflow.breakStrategy
+        val hyphenationMode = prefs[Keys.Reflow.hyphenationMode]
+            ?.let(::parseHyphenationMode)
+            ?: defaultReflow.hyphenationMode
+        val includeFontPadding = prefs[Keys.Reflow.includeFontPadding]
+            ?: defaultReflow.includeFontPadding
+        val pageInsetMode = prefs[Keys.Reflow.pageInsetMode]
+            ?.let(::parsePageInsetMode)
+            ?: defaultReflow.pageInsetMode
+        val pageTurnMode = PageTurnMode.fromStorageValue(
+            prefs[Keys.Reflow.pageTurnMode]
+        )
+        val pageTurnStyle = normalizePageTurnStyleRaw(
+            raw = prefs[Keys.Reflow.pageTurnStyle]
+        )
+        val lineHeightMult = sanitizeLineHeightMult(prefs[Keys.Reflow.lineHeightMult])
+        val paragraphSpacingDp = sanitizeParagraphSpacingDp(prefs[Keys.Reflow.paragraphSpacingDp])
+        val pagePaddingDp = sanitizeHorizontalPaddingDp(prefs[Keys.Reflow.pagePaddingDp])
+        val pagePaddingTopDp = parsePaddingDpPreference(
+            raw = prefs[Keys.Reflow.pagePaddingTopDp],
+            fallback = pagePaddingDp
+        )
+        val pagePaddingBottomDp = parsePaddingDpPreference(
+            raw = prefs[Keys.Reflow.pagePaddingBottomDp],
+            fallback = pagePaddingDp
+        )
+
+        return defaultReflow.copy(
+            fontSizeSp = prefs[Keys.Reflow.fontSizeSp] ?: defaultReflow.fontSizeSp,
+            lineHeightMult = lineHeightMult,
+            paragraphSpacingDp = paragraphSpacingDp,
+            pagePaddingDp = pagePaddingDp,
+            fontFamilyName = prefs[Keys.Reflow.fontFamilyName] ?: defaultReflow.fontFamilyName,
+            breakStrategy = breakStrategy,
+            hyphenationMode = hyphenationMode,
+            includeFontPadding = includeFontPadding,
+            pageInsetMode = pageInsetMode,
+            respectPublisherStyles = prefs[Keys.Reflow.respectPublisherStyles]
+                ?: defaultReflow.respectPublisherStyles,
+            extra = defaultReflow.extra +
+                (PAGE_TURN_EXTRA_KEY to pageTurnMode.storageValue) +
+                (PAGE_TURN_STYLE_EXTRA_KEY to pageTurnStyle) +
+                (PAGE_PADDING_TOP_DP_EXTRA_KEY to pagePaddingTopDp.toString()) +
+                (PAGE_PADDING_BOTTOM_DP_EXTRA_KEY to pagePaddingBottomDp.toString())
+        )
+    }
+
+    private fun mapFixedConfig(prefs: Preferences): RenderConfig.FixedPage {
+        val fitName = prefs[Keys.Fixed.fitMode] ?: defaultFixed.fitMode.name
+        val fitMode = runCatching { RenderConfig.FitMode.valueOf(fitName) }
+            .getOrElse { defaultFixed.fitMode }
+
+        return defaultFixed.copy(
+            fitMode = fitMode,
+            zoom = prefs[Keys.Fixed.zoom] ?: defaultFixed.zoom,
+            rotationDegrees = prefs[Keys.Fixed.rotationDegrees] ?: defaultFixed.rotationDegrees
+        )
+    }
+
+    private fun mapDisplayPrefs(prefs: Preferences): ReaderDisplayPrefs {
+        return ReaderDisplayPrefs(
+            brightness = (prefs[Keys.Display.brightness] ?: defaultDisplay.brightness)
+                .coerceIn(0f, 1f),
+            useSystemBrightness = prefs[Keys.Display.useSystemBrightness]
+                ?: defaultDisplay.useSystemBrightness,
+            eyeProtection = prefs[Keys.Display.eyeProtection]
+                ?: defaultDisplay.eyeProtection,
+            nightMode = prefs[Keys.Display.nightMode] ?: defaultDisplay.nightMode,
+            backgroundPreset = ReaderBackgroundPreset.fromStorageValue(
+                prefs[Keys.Display.backgroundPreset]
+            ),
+            showReadingProgress = prefs[Keys.Display.showReadingProgress]
+                ?: defaultDisplay.showReadingProgress,
+            fullScreenMode = prefs[Keys.Display.fullScreenMode]
+                ?: defaultDisplay.fullScreenMode,
+            volumeKeyPagingEnabled = prefs[Keys.Display.volumeKeyPagingEnabled]
+                ?: defaultDisplay.volumeKeyPagingEnabled,
+            tapZonePreset = TapZonePreset.fromStorageValue(
+                prefs[Keys.Display.tapZonePreset]
+            ),
+            preventAccidentalTurn = prefs[Keys.Display.preventAccidentalTurn]
+                ?: defaultDisplay.preventAccidentalTurn
+        )
     }
 
     private companion object {

@@ -40,6 +40,9 @@ internal class TxtSearchProviderPro(
     private val bloomBuildScheduled = AtomicBoolean(false)
 
     fun warmup() {
+        if (!breakResolver.hasIndexedBreaks()) {
+            return
+        }
         if (meta.lengthCodeUnits >= WARMUP_MIN_CODE_UNITS) {
             scheduleBloomBuild()
         }
@@ -77,7 +80,10 @@ internal class TxtSearchProviderPro(
                 ?: 0L
         )
         val bloom = TrigramBloomIndex.openIfValid(files.searchIdx, meta)
-        if (bloom == null && normalizedQuery.length >= BLOOM_MIN_QUERY_LENGTH) {
+        if (bloom == null &&
+            normalizedQuery.length >= BLOOM_MIN_QUERY_LENGTH &&
+            breakResolver.hasIndexedBreaks()
+        ) {
             scheduleBloomBuild()
         }
 
@@ -89,6 +95,9 @@ internal class TxtSearchProviderPro(
     }
 
     private fun scheduleBloomBuild() {
+        if (!breakResolver.hasIndexedBreaks()) {
+            return
+        }
         if (!bloomBuildScheduled.compareAndSet(false, true)) {
             return
         }

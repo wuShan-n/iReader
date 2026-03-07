@@ -17,9 +17,9 @@ import com.ireader.engines.common.hash.Hashing
 import com.ireader.engines.txt.internal.encoding.EncodingDetector
 import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.replaceFileAtomically
+import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
 import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
-import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
-import com.ireader.engines.txt.internal.store.Utf16TextStore
+import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.DocumentId
@@ -45,9 +45,13 @@ internal class TxtOpener(
 ) {
 
     private val encodingDetector = EncodingDetector()
-    private val schemaVersion = 7
+    private val schemaVersion = 8
 
     suspend fun open(source: DocumentSource, options: OpenOptions): ReaderResult<TxtOpenResult> {
+        return openMinimal(source, options)
+    }
+
+    suspend fun openMinimal(source: DocumentSource, options: OpenOptions): ReaderResult<TxtOpenResult> {
         return withContext(ioDispatcher) {
             try {
                 cacheDir.mkdirs()
@@ -65,6 +69,10 @@ internal class TxtOpener(
                                 val detected = encodingResult.value.charset.name()
                                 val cached = tryLoadCached(files, source, sampleHash, detected)
                                 if (cached != null) {
+                                    writeArtifactManifest(
+                                        files = files,
+                                        manifest = refreshArtifactManifest(files = files, meta = cached)
+                                    )
                                     return@use ReaderResult.Ok(
                                         TxtOpenResult(
                                             documentId = documentId,
@@ -74,7 +82,7 @@ internal class TxtOpener(
                                     )
                                 }
 
-                                val rebuilt = buildCache(
+                                val rebuilt = buildMinimalCache(
                                     files = files,
                                     source = source,
                                     sampleHash = sampleHash,
@@ -106,9 +114,11 @@ internal class TxtOpener(
             lockFile = File(bookDir, "build.lock"),
             textStore = File(bookDir, "text.store"),
             metaJson = File(bookDir, "meta.json"),
+            manifestJson = File(bookDir, "manifest.json"),
             outlineIdx = File(bookDir, "outline.idx"),
             paginationDir = File(bookDir, "pagemap"),
             breakMap = File(bookDir, "break.map"),
+            blockLock = File(bookDir, "block.lock"),
             breakLock = File(bookDir, "break.lock"),
             searchIdx = File(bookDir, "search.idx"),
             searchLock = File(bookDir, "search.lock"),
@@ -162,13 +172,10 @@ internal class TxtOpener(
         if (meta.lengthCodeUnits != expectedCodeUnits) {
             return null
         }
-        if (!files.blockIdx.exists() || !files.breakMap.exists()) {
-            return null
-        }
         return meta
     }
 
-    private suspend fun buildCache(
+    private suspend fun buildMinimalCache(
         files: TxtBookFiles,
         source: DocumentSource,
         sampleHash: String,
@@ -192,28 +199,54 @@ internal class TxtOpener(
             lengthChars = content.lengthChars,
             lengthCodeUnits = content.lengthChars,
             hardWrapLikely = content.hardWrapLikely,
+            typicalLineLength = content.typicalLineLength,
             createdAtEpochMs = System.currentTimeMillis()
         )
         val metaTemp = File(files.bookDir, "meta.json.tmp")
         prepareTempFile(metaTemp)
         metaTemp.writeText(meta.toJson().toString())
         replaceFileAtomically(tempFile = metaTemp, targetFile = files.metaJson)
-
-        Utf16TextStore(files.textStore).use { store ->
-            TxtBlockIndex.buildIfNeeded(
-                file = files.blockIdx,
-                store = store,
-                meta = meta,
-                ioDispatcher = ioDispatcher
-            )
-        }
-        SoftBreakIndexBuilder.buildIfNeeded(
-            files = files,
-            meta = meta,
-            ioDispatcher = ioDispatcher,
-            profile = SoftBreakTuningProfile.BALANCED
-        )
+        clearDerivedArtifacts(files)
+        writeArtifactManifest(files = files, manifest = TxtArtifactManifest.initial(meta))
         return meta
+    }
+
+    private fun refreshArtifactManifest(
+        files: TxtBookFiles,
+        meta: TxtMeta
+    ): TxtArtifactManifest {
+        var manifest = TxtArtifactManifest.readIfValid(files.manifestJson, meta)
+            ?: TxtArtifactManifest.initial(meta)
+        manifest = if (TxtBlockIndex.openIfValid(files.blockIdx, meta) != null) {
+            manifest.markBlockIndexReady(TXT_BLOCK_INDEX_VERSION)
+        } else {
+            manifest.copy(blockIndexVersion = null, blockIndexReady = false)
+        }
+        val breakMapReady = SoftBreakIndex.openIfValid(
+            file = files.breakMap,
+            meta = meta,
+            profile = SoftBreakTuningProfile.BALANCED,
+            rulesVersion = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED).rulesVersion
+        )?.let { index ->
+            index.close()
+            true
+        } ?: false
+        manifest = if (breakMapReady) {
+            manifest.markBreakMapReady(SOFT_BREAK_MAP_VERSION)
+        } else {
+            manifest.copy(breakMapVersion = null, breakMapReady = false)
+        }
+        return manifest
+    }
+
+    private fun writeArtifactManifest(
+        files: TxtBookFiles,
+        manifest: TxtArtifactManifest
+    ) {
+        val temp = File(files.bookDir, "manifest.json.tmp")
+        prepareTempFile(temp)
+        temp.writeText(manifest.toJson().toString())
+        replaceFileAtomically(tempFile = temp, targetFile = files.manifestJson)
     }
 
     private suspend fun writeUtf16Content(
@@ -298,7 +331,8 @@ internal class TxtOpener(
         return try {
             CacheContent(
                 lengthChars = writer.totalCharsWritten,
-                hardWrapLikely = stats.snapshot().hardWrapLikely
+                hardWrapLikely = stats.snapshot().hardWrapLikely,
+                typicalLineLength = stats.snapshot().typicalLineLength
             )
         } finally {
             writer.close()
@@ -437,13 +471,28 @@ internal class TxtOpener(
         )
     }
 
+    private fun clearDerivedArtifacts(files: TxtBookFiles) {
+        runCatching { files.blockIdx.delete() }
+        runCatching { files.breakMap.delete() }
+        runCatching { files.breakPatch.delete() }
+        runCatching { files.searchIdx.delete() }
+        runCatching { files.searchLock.delete() }
+        runCatching { files.outlineIdx.delete() }
+        runCatching { files.breakLock.delete() }
+        files.paginationDir.listFiles()?.forEach { child ->
+            runCatching { child.deleteRecursively() }
+        }
+    }
+
     private data class LineStatsSnapshot(
-        val hardWrapLikely: Boolean
+        val hardWrapLikely: Boolean,
+        val typicalLineLength: Int
     )
 
     private data class CacheContent(
         val lengthChars: Long,
-        val hardWrapLikely: Boolean
+        val hardWrapLikely: Boolean,
+        val typicalLineLength: Int
     )
 
     private class LineStatsCollector(
@@ -475,7 +524,10 @@ internal class TxtOpener(
 
         fun snapshot(): LineStatsSnapshot {
             if (lineLengths.size < MIN_SAMPLE_LINES) {
-                return LineStatsSnapshot(hardWrapLikely = false)
+                return LineStatsSnapshot(
+                    hardWrapLikely = false,
+                    typicalLineLength = DEFAULT_TYPICAL_LINE_LENGTH
+                )
             }
 
             val sorted = lineLengths.sorted()
@@ -505,13 +557,23 @@ internal class TxtOpener(
 
             val likely = likelyByClassic || likelyByShortStableWrap
 
-            return LineStatsSnapshot(hardWrapLikely = likely)
+            return LineStatsSnapshot(
+                hardWrapLikely = likely,
+                typicalLineLength = mean
+                    .toInt()
+                    .coerceIn(MIN_TYPICAL_LINE_LENGTH, MAX_TYPICAL_LINE_LENGTH)
+            )
         }
     }
 
     private companion object {
+        private const val TXT_BLOCK_INDEX_VERSION = 1
+        private const val SOFT_BREAK_MAP_VERSION = 7
         private val STRONG_END_PUNCTUATION = setOf('。', '！', '？', '.', '!', '?')
         private const val MIN_SAMPLE_LINES = 60
+        private const val DEFAULT_TYPICAL_LINE_LENGTH = 72
+        private const val MIN_TYPICAL_LINE_LENGTH = 16
+        private const val MAX_TYPICAL_LINE_LENGTH = 240
         private const val HARD_WRAP_MEDIAN_MIN = 18
         private const val HARD_WRAP_MEDIAN_MAX = 140
         private const val HARD_WRAP_STD_MAX = 30.0

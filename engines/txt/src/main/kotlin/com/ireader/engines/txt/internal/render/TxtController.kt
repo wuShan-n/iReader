@@ -43,6 +43,7 @@ import com.ireader.reader.model.LocatorExtraKeys
 import com.ireader.reader.model.LocatorRange
 import com.ireader.reader.model.Progression
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
@@ -155,24 +156,28 @@ internal class TxtController(
     override suspend fun unbindSurface(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
     override suspend fun setTextLayouterFactory(factory: TextLayouterFactory): ReaderResult<Unit> {
-        return mutex.withLock {
-            if (textLayouterFactoryKey == factory.environmentKey) {
-                return@withLock ReaderResult.Ok(Unit)
+        return guardControllerCall("setTextLayouterFactory") {
+            mutex.withLock {
+                if (textLayouterFactoryKey == factory.environmentKey) {
+                    return@withLock ReaderResult.Ok(Unit)
+                }
+                textLayouterFactoryKey = factory.environmentKey
+                pagination.setTextLayouterFactory(factory)
+                invalidatePaginationLocked()
+                ReaderResult.Ok(Unit)
             }
-            textLayouterFactoryKey = factory.environmentKey
-            pagination.setTextLayouterFactory(factory)
-            invalidatePaginationLocked()
-            ReaderResult.Ok(Unit)
         }
     }
 
     override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> {
-        return mutex.withLock {
-            this.constraints = constraints
-            pagination.setLayoutConstraints(constraints)
-            invalidatePaginationLocked()
-            updateStateLocked()
-            ReaderResult.Ok(Unit)
+        return guardControllerCall("setLayoutConstraints") {
+            mutex.withLock {
+                this.constraints = constraints
+                pagination.setLayoutConstraints(constraints)
+                invalidatePaginationLocked()
+                updateStateLocked()
+                ReaderResult.Ok(Unit)
+            }
         }
     }
 
@@ -180,116 +185,132 @@ internal class TxtController(
         val reflow = config as? RenderConfig.ReflowText
             ?: return ReaderResult.Err(ReaderError.Internal("TXT requires ReflowText config"))
         val sanitized = reflow.sanitized()
-        return mutex.withLock {
-            currentConfig = sanitized
-            stateMutable.value = stateMutable.value.copy(config = sanitized)
-            pagination.setConfig(sanitized)
-            invalidatePaginationLocked()
-            ReaderResult.Ok(Unit)
+        return guardControllerCall("setConfig") {
+            mutex.withLock {
+                currentConfig = sanitized
+                stateMutable.value = stateMutable.value.copy(config = sanitized)
+                pagination.setConfig(sanitized)
+                invalidatePaginationLocked()
+                ReaderResult.Ok(Unit)
+            }
         }
     }
 
     override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> {
-        val snapshotResult = mutex.withLock { renderSnapshotLocked(policy) }
-        val renderResult = when (snapshotResult) {
-            is ReaderResult.Err -> snapshotResult
-            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
-        }
-        if (renderResult is ReaderResult.Ok && policy.prefetchNeighbors > 0) {
-            mutex.withLock {
-                schedulePrefetchLocked(policy.prefetchNeighbors)
+        return guardControllerCall("render") {
+            val snapshotResult = mutex.withLock { renderSnapshotLocked(policy) }
+            val renderResult = when (snapshotResult) {
+                is ReaderResult.Err -> snapshotResult
+                is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
             }
+            if (renderResult is ReaderResult.Ok && policy.prefetchNeighbors > 0) {
+                mutex.withLock {
+                    schedulePrefetchLocked(policy.prefetchNeighbors)
+                }
+            }
+            renderResult
         }
-        return renderResult
     }
 
     override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> {
-        if (textLayouterFactoryKey == null) {
-            return ReaderResult.Err(ReaderError.Internal("TXT text layouter not set"))
-        }
-        val snapshotResult = mutex.withLock {
-            val current = pagination.pageAt(
-                startOffset = navigation.currentStart,
-                allowCache = true
-            ).slice
-            if (current.endOffset >= store.lengthCodeUnits) {
-                return@withLock prepareRenderSnapshotLocked(
-                    slice = current,
-                    renderTimeMs = 0L,
-                    cacheHit = true
-                )
+        return guardControllerCall("next") {
+            if (textLayouterFactoryKey == null) {
+                return@guardControllerCall ReaderResult.Err(ReaderError.Internal("TXT text layouter not set"))
             }
-            navigation.moveTo(current.endOffset, store.lengthCodeUnits)
-            renderSnapshotLocked(policy)
-        }
-        return when (snapshotResult) {
-            is ReaderResult.Err -> snapshotResult
-            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            val snapshotResult = mutex.withLock {
+                val current = pagination.pageAt(
+                    startOffset = navigation.currentStart,
+                    allowCache = true
+                ).slice
+                if (current.endOffset >= store.lengthCodeUnits) {
+                    return@withLock prepareRenderSnapshotLocked(
+                        slice = current,
+                        renderTimeMs = 0L,
+                        cacheHit = true
+                    )
+                }
+                navigation.moveTo(current.endOffset, store.lengthCodeUnits)
+                renderSnapshotLocked(policy)
+            }
+            when (snapshotResult) {
+                is ReaderResult.Err -> snapshotResult
+                is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            }
         }
     }
 
     override suspend fun prev(policy: RenderPolicy): ReaderResult<RenderPage> {
-        if (textLayouterFactoryKey == null) {
-            return ReaderResult.Err(ReaderError.Internal("TXT text layouter not set"))
-        }
-        val snapshotResult = mutex.withLock {
-            if (!navigation.canGoPrev()) {
-                return@withLock renderSnapshotLocked(policy)
+        return guardControllerCall("prev") {
+            if (textLayouterFactoryKey == null) {
+                return@guardControllerCall ReaderResult.Err(ReaderError.Internal("TXT text layouter not set"))
             }
-            val target = pagination.previousStart(navigation.currentStart)
-            navigation.moveTo(target, store.lengthCodeUnits)
-            renderSnapshotLocked(policy)
-        }
-        return when (snapshotResult) {
-            is ReaderResult.Err -> snapshotResult
-            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            val snapshotResult = mutex.withLock {
+                if (!navigation.canGoPrev()) {
+                    return@withLock renderSnapshotLocked(policy)
+                }
+                val target = pagination.previousStart(navigation.currentStart)
+                navigation.moveTo(target, store.lengthCodeUnits)
+                renderSnapshotLocked(policy)
+            }
+            when (snapshotResult) {
+                is ReaderResult.Err -> snapshotResult
+                is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            }
         }
     }
 
     override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> {
-        val offset = TxtAnchorLocatorCodec.parseOffset(
-            locator = locator,
-            blockIndex = blockIndex,
-            expectedRevision = meta.contentRevision,
-            maxOffset = store.lengthCodeUnits
-        ) ?: return ReaderResult.Err(
-            ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
-        )
-        val snapshotResult = mutex.withLock {
-            navigation.moveTo(offset, store.lengthCodeUnits)
-            renderSnapshotLocked(policy)
-        }
-        return when (snapshotResult) {
-            is ReaderResult.Err -> snapshotResult
-            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+        return guardControllerCall("goTo") {
+            val offset = TxtAnchorLocatorCodec.parseOffset(
+                locator = locator,
+                blockIndex = blockIndex,
+                expectedRevision = meta.contentRevision,
+                maxOffset = store.lengthCodeUnits
+            ) ?: return@guardControllerCall ReaderResult.Err(
+                ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
+            )
+            val snapshotResult = mutex.withLock {
+                navigation.moveTo(offset, store.lengthCodeUnits)
+                renderSnapshotLocked(policy)
+            }
+            when (snapshotResult) {
+                is ReaderResult.Err -> snapshotResult
+                is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            }
         }
     }
 
     override suspend fun goToProgress(percent: Double, policy: RenderPolicy): ReaderResult<RenderPage> {
-        val clamped = percent.coerceIn(0.0, 1.0)
-        val snapshotResult = mutex.withLock {
-            val target = pagination.startForProgress(clamped)
-            navigation.moveTo(target, store.lengthCodeUnits)
-            renderSnapshotLocked(policy)
-        }
-        return when (snapshotResult) {
-            is ReaderResult.Err -> snapshotResult
-            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+        return guardControllerCall("goToProgress") {
+            val clamped = percent.coerceIn(0.0, 1.0)
+            val snapshotResult = mutex.withLock {
+                val target = pagination.startForProgress(clamped)
+                navigation.moveTo(target, store.lengthCodeUnits)
+                renderSnapshotLocked(policy)
+            }
+            when (snapshotResult) {
+                is ReaderResult.Err -> snapshotResult
+                is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            }
         }
     }
 
     override suspend fun prefetchNeighbors(count: Int): ReaderResult<Unit> {
-        if (count <= 0 || textLayouterFactoryKey == null) {
-            return ReaderResult.Ok(Unit)
+        return guardControllerCall("prefetchNeighbors") {
+            if (count <= 0 || textLayouterFactoryKey == null) {
+                return@guardControllerCall ReaderResult.Ok(Unit)
+            }
+            val expectedGeneration = mutex.withLock { paginationGeneration }
+            prefetchNeighbors(count = count, expectedGeneration = expectedGeneration)
         }
-        val expectedGeneration = mutex.withLock { paginationGeneration }
-        return prefetchNeighbors(count = count, expectedGeneration = expectedGeneration)
     }
 
     override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
-        return mutex.withLock {
-            invalidatePaginationLocked()
-            ReaderResult.Ok(Unit)
+        return guardControllerCall("invalidate") {
+            mutex.withLock {
+                invalidatePaginationLocked()
+                ReaderResult.Ok(Unit)
+            }
         }
     }
 
@@ -305,40 +326,44 @@ internal class TxtController(
         direction: TextBreakPatchDirection,
         state: TextBreakPatchState
     ): ReaderResult<RenderPage> {
-        val offset = TxtAnchorLocatorCodec.parseOffset(
-            locator = locator,
-            blockIndex = blockIndex,
-            expectedRevision = meta.contentRevision,
-            maxOffset = store.lengthCodeUnits
-        ) ?: return ReaderResult.Err(
-            ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
-        )
-        val snapshotResult = mutex.withLock {
-            val newlineOffset = findNearestNewlineOffset(
-                fromOffset = offset,
-                direction = direction
-            ) ?: return@withLock ReaderResult.Err(
-                ReaderError.Internal("No newline found near the current TXT anchor")
+        return guardControllerCall("applyBreakPatch") {
+            val offset = TxtAnchorLocatorCodec.parseOffset(
+                locator = locator,
+                blockIndex = blockIndex,
+                expectedRevision = meta.contentRevision,
+                maxOffset = store.lengthCodeUnits
+            ) ?: return@guardControllerCall ReaderResult.Err(
+                ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
             )
-            breakResolver.patch(newlineOffset, state.toBreakMapState())
-            invalidateBreakProjectionLocked()
-            renderSnapshotLocked(RenderPolicy.Default)
-        }
-        return when (snapshotResult) {
-            is ReaderResult.Err -> snapshotResult
-            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            val snapshotResult = mutex.withLock {
+                val newlineOffset = findNearestNewlineOffset(
+                    fromOffset = offset,
+                    direction = direction
+                ) ?: return@withLock ReaderResult.Err(
+                    ReaderError.Internal("No newline found near the current TXT anchor")
+                )
+                breakResolver.patch(newlineOffset, state.toBreakMapState())
+                invalidateBreakProjectionLocked()
+                renderSnapshotLocked(RenderPolicy.Default)
+            }
+            when (snapshotResult) {
+                is ReaderResult.Err -> snapshotResult
+                is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            }
         }
     }
 
     suspend fun clearBreakPatches(): ReaderResult<RenderPage> {
-        val snapshotResult = mutex.withLock {
-            breakResolver.clearPatches()
-            invalidateBreakProjectionLocked()
-            renderSnapshotLocked(RenderPolicy.Default)
-        }
-        return when (snapshotResult) {
-            is ReaderResult.Err -> snapshotResult
-            is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+        return guardControllerCall("clearBreakPatches") {
+            val snapshotResult = mutex.withLock {
+                breakResolver.clearPatches()
+                invalidateBreakProjectionLocked()
+                renderSnapshotLocked(RenderPolicy.Default)
+            }
+            when (snapshotResult) {
+                is ReaderResult.Err -> snapshotResult
+                is ReaderResult.Ok -> buildPageResult(snapshotResult.value)
+            }
         }
     }
 
@@ -675,6 +700,25 @@ internal class TxtController(
                 pagination.prefetchAround(currentStart = start, count = count)
                 ReaderResult.Ok(Unit)
             }
+        }
+    }
+
+    private suspend fun <T> guardControllerCall(
+        name: String,
+        block: suspend () -> ReaderResult<T>
+    ): ReaderResult<T> {
+        return try {
+            block()
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            logWarn(TAG, "TXT controller call failed: $name", t)
+            ReaderResult.Err(
+                ReaderError.Internal(
+                    t.message?.takeIf(String::isNotBlank)
+                        ?: "TXT controller call failed: $name"
+                )
+            )
         }
     }
 

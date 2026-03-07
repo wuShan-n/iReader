@@ -21,6 +21,7 @@ internal class SoftBreakIndex private constructor(
     val rulesVersion: Int,
     private val blocks: List<BlockMeta>
 ) : Closeable, ReflowSoftBreakIndex {
+    private val rafLock = Any()
 
     internal data class BlockMeta(
         val filePos: Long,
@@ -62,6 +63,7 @@ internal class SoftBreakIndex private constructor(
                 val storedProfile = SoftBreakTuningProfile.fromStorageValue(storedProfileRaw)
                 val storedRulesVersion = raf.readInt()
                 val indexOffset = raf.readLong()
+                val fileLength = raf.length()
 
                 if (lengthChars != meta.lengthCodeUnits || sampleHash != meta.sampleHash) {
                     raf.close()
@@ -71,15 +73,35 @@ internal class SoftBreakIndex private constructor(
                     raf.close()
                     return null
                 }
+                if (blockNewlines <= 0 || indexOffset < raf.filePointer || indexOffset > fileLength - 4L) {
+                    raf.close()
+                    return null
+                }
 
                 raf.seek(indexOffset)
                 val count = raf.readInt()
+                if (count < 0) {
+                    raf.close()
+                    return null
+                }
                 val blocks = ArrayList<BlockMeta>(count)
                 for (i in 0 until count) {
                     val filePos = raf.readLong()
                     val first = raf.readLong()
                     val last = raf.readLong()
                     val c = raf.readInt()
+                    if (
+                        c <= 0 ||
+                        c > blockNewlines ||
+                        filePos < 0L ||
+                        filePos >= indexOffset ||
+                        first < 0L ||
+                        last < first ||
+                        last >= lengthChars
+                    ) {
+                        raf.close()
+                        return null
+                    }
                     blocks.add(
                         BlockMeta(
                             filePos = filePos,
@@ -177,20 +199,42 @@ internal class SoftBreakIndex private constructor(
         end: Long,
         consumer: (offset: Long, state: BreakMapState) -> Unit
     ) {
-        raf.seek(block.filePos)
-        val count = raf.readInt()
-        val firstOffset = raf.readLong()
-        val states = ByteArray(count)
-        raf.readFully(states)
+        val decoded = synchronized(rafLock) {
+            raf.seek(block.filePos)
+            val count = raf.readInt()
+            if (count <= 0 || count > blockNewlines || count != block.count) {
+                return@synchronized null
+            }
+            val firstOffset = raf.readLong()
+            if (firstOffset != block.firstOffset) {
+                return@synchronized null
+            }
+            val states = ByteArray(count)
+            raf.readFully(states)
+            val offsets = LongArray(count)
+            offsets[0] = firstOffset
+            var offset = firstOffset
+            for (index in 1 until count) {
+                val delta = raf.readVarLongOrNull() ?: return@synchronized null
+                val next = max(offset + delta, offset)
+                if (next < offset || next > block.lastOffset || next >= lengthChars) {
+                    return@synchronized null
+                }
+                offsets[index] = next
+                offset = next
+            }
+            if (offsets[count - 1] != block.lastOffset) {
+                return@synchronized null
+            }
+            offsets to states
+        } ?: return
 
-        var offset = firstOffset
-        for (index in 0 until count) {
+        val offsets = decoded.first
+        val states = decoded.second
+        for (index in offsets.indices) {
+            val offset = offsets[index]
             if (offset in start until end) {
                 consumer(offset, BreakMapState.fromStorageCode(states[index].toInt()))
-            }
-            if (index < count - 1) {
-                val delta = raf.readVarLongOrNull() ?: break
-                offset = max(offset + delta, offset)
             }
         }
     }

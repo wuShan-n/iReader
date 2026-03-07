@@ -52,6 +52,10 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.api.render.RenderSurface
+import com.ireader.reader.api.render.TextLayoutInput
+import com.ireader.reader.api.render.TextLayoutMeasureResult
+import com.ireader.reader.api.render.TextLayouter
+import com.ireader.reader.api.render.TextLayouterFactory
 import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.Locator
@@ -65,6 +69,7 @@ import com.ireader.reader.runtime.ReaderSessionHandle
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,6 +77,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -328,6 +334,83 @@ class ReaderViewModelTest {
     }
 
     @Test
+    fun `open should apply stored layout before late text layouter factory arrives`() = runTest {
+        val controller = RecordingReaderController(requireLayoutBeforeRender = true)
+        val vm = newViewModel(bookById = emptyMap())
+        try {
+            vm.dispatch(
+                ReaderIntent.LayoutChanged(
+                    LayoutConstraints(
+                        viewportWidthPx = 1080,
+                        viewportHeightPx = 1920,
+                        density = 3f,
+                        fontScale = 1f
+                    )
+                )
+            )
+            advanceUntilIdle()
+            attachSession(
+                vm = vm,
+                bookId = 1L,
+                handle = readerSessionHandle(controller = controller)
+            )
+
+            vm.dispatch(ReaderIntent.TextLayouterFactoryChanged(TestTextLayouterFactory))
+            advanceUntilIdle()
+
+            assertTrue(controller.setLayoutConstraintsCalls > 0)
+            assertTrue(controller.renderCalls > 0)
+            assertEquals(null, vm.state.value.error)
+            assertEquals("render", vm.state.value.page?.id?.value)
+        } finally {
+            disposeViewModel(vm)
+        }
+    }
+
+    @Test
+    fun `stale render result should be dropped after session replacement`() = runTest {
+        val delayedController = DelayedRenderController(
+            delayMs = 100L,
+            pageId = "stale-page"
+        )
+        val freshController = RecordingReaderController(requireLayoutBeforeRender = true)
+        val vm = newViewModel(bookById = emptyMap())
+        val constraints = LayoutConstraints(
+            viewportWidthPx = 1080,
+            viewportHeightPx = 1920,
+            density = 3f,
+            fontScale = 1f
+        )
+        try {
+            vm.dispatch(ReaderIntent.LayoutChanged(constraints))
+            advanceUntilIdle()
+
+            attachSession(
+                vm = vm,
+                bookId = 1L,
+                handle = readerSessionHandle(controller = delayedController)
+            )
+            vm.dispatch(ReaderIntent.TextLayouterFactoryChanged(TestTextLayouterFactory))
+            runCurrent()
+
+            attachSession(
+                vm = vm,
+                bookId = 2L,
+                handle = readerSessionHandle(controller = freshController)
+            )
+            vm.dispatch(ReaderIntent.LayoutChanged(constraints))
+            vm.dispatch(ReaderIntent.TextLayouterFactoryChanged(TestTextLayouterFactory))
+            advanceUntilIdle()
+
+            assertEquals("render", vm.state.value.page?.id?.value)
+            assertTrue(delayedController.renderCalls > 0)
+            assertTrue(freshController.renderCalls > 0)
+        } finally {
+            disposeViewModel(vm)
+        }
+    }
+
+    @Test
     fun `drag should be ignored for fixed gesture profile`() = runTest {
         val controller = RecordingReaderController()
         val vm = newViewModel(bookById = emptyMap())
@@ -508,6 +591,26 @@ class ReaderViewModelTest {
         )
         attachMethod.isAccessible = true
         attachMethod.invoke(sessionCoordinator, bookId, handle)
+
+        val gateField = ReaderViewModel::class.java.getDeclaredField("renderGate")
+        gateField.isAccessible = true
+        val renderGate = gateField.get(vm)
+        val openEpochField = ReaderViewModel::class.java.getDeclaredField("openEpoch")
+        openEpochField.isAccessible = true
+        val attachGateMethod = renderGate.javaClass.getDeclaredMethod(
+            "attachSession",
+            ReaderSessionHandle::class.java,
+            Long::class.javaPrimitiveType
+        )
+        attachGateMethod.isAccessible = true
+        attachGateMethod.invoke(renderGate, handle, openEpochField.getLong(vm))
+
+        val appliedLayoutField = ReaderViewModel::class.java.getDeclaredField("appliedLayoutConstraints")
+        appliedLayoutField.isAccessible = true
+        appliedLayoutField.set(vm, null)
+        val appliedLayouterField = ReaderViewModel::class.java.getDeclaredField("appliedTextLayouterFactoryKey")
+        appliedLayouterField.isAccessible = true
+        appliedLayouterField.set(vm, null)
 
         val stateField = ReaderViewModel::class.java.getDeclaredField("stateStore")
         stateField.isAccessible = true
@@ -780,7 +883,7 @@ private class QueueReaderRuntime(
 }
 
 private fun readerSessionHandle(
-    controller: RecordingReaderController = RecordingReaderController(),
+    controller: ReaderController = RecordingReaderController(),
     search: SearchProvider? = null,
     textBreakPatchSupport: FakeTextBreakPatchSupport? = null,
     fixedLayout: Boolean = false,
@@ -869,11 +972,15 @@ private data class FakeTextBreakPatchSupport(
 )
 
 private class RecordingReaderController(
-    initialConfig: RenderConfig = RenderConfig.ReflowText()
+    initialConfig: RenderConfig = RenderConfig.ReflowText(),
+    private val requireLayoutBeforeRender: Boolean = false
 ) : ReaderController {
     var nextCalls: Int = 0
     var prevCalls: Int = 0
     var setConfigCalls: Int = 0
+    var setLayoutConstraintsCalls: Int = 0
+    var renderCalls: Int = 0
+    private var hasLayoutConstraints: Boolean = false
 
     private val stateStore = MutableStateFlow(
         RenderState(
@@ -891,7 +998,11 @@ private class RecordingReaderController(
 
     override suspend fun unbindSurface(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-    override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+    override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> {
+        setLayoutConstraintsCalls += 1
+        hasLayoutConstraints = true
+        return ReaderResult.Ok(Unit)
+    }
 
     override suspend fun setTextLayouterFactory(
         factory: com.ireader.reader.api.render.TextLayouterFactory
@@ -903,7 +1014,13 @@ private class RecordingReaderController(
         return ReaderResult.Ok(Unit)
     }
 
-    override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Ok(renderPage("render"))
+    override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> {
+        renderCalls += 1
+        if (requireLayoutBeforeRender && !hasLayoutConstraints) {
+            return ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
+        }
+        return ReaderResult.Ok(renderPage("render"))
+    }
 
     override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> {
         nextCalls += 1
@@ -937,6 +1054,88 @@ private class RecordingReaderController(
             locator = locator,
             content = RenderContent.Text(text = id)
         )
+    }
+}
+
+private class DelayedRenderController(
+    private val delayMs: Long,
+    private val pageId: String
+) : ReaderController {
+    var renderCalls: Int = 0
+    private var hasLayoutConstraints: Boolean = false
+    private val stateStore = MutableStateFlow(
+        RenderState(
+            locator = Locator(scheme = "txt.anchor", value = "0:0:f:1"),
+            progression = Progression(0.0),
+            nav = NavigationAvailability(canGoPrev = true, canGoNext = true),
+            config = RenderConfig.ReflowText()
+        )
+    )
+
+    override val state = stateStore
+    override val events: Flow<ReaderEvent> = MutableSharedFlow()
+
+    override suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun unbindSurface(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> {
+        hasLayoutConstraints = true
+        return ReaderResult.Ok(Unit)
+    }
+
+    override suspend fun setTextLayouterFactory(factory: TextLayouterFactory): ReaderResult<Unit> {
+        return ReaderResult.Ok(Unit)
+    }
+
+    override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> {
+        renderCalls += 1
+        if (!hasLayoutConstraints) {
+            return ReaderResult.Err(ReaderError.Internal("LayoutConstraints not set"))
+        }
+        delay(delayMs)
+        return ReaderResult.Ok(
+            RenderPage(
+                id = PageId(pageId),
+                locator = stateStore.value.locator,
+                content = RenderContent.Text(text = pageId)
+            )
+        )
+    }
+
+    override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> = render(policy)
+
+    override suspend fun prev(policy: RenderPolicy): ReaderResult<RenderPage> = render(policy)
+
+    override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> = render(policy)
+
+    override suspend fun goToProgress(percent: Double, policy: RenderPolicy): ReaderResult<RenderPage> = render(policy)
+
+    override suspend fun prefetchNeighbors(count: Int): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override fun close() = Unit
+}
+
+private object TestTextLayouterFactory : TextLayouterFactory {
+    override val environmentKey: String = "reader-vm-test"
+
+    override fun create(cacheSize: Int): TextLayouter {
+        return object : TextLayouter {
+            override fun measure(
+                text: CharSequence,
+                input: TextLayoutInput
+            ): TextLayoutMeasureResult {
+                return TextLayoutMeasureResult(
+                    endChar = text.length,
+                    lineCount = 1,
+                    lastVisibleLine = 0
+                )
+            }
+        }
     }
 }
 

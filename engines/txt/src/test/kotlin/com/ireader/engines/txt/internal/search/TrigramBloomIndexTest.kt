@@ -27,6 +27,7 @@ class TrigramBloomIndexTest {
             originalCharset = "UTF-8",
             lengthChars = 500L,
             hardWrapLikely = false,
+            typicalLineLength = 72,
             createdAtEpochMs = 0L
         )
 
@@ -56,6 +57,7 @@ class TrigramBloomIndexTest {
             originalCharset = "UTF-8",
             lengthChars = store.lengthChars,
             hardWrapLikely = false,
+            typicalLineLength = 72,
             createdAtEpochMs = 0L
         )
 

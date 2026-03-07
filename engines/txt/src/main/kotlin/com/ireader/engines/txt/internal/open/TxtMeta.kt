@@ -11,6 +11,7 @@ internal data class TxtMeta(
     val originalCharset: String,
     val lengthChars: Long,
     val hardWrapLikely: Boolean,
+    val typicalLineLength: Int,
     val createdAtEpochMs: Long,
     val lengthCodeUnits: Long = lengthChars,
     val defaultBlockSizeCodeUnits: Int = 128 * 1024,
@@ -29,6 +30,7 @@ internal data class TxtMeta(
             put("lengthChars", lengthChars)
             put("lengthCodeUnits", lengthCodeUnits)
             put("hardWrapLikely", hardWrapLikely)
+            put("typicalLineLength", typicalLineLength)
             put("createdAtEpochMs", createdAtEpochMs)
             put("defaultBlockSizeCodeUnits", defaultBlockSizeCodeUnits)
             put("contentRevision", contentRevision)
@@ -38,6 +40,7 @@ internal data class TxtMeta(
     companion object {
         private const val DEFAULT_BLOCK_SIZE_CODE_UNITS = 128 * 1024
         private const val DEFAULT_CONTENT_REVISION = 1
+        private const val DEFAULT_TYPICAL_LINE_LENGTH = 72
 
         fun fromJson(json: JSONObject): TxtMeta {
             val lengthChars = json.getLong("lengthChars")
@@ -50,6 +53,7 @@ internal data class TxtMeta(
                 originalCharset = json.getString("originalCharset"),
                 lengthChars = lengthChars,
                 hardWrapLikely = json.optBoolean("hardWrapLikely", false),
+                typicalLineLength = json.optInt("typicalLineLength", DEFAULT_TYPICAL_LINE_LENGTH),
                 createdAtEpochMs = json.optLong("createdAtEpochMs", 0L),
                 lengthCodeUnits = json.optLong("lengthCodeUnits", lengthChars),
                 defaultBlockSizeCodeUnits = json.optInt(

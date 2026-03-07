@@ -71,6 +71,23 @@ internal class TxtBlockIndex private constructor(
         private const val MAGIC = "TBI2"
         private const val VERSION = 1
 
+        fun minimal(meta: TxtMeta): TxtBlockIndex {
+            val blockSize = meta.defaultBlockSizeCodeUnits.coerceAtLeast(4 * 1024)
+            val blockCount = if (meta.lengthCodeUnits <= 0L) {
+                1
+            } else {
+                ((meta.lengthCodeUnits + blockSize - 1L) / blockSize.toLong()).toInt()
+            }
+            return TxtBlockIndex(
+                blockSizeCodeUnits = blockSize,
+                lengthCodeUnits = meta.lengthCodeUnits,
+                sampleHash = meta.sampleHash,
+                blockCount = blockCount,
+                newlineCounts = IntArray(blockCount),
+                newlineOrdinals = LongArray(blockCount)
+            )
+        }
+
         fun openIfValid(file: File, meta: TxtMeta): TxtBlockIndex? {
             if (!file.exists()) {
                 return null
@@ -112,57 +129,65 @@ internal class TxtBlockIndex private constructor(
 
         suspend fun buildIfNeeded(
             file: File,
+            lockFile: File,
             store: Utf16TextStore,
             meta: TxtMeta,
             ioDispatcher: CoroutineDispatcher
         ) = withContext(ioDispatcher) {
             openIfValid(file, meta)?.also { return@withContext }
 
-            val blockSize = meta.defaultBlockSizeCodeUnits.coerceAtLeast(4 * 1024)
-            val blockCount = if (store.lengthCodeUnits <= 0L) {
-                1
-            } else {
-                ((store.lengthCodeUnits + blockSize - 1L) / blockSize.toLong()).toInt()
-            }
-            val newlineCounts = IntArray(blockCount)
-            val newlineOrdinals = LongArray(blockCount)
-            var runningNewlines = 0L
-            for (blockId in 0 until blockCount) {
-                coroutineContext.ensureActive()
-                val start = blockId.toLong() * blockSize.toLong()
-                val end = min(store.lengthCodeUnits, start + blockSize.toLong())
-                val count = (end - start).toInt().coerceAtLeast(0)
-                newlineOrdinals[blockId] = runningNewlines
-                if (count <= 0) {
-                    continue
-                }
-                val chars = store.readChars(start, count)
-                var localNewlines = 0
-                for (char in chars) {
-                    if (char == '\n') {
-                        localNewlines++
-                    }
-                }
-                newlineCounts[blockId] = localNewlines
-                runningNewlines += localNewlines.toLong()
-            }
+            lockFile.parentFile?.mkdirs()
+            RandomAccessFile(lockFile, "rw").channel.use { lockChannel ->
+                lockChannel.lock().use {
+                    openIfValid(file, meta)?.also { return@withContext }
 
-            val tmp = File(file.parentFile, "${file.name}.tmp")
-            prepareTempFile(tmp)
-            RandomAccessFile(tmp, "rw").use { raf ->
-                raf.setLength(0L)
-                raf.write(MAGIC.toByteArray(Charsets.US_ASCII))
-                raf.writeInt(VERSION)
-                raf.writeInt(blockSize)
-                raf.writeLong(store.lengthCodeUnits)
-                raf.writeStringUtf8(meta.sampleHash)
-                raf.writeInt(blockCount)
-                for (index in 0 until blockCount) {
-                    raf.writeInt(newlineCounts[index])
-                    raf.writeLong(newlineOrdinals[index])
+                    val blockSize = meta.defaultBlockSizeCodeUnits.coerceAtLeast(4 * 1024)
+                    val blockCount = if (store.lengthCodeUnits <= 0L) {
+                        1
+                    } else {
+                        ((store.lengthCodeUnits + blockSize - 1L) / blockSize.toLong()).toInt()
+                    }
+                    val newlineCounts = IntArray(blockCount)
+                    val newlineOrdinals = LongArray(blockCount)
+                    var runningNewlines = 0L
+                    for (blockId in 0 until blockCount) {
+                        coroutineContext.ensureActive()
+                        val start = blockId.toLong() * blockSize.toLong()
+                        val end = min(store.lengthCodeUnits, start + blockSize.toLong())
+                        val count = (end - start).toInt().coerceAtLeast(0)
+                        newlineOrdinals[blockId] = runningNewlines
+                        if (count <= 0) {
+                            continue
+                        }
+                        val chars = store.readChars(start, count)
+                        var localNewlines = 0
+                        for (char in chars) {
+                            if (char == '\n') {
+                                localNewlines++
+                            }
+                        }
+                        newlineCounts[blockId] = localNewlines
+                        runningNewlines += localNewlines.toLong()
+                    }
+
+                    val tmp = File(file.parentFile, "${file.name}.tmp")
+                    prepareTempFile(tmp)
+                    RandomAccessFile(tmp, "rw").use { raf ->
+                        raf.setLength(0L)
+                        raf.write(MAGIC.toByteArray(Charsets.US_ASCII))
+                        raf.writeInt(VERSION)
+                        raf.writeInt(blockSize)
+                        raf.writeLong(store.lengthCodeUnits)
+                        raf.writeStringUtf8(meta.sampleHash)
+                        raf.writeInt(blockCount)
+                        for (index in 0 until blockCount) {
+                            raf.writeInt(newlineCounts[index])
+                            raf.writeLong(newlineOrdinals[index])
+                        }
+                    }
+                    replaceFileAtomically(tempFile = tmp, targetFile = file)
                 }
             }
-            replaceFileAtomically(tempFile = tmp, targetFile = file)
         }
     }
 }

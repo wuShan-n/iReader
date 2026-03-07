@@ -19,22 +19,22 @@ internal class BreakPatchStore(
         if (raw.isBlank()) {
             return emptyMap()
         }
-        val version = VERSION_REGEX.find(raw)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+        val version = extractIntField(raw, "version") ?: 1
         if (version != 1) {
             return emptyMap()
         }
-        val storedSampleHash = SAMPLE_HASH_REGEX.find(raw)?.groupValues?.getOrNull(1).orEmpty()
+        val storedSampleHash = extractStringField(raw, "sampleHash").orEmpty().trim()
         if (storedSampleHash.isNotBlank() && storedSampleHash != sampleHash) {
             return emptyMap()
         }
-        val patchesSection = PATCHES_REGEX.find(raw)?.groupValues?.getOrNull(1).orEmpty()
-        if (patchesSection.isBlank()) {
+        val patchesBody = extractObjectBody(raw, "patches") ?: return emptyMap()
+        if (patchesBody.isBlank()) {
             return emptyMap()
         }
         return buildMap {
-            PATCH_ENTRY_REGEX.findAll(patchesSection).forEach { match ->
-                val offset = match.groupValues[1].toLongOrNull() ?: return@forEach
-                val state = runCatching { BreakMapState.valueOf(match.groupValues[2]) }.getOrNull()
+            parseStringMap(patchesBody).forEach { (key, value) ->
+                val offset = key.toLongOrNull() ?: return@forEach
+                val state = runCatching { BreakMapState.valueOf(value) }.getOrNull()
                     ?: return@forEach
                 put(offset, state)
             }
@@ -57,12 +57,15 @@ internal class BreakPatchStore(
         val entries = patches.entries
             .sortedBy { it.key }
             .joinToString(separator = ",") { (offset, state) ->
-                "\"$offset\":\"${state.name}\""
+                "\"${escape(offset.toString())}\":\"${escape(state.name)}\""
             }
         return buildString {
-            append("{\"version\":1,\"sampleHash\":\"")
+            append('{')
+            append("\"version\":1,")
+            append("\"sampleHash\":\"")
             append(escape(sampleHash))
-            append("\",\"patches\":{")
+            append("\",")
+            append("\"patches\":{")
             append(entries)
             append("}}")
         }
@@ -72,14 +75,195 @@ internal class BreakPatchStore(
         return File(files.bookDir, "break.patch.tmp")
     }
 
-    private fun escape(value: String): String {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"")
+    private fun extractIntField(raw: String, key: String): Int? {
+        val valueRange = locateFieldValue(raw, key) ?: return null
+        val token = raw.substring(valueRange.first, valueRange.last + 1).trim()
+        return token.toIntOrNull()
     }
 
-    private companion object {
-        private val VERSION_REGEX = Regex(""""version"\s*:\s*(\d+)""")
-        private val SAMPLE_HASH_REGEX = Regex(""""sampleHash"\s*:\s*"([^"]*)"""")
-        private val PATCHES_REGEX = Regex(""""patches"\s*:\s*\{(.*?)}""", setOf(RegexOption.DOT_MATCHES_ALL))
-        private val PATCH_ENTRY_REGEX = Regex(""""(\d+)"\s*:\s*"([A-Z_]+)"""")
+    private fun extractStringField(raw: String, key: String): String? {
+        val valueRange = locateFieldValue(raw, key) ?: return null
+        val start = valueRange.first
+        if (start > valueRange.last || raw[start] != '"') {
+            return null
+        }
+        val parsed = readJsonString(raw, start) ?: return null
+        return parsed.first
+    }
+
+    private fun extractObjectBody(raw: String, key: String): String? {
+        val valueRange = locateFieldValue(raw, key) ?: return null
+        val start = valueRange.first
+        if (start > valueRange.last || raw[start] != '{') {
+            return null
+        }
+        val end = findMatchingBrace(raw, start) ?: return null
+        if (end > valueRange.last) {
+            return null
+        }
+        return raw.substring(start + 1, end)
+    }
+
+    private fun locateFieldValue(raw: String, key: String): IntRange? {
+        val keyToken = "\"$key\""
+        var searchFrom = 0
+        while (true) {
+            val keyIndex = raw.indexOf(keyToken, startIndex = searchFrom)
+            if (keyIndex < 0) {
+                return null
+            }
+            var index = skipWhitespace(raw, keyIndex + keyToken.length)
+            if (index >= raw.length || raw[index] != ':') {
+                searchFrom = keyIndex + keyToken.length
+                continue
+            }
+            index = skipWhitespace(raw, index + 1)
+            if (index >= raw.length) {
+                return null
+            }
+            val end = findValueEnd(raw, index) ?: return null
+            return index..end
+        }
+    }
+
+    private fun parseStringMap(raw: String): Map<String, String> {
+        if (raw.isBlank()) {
+            return emptyMap()
+        }
+        val result = LinkedHashMap<String, String>()
+        var index = 0
+        while (index < raw.length) {
+            index = skipWhitespaceAndCommas(raw, index)
+            if (index >= raw.length) {
+                break
+            }
+            if (raw[index] != '"') {
+                return emptyMap()
+            }
+            val key = readJsonString(raw, index) ?: return emptyMap()
+            index = skipWhitespace(raw, key.second)
+            if (index >= raw.length || raw[index] != ':') {
+                return emptyMap()
+            }
+            index = skipWhitespace(raw, index + 1)
+            if (index >= raw.length || raw[index] != '"') {
+                return emptyMap()
+            }
+            val value = readJsonString(raw, index) ?: return emptyMap()
+            result[key.first] = value.first
+            index = value.second
+            index = skipWhitespaceAndCommas(raw, index)
+        }
+        return result
+    }
+
+    private fun findValueEnd(raw: String, start: Int): Int? {
+        return when (raw[start]) {
+            '"' -> readJsonString(raw, start)?.second?.minus(1)
+            '{' -> findMatchingBrace(raw, start)
+            else -> {
+                var index = start
+                while (index < raw.length && raw[index] != ',' && raw[index] != '}') {
+                    index++
+                }
+                (index - 1).takeIf { it >= start }
+            }
+        }
+    }
+
+    private fun findMatchingBrace(raw: String, start: Int): Int? {
+        var depth = 0
+        var index = start
+        while (index < raw.length) {
+            when (val char = raw[index]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        return index
+                    }
+                }
+                '"' -> {
+                    val parsed = readJsonString(raw, index) ?: return null
+                    index = parsed.second - 1
+                }
+            }
+            index++
+        }
+        return null
+    }
+
+    private fun readJsonString(raw: String, start: Int): Pair<String, Int>? {
+        if (start >= raw.length || raw[start] != '"') {
+            return null
+        }
+        val out = StringBuilder()
+        var index = start + 1
+        while (index < raw.length) {
+            when (val char = raw[index]) {
+                '"' -> return out.toString() to (index + 1)
+                '\\' -> {
+                    if (index + 1 >= raw.length) {
+                        return null
+                    }
+                    when (val escaped = raw[index + 1]) {
+                        '"', '\\', '/' -> out.append(escaped)
+                        'b' -> out.append('\b')
+                        'f' -> out.append('\u000C')
+                        'n' -> out.append('\n')
+                        'r' -> out.append('\r')
+                        't' -> out.append('\t')
+                        'u' -> {
+                            if (index + 5 >= raw.length) {
+                                return null
+                            }
+                            val codePoint = raw.substring(index + 2, index + 6).toIntOrNull(16)
+                                ?: return null
+                            out.append(codePoint.toChar())
+                            index += 4
+                        }
+                        else -> return null
+                    }
+                    index += 2
+                    continue
+                }
+                else -> out.append(char)
+            }
+            index++
+        }
+        return null
+    }
+
+    private fun skipWhitespace(raw: String, start: Int): Int {
+        var index = start
+        while (index < raw.length && raw[index].isWhitespace()) {
+            index++
+        }
+        return index
+    }
+
+    private fun skipWhitespaceAndCommas(raw: String, start: Int): Int {
+        var index = start
+        while (index < raw.length && (raw[index].isWhitespace() || raw[index] == ',')) {
+            index++
+        }
+        return index
+    }
+
+    private fun escape(value: String): String {
+        return buildString(value.length + 8) {
+            value.forEach { char ->
+                when (char) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '\b' -> append("\\b")
+                    '\u000C' -> append("\\f")
+                    '\n' -> append("\\n")
+                    '\r' -> append("\\r")
+                    '\t' -> append("\\t")
+                    else -> append(char)
+                }
+            }
+        }
     }
 }

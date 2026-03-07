@@ -27,7 +27,7 @@ class TxtEngine(
         source: DocumentSource,
         options: OpenOptions
     ): ReaderResult<ReaderDocument> {
-        return when (val result = opener.open(source, options)) {
+        return when (val result = opener.openMinimal(source, options)) {
             is ReaderResult.Err -> result
             is ReaderResult.Ok -> {
                 ReaderResult.Ok(

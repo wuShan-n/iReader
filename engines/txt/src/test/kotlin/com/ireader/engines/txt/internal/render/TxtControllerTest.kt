@@ -66,6 +66,21 @@ class TxtControllerTest {
     }
 
     @Test
+    fun `render should return error when layouter throws unexpectedly`() = runBlocking {
+        val fixture = createFixture(
+            text = sampleText(paragraphs = 20),
+            textLayouterFactory = ThrowingTextLayouterFactory
+        )
+        try {
+            fixture.controller.setLayoutConstraints(defaultConstraints())
+            val result = fixture.controller.render(RenderPolicy.Default)
+            assertTrue(result is ReaderResult.Err)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `render cache should reset after config change`() = runBlocking {
         val fixture = createFixture(text = sampleText(paragraphs = 60))
         try {
@@ -101,6 +116,23 @@ class TxtControllerTest {
 
             assertFalse(noCache.metrics?.cacheHit ?: true)
             assertFalse(firstCachedAttempt.metrics?.cacheHit ?: true)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `render should succeed without persisted break map`() = runBlocking {
+        val fixture = createFixture(
+            text = sampleText(paragraphs = 40),
+            usePersistedBreakIndex = false
+        )
+        try {
+            fixture.controller.setLayoutConstraints(defaultConstraints())
+
+            val page = fixture.controller.render(RenderPolicy.Default).requireOk()
+
+            assertTrue((page.content as RenderContent.Text).text.isNotEmpty())
         } finally {
             fixture.close()
         }
@@ -236,7 +268,9 @@ class TxtControllerTest {
 
     private suspend fun createFixture(
         text: String,
-        annotationProvider: AnnotationProvider? = null
+        annotationProvider: AnnotationProvider? = null,
+        textLayouterFactory: TextLayouterFactory = TestTextLayouterFactory,
+        usePersistedBreakIndex: Boolean = true
     ): ControllerFixture {
         val dir = Files.createTempDirectory("txt_controller_test").toFile()
         val runtime = buildTxtRuntimeFixture(
@@ -245,13 +279,34 @@ class TxtControllerTest {
             ioDispatcher = Dispatchers.IO,
             rootDir = dir
         )
+        val breakResolver = if (usePersistedBreakIndex) {
+            runtime.breakResolver
+        } else {
+            runtime.files.breakMap.delete()
+            BreakResolver(
+                store = runtime.store,
+                files = runtime.files,
+                meta = runtime.meta,
+                breakIndex = null
+            )
+        }
+        val blockStore = if (usePersistedBreakIndex) {
+            runtime.blockStore
+        } else {
+            BlockStore(
+                store = runtime.store,
+                blockIndex = runtime.blockIndex,
+                revision = runtime.meta.contentRevision,
+                breakResolver = breakResolver
+            )
+        }
         val controller = TxtController(
             documentKey = "doc-test",
             store = runtime.store,
             meta = runtime.meta,
             blockIndex = runtime.blockIndex,
-            breakResolver = runtime.breakResolver,
-            blockStore = runtime.blockStore,
+            breakResolver = breakResolver,
+            blockStore = blockStore,
             initialLocator = null,
             initialOffset = 0L,
             initialConfig = RenderConfig.ReflowText(),
@@ -263,10 +318,11 @@ class TxtControllerTest {
             paginationDispatcher = Dispatchers.Default.limitedParallelism(1),
             defaultDispatcher = Dispatchers.Default
         )
-        controller.setTextLayouterFactory(TestTextLayouterFactory)
+        controller.setTextLayouterFactory(textLayouterFactory)
         return ControllerFixture(
             controller = controller,
-            runtime = runtime
+            runtime = runtime,
+            transientBreakResolver = if (usePersistedBreakIndex) null else breakResolver
         )
     }
 
@@ -277,10 +333,12 @@ class TxtControllerTest {
 
     private class ControllerFixture(
         val controller: TxtController,
-        val runtime: TxtRuntimeFixture
+        val runtime: TxtRuntimeFixture,
+        private val transientBreakResolver: BreakResolver? = null
     ) {
         fun close() {
             controller.close()
+            transientBreakResolver?.close()
             runtime.close()
         }
     }
@@ -388,6 +446,21 @@ class TxtControllerTest {
                             lineCount = visibleLineCount,
                             lastVisibleLine = visibleLineCount - 1
                         )
+                    }
+                }
+            }
+        }
+
+        private val ThrowingTextLayouterFactory = object : TextLayouterFactory {
+            override val environmentKey: String = "txt-controller-throwing"
+
+            override fun create(cacheSize: Int): TextLayouter {
+                return object : TextLayouter {
+                    override fun measure(
+                        text: CharSequence,
+                        input: TextLayoutInput
+                    ): TextLayoutMeasureResult {
+                        error("synthetic layouter failure")
                     }
                 }
             }

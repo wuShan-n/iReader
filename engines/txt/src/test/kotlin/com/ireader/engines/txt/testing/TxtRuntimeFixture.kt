@@ -47,6 +47,7 @@ internal data class TxtRuntimeFixture(
     }
 
     fun close() {
+        runCatching { breakResolver.close() }
         runCatching { breakIndex.close() }
         runCatching { store.close() }
         rootDir.deleteRecursively()
@@ -63,7 +64,7 @@ internal suspend fun buildTxtRuntimeFixture(
     writeUtf16Text(files.textStore, text)
     val store = Utf16TextStore(files.textStore)
     val meta = TxtMeta(
-        version = 7,
+        version = 8,
         sourceUri = "file:///$sampleHash.txt",
         displayName = "$sampleHash.txt",
         sizeBytes = text.length.toLong(),
@@ -71,6 +72,7 @@ internal suspend fun buildTxtRuntimeFixture(
         originalCharset = "UTF-8",
         lengthChars = store.lengthChars,
         hardWrapLikely = false,
+        typicalLineLength = 72,
         createdAtEpochMs = 0L
     )
     SoftBreakIndexBuilder.buildIfNeeded(
@@ -81,6 +83,7 @@ internal suspend fun buildTxtRuntimeFixture(
     )
     TxtBlockIndex.buildIfNeeded(
         file = files.blockIdx,
+        lockFile = files.blockLock,
         store = store,
         meta = meta,
         ioDispatcher = ioDispatcher

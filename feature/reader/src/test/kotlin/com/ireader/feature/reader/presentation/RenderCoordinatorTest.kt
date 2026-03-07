@@ -31,6 +31,21 @@ class RenderCoordinatorTest {
     }
 
     @Test
+    fun `immediate render request should bypass debounce`() = runTest {
+        var renderCount = 0
+        val coordinator = RenderCoordinator(scope = this) {
+            renderCount++
+        }
+
+        runCurrent()
+        coordinator.requestImmediateRender(RenderRequest.OPEN)
+        runCurrent()
+
+        assertEquals(1, renderCount)
+        coordinator.cancel()
+    }
+
+    @Test
     fun `navigation lock should serialize blocks`() = runTest {
         val coordinator = RenderCoordinator(scope = this) {}
         val calls = mutableListOf<String>()

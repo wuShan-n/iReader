@@ -68,6 +68,7 @@ class SoftBreakStateConsistencyTest {
             originalCharset = "UTF-8",
             lengthChars = raw.length.toLong(),
             hardWrapLikely = hardWrapLikely,
+            typicalLineLength = 72,
             createdAtEpochMs = 0L
         )
         try {
@@ -108,9 +109,11 @@ class SoftBreakStateConsistencyTest {
             lockFile = File(root, "book.lock"),
             textStore = File(root, "text.store"),
             metaJson = File(root, "meta.json"),
+            manifestJson = File(root, "manifest.json"),
             outlineIdx = File(root, "outline.idx"),
             paginationDir = paginationDir,
             breakMap = File(root, "break.map"),
+            blockLock = File(root, "block.lock"),
             breakLock = File(root, "break.lock"),
             searchIdx = File(root, "search.idx"),
             searchLock = File(root, "search.lock"),
