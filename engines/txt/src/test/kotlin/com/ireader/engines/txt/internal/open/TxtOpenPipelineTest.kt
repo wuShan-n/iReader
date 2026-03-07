@@ -9,6 +9,7 @@ import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.provider.AnnotationQuery
+import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPolicy
@@ -24,6 +25,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -297,6 +299,101 @@ class TxtOpenPipelineTest {
     }
 
     @Test
+    fun `outline cache should stay lazy until outline is requested`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_lazy_outline").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/lazy-outline.txt"),
+                payload = outlineSampleText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(
+                TxtEngineConfig(
+                    cacheDir = cacheDir,
+                    persistOutline = true
+                )
+            )
+
+            val opened = engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk()
+            try {
+                val session = opened.createSession(
+                    initialLocator = null,
+                    initialConfig = RenderConfig.ReflowText()
+                ).requireOk()
+                try {
+                    session.controller.setTextLayouterFactory(PipelineTextLayouterFactory).requireOkUnit()
+                    session.controller.setLayoutConstraints(defaultConstraints()).requireOkUnit()
+                    session.controller.render(RenderPolicy.Default).requireOk()
+
+                    val manifestReady = waitForCondition {
+                        val manifest = readOptionalNamedJson(cacheDir, "manifest.json") ?: return@waitForCondition false
+                        manifest.getBoolean("blockIndexReady") && manifest.getBoolean("breakMapReady")
+                    }
+                    assertTrue(manifestReady)
+
+                    val bookDir = readSingleMetaFile(cacheDir).parentFile
+                    assertFalse(File(bookDir, "outline.idx").exists())
+
+                    val outline = session.outline?.getOutline()?.requireOk()
+                    assertNotNull(outline)
+                    assertFalse(outline.isNullOrEmpty())
+                    assertTrue(File(bookDir, "outline.idx").exists())
+                } finally {
+                    session.close()
+                }
+            } finally {
+                opened.close()
+                cacheDir.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
+    fun `search should stay lazy before first query and still return hits on demand`() {
+        runBlocking {
+            val cacheDir = Files.createTempDirectory("txt_lazy_search").toFile()
+            val source = InMemoryDocumentSource(
+                uri = Uri.parse("file:///books/lazy-search.txt"),
+                payload = largeSearchText().toByteArray(Charsets.UTF_8)
+            )
+            val engine = TxtEngine(TxtEngineConfig(cacheDir = cacheDir))
+
+            val opened = engine.open(source, OpenOptions(textEncoding = "UTF-8")).requireOk()
+            try {
+                val session = opened.createSession(
+                    initialLocator = null,
+                    initialConfig = RenderConfig.ReflowText()
+                ).requireOk()
+                try {
+                    session.controller.setTextLayouterFactory(PipelineTextLayouterFactory).requireOkUnit()
+                    session.controller.setLayoutConstraints(defaultConstraints()).requireOkUnit()
+                    session.controller.render(RenderPolicy.Default).requireOk()
+
+                    val manifestReady = waitForCondition {
+                        val manifest = readOptionalNamedJson(cacheDir, "manifest.json") ?: return@waitForCondition false
+                        manifest.getBoolean("blockIndexReady") && manifest.getBoolean("breakMapReady")
+                    }
+                    assertTrue(manifestReady)
+
+                    val bookDir = readSingleMetaFile(cacheDir).parentFile
+                    val searchFile = File(bookDir, "search.idx")
+                    assertFalse(searchFile.exists())
+
+                    val hits = session.search
+                        ?.search(query = "needle", options = SearchOptions(maxHits = 5))
+                        ?.toList()
+                        .orEmpty()
+                    assertFalse(hits.isEmpty())
+                } finally {
+                    session.close()
+                }
+            } finally {
+                opened.close()
+                cacheDir.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
     fun `open should rebuild cache when cached schema version is outdated`() {
         runBlocking {
             val cacheDir = Files.createTempDirectory("txt_cache_schema_upgrade").toFile()
@@ -448,12 +545,47 @@ class TxtOpenPipelineTest {
         }
     }
 
+    private fun outlineSampleText(): String {
+        return buildString {
+            repeat(24) { idx ->
+                append("第")
+                append(idx + 1)
+                append("章 标题")
+                append(idx + 1)
+                append('\n')
+                repeat(8) {
+                    append("这是目录懒加载测试用的正文段落，确保章节检测与缓存行为可以被验证。")
+                    append('\n')
+                }
+            }
+        }
+    }
+
+    private fun largeSearchText(): String {
+        return buildString {
+            repeat(2_600) { idx ->
+                append("Chapter ")
+                append(idx + 1)
+                append(" carries the needle marker through a longer body of searchable text for lazy index validation.")
+                append('\n')
+            }
+        }
+    }
+
     private fun readSingleMeta(cacheDir: File): JSONObject {
         return JSONObject(readSingleMetaFile(cacheDir).readText())
     }
 
     private fun readSingleNamedJson(cacheDir: File, name: String): JSONObject {
         return JSONObject(readSingleNamedFile(cacheDir, name).readText())
+    }
+
+    private fun readOptionalNamedJson(cacheDir: File, name: String): JSONObject? {
+        val file = cacheDir
+            .walkTopDown()
+            .firstOrNull { it.isFile && it.name == name }
+            ?: return null
+        return JSONObject(file.readText())
     }
 
     private fun readSingleMetaFile(cacheDir: File): File {
@@ -494,6 +626,20 @@ class TxtOpenPipelineTest {
             density = 3f,
             fontScale = 1f
         )
+    }
+
+    private fun waitForCondition(
+        attempts: Int = 40,
+        delayMs: Long = 25L,
+        predicate: () -> Boolean
+    ): Boolean {
+        repeat(attempts) {
+            if (predicate()) {
+                return true
+            }
+            Thread.sleep(delayMs)
+        }
+        return predicate()
     }
 }
 

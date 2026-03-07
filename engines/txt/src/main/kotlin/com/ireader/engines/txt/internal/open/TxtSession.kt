@@ -60,7 +60,7 @@ internal class TxtSession(
             txtController.events
                 .filterIsInstance<ReaderEvent.Rendered>()
                 .first()
-            ensureDerivedArtifactsReady()
+            ensureBackgroundArtifactsReady()
         }
     }
 
@@ -80,8 +80,6 @@ internal class TxtSession(
         if (result is com.ireader.reader.api.error.ReaderResult.Ok) {
             outlineProvider.invalidate()
             searchProvider.invalidate()
-            outlineProvider.warmup()
-            searchProvider.warmup()
         }
         return result
     }
@@ -91,32 +89,42 @@ internal class TxtSession(
         if (result is com.ireader.reader.api.error.ReaderResult.Ok) {
             outlineProvider.invalidate()
             searchProvider.invalidate()
-            outlineProvider.warmup()
-            searchProvider.warmup()
         }
         return result
     }
 
-    private suspend fun ensureDerivedArtifactsReady() {
+    private suspend fun ensureBackgroundArtifactsReady() {
         var manifest = TxtArtifactManifest.readIfValid(files.manifestJson, meta) ?: initial(meta)
-        if (!manifest.blockIndexReady || TxtBlockIndex.openIfValid(files.blockIdx, meta) == null) {
-            Utf16TextStore(files.textStore).use { store ->
-                TxtBlockIndex.buildIfNeeded(
-                    file = files.blockIdx,
-                    lockFile = files.blockLock,
-                    store = store,
-                    meta = meta,
-                    ioDispatcher = ioDispatcher
-                )
-            }
-            manifest = if (TxtBlockIndex.openIfValid(files.blockIdx, meta) != null) {
-                manifest.markBlockIndexReady(TXT_BLOCK_INDEX_VERSION)
-            } else {
-                manifest.copy(blockIndexVersion = null, blockIndexReady = false)
-            }
-            writeArtifactManifest(manifest)
+        manifest = ensureBlockIndexReady(manifest)
+        ensureBreakMapReady(manifest)
+    }
+
+    private suspend fun ensureBlockIndexReady(manifest: TxtArtifactManifest): TxtArtifactManifest {
+        if (manifest.blockIndexReady && TxtBlockIndex.openIfValid(files.blockIdx, meta) != null) {
+            return manifest
         }
-        if (!breakResolver.hasIndexedBreaks()) {
+
+        Utf16TextStore(files.textStore).use { store ->
+            TxtBlockIndex.buildIfNeeded(
+                file = files.blockIdx,
+                lockFile = files.blockLock,
+                store = store,
+                meta = meta,
+                ioDispatcher = ioDispatcher
+            )
+        }
+
+        val nextManifest = if (TxtBlockIndex.openIfValid(files.blockIdx, meta) != null) {
+            manifest.markBlockIndexReady(TXT_BLOCK_INDEX_VERSION)
+        } else {
+            manifest.copy(blockIndexVersion = null, blockIndexReady = false)
+        }
+        writeArtifactManifest(nextManifest)
+        return nextManifest
+    }
+
+    private suspend fun ensureBreakMapReady(manifest: TxtArtifactManifest) {
+        val nextManifest = if (!breakResolver.hasIndexedBreaks()) {
             SoftBreakIndexBuilder.buildIfNeeded(
                 files = files,
                 meta = meta,
@@ -131,16 +139,19 @@ internal class TxtSession(
             )
             if (builtIndex != null) {
                 breakResolver.attachIndex(builtIndex)
-                manifest = manifest.markBreakMapReady(SOFT_BREAK_MAP_VERSION)
+                manifest.markBreakMapReady(SOFT_BREAK_MAP_VERSION)
             } else {
-                manifest = manifest.copy(breakMapVersion = null, breakMapReady = false)
+                manifest.copy(breakMapVersion = null, breakMapReady = false)
             }
-            writeArtifactManifest(manifest)
         } else if (!manifest.breakMapReady) {
-            writeArtifactManifest(manifest.markBreakMapReady(SOFT_BREAK_MAP_VERSION))
+            manifest.markBreakMapReady(SOFT_BREAK_MAP_VERSION)
+        } else {
+            manifest
         }
-        searchProvider.warmup()
-        outlineProvider.warmup()
+
+        if (nextManifest != manifest) {
+            writeArtifactManifest(nextManifest)
+        }
     }
 
     private fun writeArtifactManifest(manifest: TxtArtifactManifest) {
