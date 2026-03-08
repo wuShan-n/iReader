@@ -327,6 +327,45 @@ class ReaderViewModelTest {
     }
 
     @Test
+    fun `create annotation should invalidate and rerender current page`() = runTest {
+        val controller = RecordingReaderController(requireLayoutBeforeRender = true)
+        val annotationSupport = FakeAnnotationSupport(
+            selection = SelectionProvider.Selection(
+                locator = Locator(scheme = "txt.stable.anchor", value = "0:0"),
+                selectedText = "selected text"
+            )
+        )
+        val vm = newViewModel(bookById = emptyMap())
+        try {
+            attachSession(
+                vm = vm,
+                bookId = 1L,
+                handle = readerHandle(
+                    controller = controller,
+                    annotationSupport = annotationSupport
+                )
+            )
+            vm.dispatch(ReaderIntent.LayoutChanged(defaultLayoutConstraints()))
+            vm.dispatch(ReaderIntent.TextLayouterFactoryChanged(TestTextLayouterFactory))
+            advanceUntilIdle()
+
+            val renderCallsBefore = controller.renderCalls
+            val invalidateCallsBefore = controller.invalidateCalls
+
+            vm.dispatch(ReaderIntent.CreateAnnotation)
+            advanceUntilIdle()
+
+            assertEquals(1, annotationSupport.createAnnotationCalls)
+            assertEquals(1, annotationSupport.clearSelectionCalls)
+            assertEquals(invalidateCallsBefore + 1, controller.invalidateCalls)
+            assertTrue(controller.renderCalls > renderCallsBefore)
+            assertEquals("render", vm.state.value.page?.id?.value)
+        } finally {
+            disposeViewModel(vm)
+        }
+    }
+
+    @Test
     fun `open should apply stored layout before late text layouter factory arrives`() = runTest {
         val controller = RecordingReaderController(requireLayoutBeforeRender = true)
         val vm = newViewModel(bookById = emptyMap())
@@ -569,41 +608,33 @@ class ReaderViewModelTest {
         vm.state.first { !it.isOpening }
     }
 
+    private fun defaultLayoutConstraints(): LayoutConstraints {
+        return LayoutConstraints(
+            viewportWidthPx = 1080,
+            viewportHeightPx = 1920,
+            density = 3f,
+            fontScale = 1f
+        )
+    }
+
     private fun attachSession(
         vm: ReaderViewModel,
         bookId: Long,
         handle: ReaderHandle
     ) {
-        val sessionField = ReaderViewModel::class.java.getDeclaredField("session")
+        val sessionField = ReaderViewModel::class.java.getDeclaredField("sessionInteractor")
         sessionField.isAccessible = true
         val sessionCoordinator = sessionField.get(vm)
+        val openEpochField = ReaderViewModel::class.java.getDeclaredField("openEpoch")
+        openEpochField.isAccessible = true
         val attachMethod = sessionCoordinator.javaClass.getDeclaredMethod(
             "attach",
             Long::class.javaPrimitiveType,
-            ReaderHandle::class.java
-        )
-        attachMethod.isAccessible = true
-        attachMethod.invoke(sessionCoordinator, bookId, handle)
-
-        val gateField = ReaderViewModel::class.java.getDeclaredField("renderGate")
-        gateField.isAccessible = true
-        val renderGate = gateField.get(vm)
-        val openEpochField = ReaderViewModel::class.java.getDeclaredField("openEpoch")
-        openEpochField.isAccessible = true
-        val attachGateMethod = renderGate.javaClass.getDeclaredMethod(
-            "attachSession",
             ReaderHandle::class.java,
             Long::class.javaPrimitiveType
         )
-        attachGateMethod.isAccessible = true
-        attachGateMethod.invoke(renderGate, handle, openEpochField.getLong(vm))
-
-        val appliedLayoutField = ReaderViewModel::class.java.getDeclaredField("appliedLayoutConstraints")
-        appliedLayoutField.isAccessible = true
-        appliedLayoutField.set(vm, null)
-        val appliedLayouterField = ReaderViewModel::class.java.getDeclaredField("appliedTextLayouterFactoryKey")
-        appliedLayouterField.isAccessible = true
-        appliedLayouterField.set(vm, null)
+        attachMethod.isAccessible = true
+        attachMethod.invoke(sessionCoordinator, bookId, handle, openEpochField.getLong(vm))
 
         val stateField = ReaderViewModel::class.java.getDeclaredField("stateStore")
         stateField.isAccessible = true
@@ -611,7 +642,6 @@ class ReaderViewModelTest {
         val stateStore = stateField.get(vm) as MutableStateFlow<ReaderUiState>
         stateStore.value = stateStore.value.copy(
             bookId = bookId,
-            handle = handle,
             resources = handle.resources,
             capabilities = handle.capabilities,
             renderState = handle.state.value,
@@ -891,6 +921,7 @@ private fun readerHandle(
     controller: ReaderController = RecordingReaderController(),
     search: SearchProvider? = null,
     textBreakPatchSupport: FakeTextBreakPatchSupport? = null,
+    annotationSupport: FakeAnnotationSupport? = null,
     fixedLayout: Boolean = false,
     documentFormat: com.ireader.reader.model.BookFormat = if (fixedLayout) {
         com.ireader.reader.model.BookFormat.PDF
@@ -904,8 +935,8 @@ private fun readerHandle(
         outline = false,
         search = search != null,
         textExtraction = false,
-        annotations = false,
-        selection = false,
+        annotations = annotationSupport != null,
+        selection = annotationSupport != null,
         links = false
     )
     return object : ReaderHandle {
@@ -985,7 +1016,7 @@ private fun readerHandle(
         }
 
         override suspend fun currentSelection(): ReaderResult<SelectionProvider.Selection?> {
-            return ReaderResult.Ok(null)
+            return ReaderResult.Ok(annotationSupport?.selection)
         }
 
         override suspend fun startSelection(locator: Locator): ReaderResult<Unit> = ReaderResult.Ok(Unit)
@@ -994,11 +1025,18 @@ private fun readerHandle(
 
         override suspend fun finishSelection(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-        override suspend fun clearSelection(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+        override suspend fun clearSelection(): ReaderResult<Unit> {
+            annotationSupport?.let { it.clearSelectionCalls += 1 }
+            return ReaderResult.Ok(Unit)
+        }
 
         override suspend fun createAnnotation(
             draft: com.ireader.reader.model.annotation.AnnotationDraft
-        ): ReaderResult<Unit> = ReaderResult.Err(ReaderError.Internal("unused"))
+        ): ReaderResult<Unit> {
+            val support = annotationSupport ?: return ReaderResult.Err(ReaderError.Internal("unused"))
+            support.createAnnotationCalls += 1
+            return ReaderResult.Ok(Unit)
+        }
 
         override suspend fun applyBreakPatch(
             locator: Locator,
@@ -1030,6 +1068,12 @@ private data class FakeTextBreakPatchSupport(
     var clearCalls: Int = 0
 )
 
+private data class FakeAnnotationSupport(
+    val selection: SelectionProvider.Selection,
+    var createAnnotationCalls: Int = 0,
+    var clearSelectionCalls: Int = 0
+)
+
 private class RecordingReaderController(
     initialConfig: RenderConfig = RenderConfig.ReflowText(),
     private val requireLayoutBeforeRender: Boolean = false
@@ -1039,6 +1083,7 @@ private class RecordingReaderController(
     var setConfigCalls: Int = 0
     var setLayoutConstraintsCalls: Int = 0
     var renderCalls: Int = 0
+    var invalidateCalls: Int = 0
     private var hasLayoutConstraints: Boolean = false
 
     private val stateStore = MutableStateFlow(
@@ -1103,7 +1148,10 @@ private class RecordingReaderController(
 
     override suspend fun prefetchNeighbors(count: Int): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-    override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+    override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
+        invalidateCalls += 1
+        return ReaderResult.Ok(Unit)
+    }
 
     override fun close() = Unit
 

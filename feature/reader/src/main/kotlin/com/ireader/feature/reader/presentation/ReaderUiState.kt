@@ -7,7 +7,6 @@ import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.api.provider.ResourceProvider
-import com.ireader.reader.runtime.ReaderHandle
 
 enum class ReaderSheet {
     None,
@@ -99,7 +98,6 @@ data class ReaderUiState(
     val capabilities: DocumentCapabilities? = null,
     val renderState: RenderState? = null,
     val page: RenderPage? = null,
-    val handle: ReaderHandle? = null,
     val resources: ResourceProvider? = null,
     val toc: TocState = TocState(),
     val search: SearchState = SearchState(),

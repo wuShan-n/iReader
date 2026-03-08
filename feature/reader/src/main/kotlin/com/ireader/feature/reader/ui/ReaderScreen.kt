@@ -27,6 +27,7 @@ import com.ireader.feature.reader.presentation.ReaderViewModel
 import com.ireader.feature.reader.ui.components.ComposeTextLayouterFactory
 import com.ireader.feature.reader.ui.components.LayoutEnvSnapshot
 import com.ireader.feature.reader.web.ExternalLinkPolicy
+import com.ireader.reader.runtime.ReaderHandle
 
 @Composable
 @Suppress("FunctionNaming")
@@ -38,6 +39,7 @@ fun ReaderScreen(
     vm: ReaderViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val surfaceHandle by vm.surfaceHandle.collectAsStateWithLifecycle(initialValue = null)
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -141,6 +143,7 @@ fun ReaderScreen(
 
     ReaderScaffold(
         state = state,
+        surfaceHandle = surfaceHandle,
         snackbarHostState = snackbarHost,
         onBack = onBack,
         onIntent = vm::dispatch,
@@ -159,7 +162,7 @@ internal fun shouldConsumeVolumeKeyPaging(state: ReaderUiState, keyCode: Int): B
         state.passwordPrompt == null &&
         !state.isOpening &&
         state.error == null &&
-        state.handle != null
+        state.capabilities != null
 }
 
 internal fun volumePagingIntentForKey(

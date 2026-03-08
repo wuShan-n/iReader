@@ -52,10 +52,12 @@ import com.ireader.reader.api.render.RenderPage
 import com.ireader.reader.api.render.TextMapping
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.Locator
+import com.ireader.reader.runtime.ReaderHandle
 
 @Composable
 fun PageRenderer(
     state: ReaderUiState,
+    embeddedHandle: ReaderHandle?,
     textColor: Color,
     backgroundColor: Color,
     onBackgroundTap: (Offset, IntSize, Boolean) -> Unit,
@@ -132,7 +134,7 @@ fun PageRenderer(
             )
 
             RenderContent.Embedded -> {
-                val handle = state.handle
+                val handle = embeddedHandle
                 if (handle == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No reader handle bound")

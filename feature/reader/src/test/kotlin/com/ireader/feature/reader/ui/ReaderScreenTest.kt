@@ -80,7 +80,7 @@ private fun readerUiState(
     return ReaderUiState(
         layerState = layerState,
         displayPrefs = ReaderDisplayPrefs(volumeKeyPagingEnabled = true),
-        handle = DummyReaderHandle
+        capabilities = DummyReaderHandle.capabilities
     )
 }
 

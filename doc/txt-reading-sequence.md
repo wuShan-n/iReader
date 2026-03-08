@@ -3,6 +3,7 @@
 说明：
 - 以下内容只依据实际源码梳理，未参考 `docs/` 下文档。
 - 范围覆盖 `feature/reader` 打开阅读页、`core/reader/runtime` 分发到 TXT 引擎、`engines/txt` 的最小打开、会话创建、分页渲染、翻页、后台产物补齐、目录、搜索、选区、批注、换行修正。
+- 2026-03-08 更新：`feature/reader` 里的会话前置条件与 collector 生命周期已收口到 `ReaderSessionInteractor`；TXT 会话已改为 `TxtSessionFacade + TxtArtifactCoordinator + TxtNavigationService + TxtPaginationService + TxtPageExtrasService`。
 
 主要代码入口：
 - `feature/reader/src/main/kotlin/com/ireader/feature/reader/ui/ReaderScreen.kt`
@@ -12,7 +13,8 @@
 - `engines/txt/src/main/kotlin/com/ireader/engines/txt/TxtEngine.kt`
 - `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/open/TxtOpener.kt`
 - `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/open/TxtDocument.kt`
-- `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/open/TxtSession.kt`
+- `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/session/TxtSessionFacade.kt`
+- `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/artifact/TxtArtifactCoordinator.kt`
 - `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/render/TxtController.kt`
 - `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/render/PaginationCoordinator.kt`
 - `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/render/TxtPageFitter.kt`
@@ -25,7 +27,7 @@ sequenceDiagram
     actor User as User
     participant Screen as ReaderScreen
     participant VM as ReaderViewModel
-    participant Session as SessionCoordinator
+    participant Session as ReaderSessionInteractor
     participant BookRepo as BookRepo
     participant SourceResolver as BookSourceResolver
     participant ProgressRepo as ProgressRepo
@@ -46,7 +48,7 @@ sequenceDiagram
     participant TextProjectionEngine as TextProjectionEngine
     participant BlockStore as BlockStore
     participant Controller as TxtController
-    participant TxtSession as TxtSession
+    participant TxtSession as TxtSessionFacade
 
     User->>Screen: 进入阅读页
     Screen->>VM: dispatch(Start(bookId, locatorArg))
@@ -119,13 +121,12 @@ sequenceDiagram
             Document->>BlockStore: new(store, blockIndex, projectionEngine)
             Document->>Controller: new(initialOffset, initialConfig, blockIndex, projectionEngine, blockStore, ...)
             Document->>TxtSession: create(controller, files, meta, blockIndex, projectionEngine, blockStore, ...)
-            TxtSession-->>Document: ReaderSession(TxtSession)
+            TxtSession-->>Document: ReaderSession(TxtSessionFacade)
 
             Runtime-->>LaunchRepo: ReaderHandle
             LaunchRepo-->>VM: ReaderHandle
 
-            VM->>Session: attach(bookId, handle)
-            VM->>VM: renderGate.attachSession(handle, openEpoch)
+            VM->>Session: attach(bookId, handle, openEpoch)
             VM->>VM: startSessionCollectors(handle, bookId)
             VM->>Controller: setTextLayouterFactory(factory) [若 factory 已到位]
 
@@ -140,7 +141,7 @@ sequenceDiagram
 ```
 
 关键点：
-- `ReaderScreen` 的 `Start`、`TextLayouterFactoryChanged`、`LayoutChanged` 是三条独立输入，`RenderPrereqGate` 要求三者齐备才会触发渲染。
+- `ReaderScreen` 的 `Start`、`TextLayouterFactoryChanged`、`LayoutChanged` 是三条独立输入，现在由 `ReaderSessionInteractor` 统一维护会话、布局、排版器三者的前置条件。
 - `TxtOpener.openMinimal()` 只保证 `text.store`、`meta.json`、`manifest.json` 足够打开阅读，会话可先建立，`block.idx` 和 `break.map` 可以稍后后台补齐。
 - `ReaderLaunchRepository` 对 TXT 会直接使用 `reflowConfig.withReaderAppearance(displayPrefs)` 作为初始配置。
 
@@ -152,7 +153,7 @@ sequenceDiagram
     actor User as User
     participant Screen as ReaderScaffold
     participant VM as ReaderViewModel
-    participant Gate as RenderPrereqGate
+    participant Gate as ReaderSessionInteractor
     participant RenderQ as RenderCoordinator
     participant Controller as TxtController
     participant Pagination as PaginationCoordinator
@@ -179,7 +180,7 @@ sequenceDiagram
         Gate-->>VM: null
         VM-->>UI: 暂不渲染
     else 条件齐备
-        Gate-->>VM: RenderPrereqSnapshot
+        Gate-->>VM: ReaderViewportSnapshot
         VM->>Controller: render(RenderPolicy.Default)
 
         Controller->>Pagination: pageAt(currentStart, allowCache=true)
@@ -236,14 +237,15 @@ sequenceDiagram
 关键点：
 - `RenderCoordinator` 会把普通请求做 `24ms debounce`，立即请求走 `immediateRequests`。
 - TXT 的 `document.capabilities.fixedLayout == false`，所以 `ReaderViewModel` 中仅对固定版式使用的 DRAFT/FINAL 二段渲染分支不会进入 TXT 主链路。
-- `TxtController.next/prev` 都要求 `textLayouterFactoryKey != null`，否则会直接返回错误。
+- `TxtController.next/prev` 仍要求 layouter 已绑定，但具体前置条件与 viewport 绑定缓存已经从 `ReaderViewModel` 下沉到 `ReaderSessionInteractor`。
 
 ## 3. 首次可见后后台补齐产物
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant TxtSession as TxtSession
+    participant TxtSession as TxtSessionFacade
+    participant Artifact as TxtArtifactCoordinator
     participant Controller as TxtController
     participant Manifest as TxtArtifactManifest
     participant BlockIndex as TxtBlockIndex
@@ -255,47 +257,48 @@ sequenceDiagram
     Note over TxtSession: init 中启动 sessionScope 协程
     TxtSession->>Controller: 监听 events.filterIsInstance<Rendered>().first()
     Controller-->>TxtSession: ReaderEvent.Rendered
-    TxtSession->>TxtSession: ensureBackgroundArtifactsReady()
+    TxtSession->>Artifact: warmupProviders()
+    TxtSession->>Artifact: ensureBackgroundArtifactsReady()
 
-    TxtSession->>Manifest: readIfValid(files.manifestJson, meta)
+    Artifact->>Manifest: readIfValid(files.manifestJson, meta)
     alt manifest 缺失或无效
-        Manifest-->>TxtSession: initial(meta)
+        Manifest-->>Artifact: initial(meta)
     else manifest 可用
-        Manifest-->>TxtSession: manifest
+        Manifest-->>Artifact: manifest
     end
 
     alt block.idx 未就绪
-        TxtSession->>Store: reopen Utf16TextStore(files.textStore)
-        TxtSession->>BlockIndex: buildIfNeeded(file, lockFile, store, meta)
-        BlockIndex-->>TxtSession: block.idx built
-        TxtSession->>Manifest: markBlockIndexReady(version=1)
-        TxtSession->>Manifest: write manifest.json
+        Artifact->>Store: reopen Utf16TextStore(files.textStore)
+        Artifact->>BlockIndex: buildIfNeeded(file, lockFile, store, meta)
+        BlockIndex-->>Artifact: block.idx built
+        Artifact->>Manifest: markBlockIndexReady(version=1)
+        Artifact->>Manifest: write manifest.json
     else block.idx 已就绪
-        Note over TxtSession: 跳过 block index 构建
+        Note over Artifact: 跳过 block index 构建
     end
 
     alt break.map 未就绪
-        TxtSession->>BreakBuilder: buildIfNeeded(files, meta, BALANCED)
-        TxtSession->>BreakIndex: openIfValid(files.breakMap, meta, BALANCED)
-        BreakIndex-->>TxtSession: builtIndex?
+        Artifact->>BreakBuilder: buildIfNeeded(files, meta, BALANCED)
+        Artifact->>BreakIndex: openIfValid(files.breakMap, meta, BALANCED)
+        BreakIndex-->>Artifact: builtIndex?
         alt break.map 打开成功
-            TxtSession->>TextProjectionEngine: attachIndex(builtIndex)
-            TxtSession->>Manifest: markBreakMapReady(version=7)
-            TxtSession->>Manifest: write manifest.json
+            Artifact->>TextProjectionEngine: attachIndex(builtIndex)
+            Artifact->>Manifest: markBreakMapReady(version=7)
+            Artifact->>Manifest: write manifest.json
         else break.map 仍不可用
-            Note over TxtSession: manifest 保持 breakMapReady=false
+            Note over Artifact: manifest 保持 breakMapReady=false
         end
     else projectionEngine 已有 indexed breaks
         opt manifest 还没标记 ready
-            TxtSession->>Manifest: markBreakMapReady(version=7)
-            TxtSession->>Manifest: write manifest.json
+            Artifact->>Manifest: markBreakMapReady(version=7)
+            Artifact->>Manifest: write manifest.json
         end
     end
 ```
 
 关键点：
 - 这条后台链路是在首个 `Rendered` 事件之后才启动，不阻塞首屏。
-- 当前源码里 `TxtOutlineProvider.warmup()` 和 `TxtSearchProviderPro.warmup()` 已实现，但 `TxtSession.create()` 并没有自动调用它们。
+- 当前实现由 `TxtSessionFacade` 在首个 `Rendered` 后驱动 `TxtArtifactCoordinator`；搜索索引允许后台 warmup，目录仍保持按需构建。
 
 ## 4. 目录与搜索
 
@@ -442,7 +445,7 @@ sequenceDiagram
         VM->>Selection: clearSelection()
         VM->>Selection: clear()
         VM->>Controller: invalidate(CONTENT_CHANGED)
-        Controller->>Controller: invalidatePaginationLocked()
+        VM->>Controller: render() 当前页
         VM-->>User: Snackbar("已添加批注")
     else 创建失败
         VM-->>User: Snackbar("创建批注失败")
@@ -450,7 +453,7 @@ sequenceDiagram
 ```
 
 注：
-- 当前源码在批注创建成功后只调用 `controller.invalidate(CONTENT_CHANGED)` 清缓存，没有立即再触发一次 `render()`。
+- 当前实现会在批注创建成功后 `invalidate(CONTENT_CHANGED)`，并立即重绘当前页，确保 decoration 同步到 UI。
 
 ### 5.3 TXT 换行修正
 
@@ -459,7 +462,7 @@ sequenceDiagram
     autonumber
     actor User as User
     participant VM as ReaderViewModel
-    participant PatchSupport as TxtSession(TextBreakPatchSupport)
+    participant PatchSupport as TxtSessionFacade(TextBreakPatchSupport)
     participant Controller as TxtController
     participant Locator as TxtStableLocatorCodec
     participant TextProjectionEngine as TextProjectionEngine
@@ -498,7 +501,7 @@ sequenceDiagram
 
 关键点：
 - 换行修正真正修改的是 `TextProjectionEngine` 的 patch 层，不会回写原始 `text.store`。
-- 一旦 patch 变化，`TxtSession` 会主动让目录缓存和搜索缓存失效，因为章节识别与搜索都依赖投射后的显示文本。
+- 一旦 patch 变化，`TxtSessionFacade` 会通过 `TxtArtifactCoordinator` 让目录缓存和搜索缓存失效，因为章节识别与搜索都依赖投射后的显示文本。
 
 ## 6. 汇总
 
@@ -506,7 +509,7 @@ sequenceDiagram
 
 1. `ReaderScreen` 先后把 `Start`、`TextLayouterFactoryChanged`、`LayoutChanged` 送入 `ReaderViewModel`。
 2. `ReaderViewModel.open()` 负责拿书、找源、恢复历史定位，并通过 `ReaderLaunchRepository -> DefaultReaderRuntime -> TxtEngine -> TxtOpener` 打开最小可读文档。
-3. `TxtDocument.createSession()` 在会话阶段组装 `TxtController + TextProjectionEngine + BlockStore + providers`。
-4. `RenderPrereqGate` 等待会话、布局、排版器三者都准备好后，`RenderCoordinator` 才调用 `TxtController.render()`。
-5. `TxtController` 通过 `PaginationCoordinator -> TxtPageFitter -> BlockStore/TextProjectionEngine/TextLayouter` 计算 `TxtPageSlice`，再包装成 `RenderPage` 返给 UI。
-6. 首个 `Rendered` 事件之后，`TxtSession` 后台补齐 `block.idx` 与 `break.map`，后续目录、搜索、换行修正、选区都建立在这些产物和 `TextProjectionEngine` 的投射能力之上。
+3. `TxtDocument.createSession()` 在会话阶段组装 `TxtController + TextProjectionEngine + BlockStore + TxtSessionFacade`。
+4. `ReaderSessionInteractor` 等待会话、布局、排版器三者都准备好后，`RenderCoordinator` 才调用 `TxtController.render()`。
+5. `TxtController` 现在把导航、分页后台任务、页面 links/decorations 拆给 `TxtNavigationService + TxtPaginationService + TxtPageExtrasService`，自身主要负责 controller API 与 `RenderPage` 组装。
+6. 首个 `Rendered` 事件之后，`TxtSessionFacade` 通过 `TxtArtifactCoordinator` 后台补齐 `block.idx` 与 `break.map`，后续目录、搜索、换行修正、选区都建立在这些产物和 `TextProjectionEngine` 的投射能力之上。

@@ -70,11 +70,11 @@ class ReaderViewModel @Inject constructor(
     val effects = effectStore.asSharedFlow()
 
     private val ui = ReaderUiReducer(stateStore = stateStore, effectStore = effectStore)
-    private val session = SessionCoordinator()
+    private val sessionInteractor = ReaderSessionInteractor()
+    val surfaceHandle = sessionInteractor.handleState
     private val render = RenderCoordinator(scope = viewModelScope) {
         renderCurrentPageImmediate()
     }
-    private val renderGate = RenderPrereqGate()
     private val gestureInterpreter = ReaderGestureInterpreter()
     private val interactionTracker: ReaderInteractionTracker = ReaderInteractionTracker.None
 
@@ -87,8 +87,6 @@ class ReaderViewModel @Inject constructor(
     private var finalRenderJob: Job? = null
     private var pendingUndoTurn: PendingUndoTurn? = null
     private var pendingTouchLastOpenedBookId: Long? = null
-    private var appliedLayoutConstraints: LayoutConstraints? = null
-    private var appliedTextLayouterFactoryKey: String? = null
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
@@ -292,8 +290,6 @@ class ReaderViewModel @Inject constructor(
         val currentOpenEpoch = nextOpenEpoch()
         pendingUndoTurn = null
         pendingTouchLastOpenedBookId = null
-        appliedLayoutConstraints = null
-        appliedTextLayouterFactoryKey = null
 
         ui.update {
             it.copy(
@@ -303,7 +299,6 @@ class ReaderViewModel @Inject constructor(
                 layerState = ReaderLayerState.Reading,
                 chromeVisible = false,
                 page = null,
-                handle = null,
                 resources = null,
                 capabilities = null,
                 renderState = null,
@@ -349,14 +344,16 @@ class ReaderViewModel @Inject constructor(
             is ReaderOpenResult.Success -> {
                 val handle = result.handle
                 val renderState = handle.state.value
-                session.attach(bookId = result.book.bookId, handle = handle)
-                renderGate.attachSession(handle = handle, openEpoch = currentOpenEpoch)
+                sessionInteractor.attach(
+                    bookId = result.book.bookId,
+                    handle = handle,
+                    openEpoch = currentOpenEpoch
+                )
                 pendingTouchLastOpenedBookId = result.book.bookId
                 ui.update {
                     it.copy(
                         isOpening = false,
                         title = result.book.title?.takeIf(String::isNotBlank) ?: result.book.fileName,
-                        handle = handle,
                         resources = handle.resources,
                         capabilities = handle.capabilities,
                         currentConfig = renderState.config,
@@ -369,7 +366,7 @@ class ReaderViewModel @Inject constructor(
                 }
 
                 startSessionCollectors(handle, result.book.bookId)
-                val constraints = renderGate.currentLayout()
+                val constraints = sessionInteractor.currentLayout()
                 if (constraints != null) {
                     applyLayout(constraints)
                 } else {
@@ -487,7 +484,7 @@ class ReaderViewModel @Inject constructor(
                 }
         }
 
-        session.bindCollectors(
+        sessionInteractor.bindCollectors(
             progressJob = progressJob,
             stateJob = stateJob,
             eventJob = eventJob,
@@ -496,8 +493,8 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun applyLayout(constraints: LayoutConstraints) {
-        renderGate.updateLayout(constraints)
-        val sessionHandle = session.currentHandle() ?: return
+        sessionInteractor.updateLayout(constraints)
+        val sessionHandle = sessionInteractor.currentHandle() ?: return
         when (val result = bindViewportIfReady(sessionHandle)) {
             null -> return
             is ReaderResult.Ok -> {
@@ -512,8 +509,8 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun applyTextLayouterFactory(factory: TextLayouterFactory) {
-        renderGate.updateLayouter(factory)
-        val sessionHandle = session.currentHandle() ?: return
+        sessionInteractor.updateLayouter(factory)
+        val sessionHandle = sessionInteractor.currentHandle() ?: return
         when (val result = bindViewportIfReady(sessionHandle)) {
             null -> return
             is ReaderResult.Ok -> {
@@ -535,7 +532,7 @@ class ReaderViewModel @Inject constructor(
             }
         }
 
-        val sessionHandle = session.currentHandle()
+        val sessionHandle = sessionInteractor.currentHandle()
         val effectiveConfig = if (sessionHandle != null) {
             normalizeConfigForSession(
                 config = config,
@@ -590,44 +587,19 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun renderCurrentPageImmediate() {
-        val snapshot = renderGate.snapshotIfReady() ?: return
-        val sessionHandle = snapshot.sessionHandle
-        when (val bindResult = bindViewportIfReady(sessionHandle)) {
-            null -> return
-            is ReaderResult.Err -> {
-                ui.update { it.copy(error = errorMapper.map(bindResult.error)) }
-                return
-            }
-            is ReaderResult.Ok -> Unit
-        }
-        cancelFinalRender()
-        val fixedLayout = sessionHandle.capabilities.fixedLayout
+        val snapshot = sessionInteractor.snapshotIfReady() ?: return
+        val sessionHandle = snapshot.session.handle
         val renderToken = nextRenderToken()
-        val result = render.withNavigationLock {
-            if (fixedLayout) {
-                sessionHandle.render(RenderPolicy(quality = RenderPolicy.Quality.DRAFT))
-            } else {
-                sessionHandle.render()
-            }
-        }
+        val result = renderCurrentPageResult(sessionHandle) ?: return
         when (result) {
             is ReaderResult.Err -> ui.update { it.copy(error = errorMapper.map(result.error)) }
-            is ReaderResult.Ok -> {
-                val committed = commitPageIfCurrent(
-                    sessionHandle = sessionHandle,
-                    expectedOpenEpoch = snapshot.openEpoch,
-                    renderToken = renderToken,
-                    nextPage = result.value,
-                    direction = null
-                )
-                if (committed && fixedLayout) {
-                    launchFinalRender(
-                        sessionHandle = sessionHandle,
-                        expectedOpenEpoch = snapshot.openEpoch,
-                        expectedPageId = result.value.id
-                    )
-                }
-            }
+            is ReaderResult.Ok -> commitRenderedPage(
+                sessionHandle = sessionHandle,
+                expectedOpenEpoch = snapshot.session.openEpoch,
+                renderToken = renderToken,
+                page = result.value,
+                direction = null
+            )
         }
     }
 
@@ -640,7 +612,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private fun requestRenderIfReady(reason: RenderRequest, immediate: Boolean) {
-        if (renderGate.snapshotIfReady() == null) {
+        if (sessionInteractor.snapshotIfReady() == null) {
             return
         }
         requestPageRender(reason = reason, immediate = immediate)
@@ -650,7 +622,7 @@ class ReaderViewModel @Inject constructor(
         direction: PageTurnDirection? = null,
         block: suspend (ReaderHandle, RenderPolicy) -> ReaderResult<RenderPage>
     ): Boolean {
-        val sessionHandle = session.currentHandle() ?: return false
+        val sessionHandle = sessionInteractor.currentHandle() ?: return false
         when (val bindResult = bindViewportIfReady(sessionHandle)) {
             null -> return false
             is ReaderResult.Err -> {
@@ -698,6 +670,48 @@ class ReaderViewModel @Inject constructor(
         finalRenderJob?.cancel()
         finalRenderJob = null
         ui.update { it.copy(isRenderingFinal = false) }
+    }
+
+    private suspend fun renderCurrentPageResult(
+        sessionHandle: ReaderHandle
+    ): ReaderResult<RenderPage>? {
+        when (val bindResult = bindViewportIfReady(sessionHandle)) {
+            null -> return null
+            is ReaderResult.Err -> return bindResult
+            is ReaderResult.Ok -> Unit
+        }
+        cancelFinalRender()
+        return render.withNavigationLock {
+            if (sessionHandle.capabilities.fixedLayout) {
+                sessionHandle.render(RenderPolicy(quality = RenderPolicy.Quality.DRAFT))
+            } else {
+                sessionHandle.render()
+            }
+        }
+    }
+
+    private fun commitRenderedPage(
+        sessionHandle: ReaderHandle,
+        expectedOpenEpoch: Long,
+        renderToken: Long,
+        page: RenderPage,
+        direction: PageTurnDirection?
+    ): Boolean {
+        val committed = commitPageIfCurrent(
+            sessionHandle = sessionHandle,
+            expectedOpenEpoch = expectedOpenEpoch,
+            renderToken = renderToken,
+            nextPage = page,
+            direction = direction
+        )
+        if (committed && sessionHandle.capabilities.fixedLayout) {
+            launchFinalRender(
+                sessionHandle = sessionHandle,
+                expectedOpenEpoch = expectedOpenEpoch,
+                expectedPageId = page.id
+            )
+        }
+        return committed
     }
 
     private fun launchFinalRender(
@@ -776,8 +790,7 @@ class ReaderViewModel @Inject constructor(
         expectedOpenEpoch: Long,
         renderToken: Long
     ): Boolean {
-        return session.currentHandle() === sessionHandle &&
-            openEpoch == expectedOpenEpoch &&
+        return sessionInteractor.isCurrent(sessionHandle, expectedOpenEpoch) &&
             activeRenderToken == renderToken
     }
 
@@ -835,7 +848,7 @@ class ReaderViewModel @Inject constructor(
             current.passwordPrompt == null &&
             !current.isOpening &&
             current.error == null &&
-            current.handle != null
+            sessionInteractor.currentHandle() != null
     }
 
     private suspend fun cancelActiveSearch() {
@@ -855,7 +868,7 @@ class ReaderViewModel @Inject constructor(
             current.copy(
                 isOpening = false,
                 search = current.search.copy(isSearching = false),
-                error = if (current.handle == null) {
+                error = if (sessionInteractor.currentHandle() == null) {
                     ReaderUiError(
                         message = UiText.Dynamic("Unexpected reader error"),
                         actionLabel = UiText.Dynamic("Back"),
@@ -908,7 +921,7 @@ class ReaderViewModel @Inject constructor(
     private suspend fun updateSelection(
         block: suspend (ReaderHandle) -> ReaderResult<Unit>
     ) {
-        val sessionHandle = session.currentHandle() ?: return
+        val sessionHandle = sessionInteractor.currentHandle() ?: return
         when (block(sessionHandle)) {
             is ReaderResult.Ok -> Unit
             is ReaderResult.Err -> ui.emit(
@@ -918,7 +931,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun createAnnotation() {
-        val sessionHandle = session.currentHandle() ?: return
+        val sessionHandle = sessionInteractor.currentHandle() ?: return
         if (!sessionHandle.capabilities.annotations) {
             ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("当前文档不支持批注")))
             return
@@ -952,11 +965,34 @@ class ReaderViewModel @Inject constructor(
 
             is ReaderResult.Ok -> {
                 sessionHandle.clearSelection()
-                when (sessionHandle.invalidate(InvalidateReason.CONTENT_CHANGED)) {
-                    is ReaderResult.Ok -> Unit
+                when (val invalidateResult = sessionHandle.invalidate(InvalidateReason.CONTENT_CHANGED)) {
                     is ReaderResult.Err -> ui.emit(
                         ReaderEffect.Snackbar(UiText.Dynamic("批注已保存，但页面刷新失败"))
                     )
+
+                    is ReaderResult.Ok -> {
+                        val expectedOpenEpoch = openEpoch
+                        val renderToken = nextRenderToken()
+                        when (val renderResult = renderCurrentPageResult(sessionHandle)) {
+                            null -> ui.emit(
+                                ReaderEffect.Snackbar(UiText.Dynamic("批注已保存，但页面刷新失败"))
+                            )
+
+                            is ReaderResult.Err -> ui.emit(
+                                ReaderEffect.Snackbar(UiText.Dynamic("批注已保存，但页面刷新失败"))
+                            )
+
+                            is ReaderResult.Ok -> {
+                                commitRenderedPage(
+                                    sessionHandle = sessionHandle,
+                                    expectedOpenEpoch = expectedOpenEpoch,
+                                    renderToken = renderToken,
+                                    page = renderResult.value,
+                                    direction = null
+                                )
+                            }
+                        }
+                    }
                 }
                 ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("已添加批注")))
             }
@@ -987,7 +1023,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun loadTocIfNeeded(force: Boolean = false) {
-        val sessionHandle = session.currentHandle() ?: return
+        val sessionHandle = sessionInteractor.currentHandle() ?: return
         if (!force && ui.state.value.toc.items.isNotEmpty()) return
 
         ui.update { it.copy(toc = it.toc.copy(isLoading = true, error = null)) }
@@ -1015,7 +1051,7 @@ class ReaderViewModel @Inject constructor(
         direction: TextBreakPatchDirection,
         state: TextBreakPatchState
     ) {
-        val sessionHandle = session.currentHandle() ?: return
+        val sessionHandle = sessionInteractor.currentHandle() ?: return
         if (!sessionHandle.supportsTextBreakPatches) {
             ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("当前文档不支持 TXT 换行修正")))
             return
@@ -1074,7 +1110,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun clearTextBreakPatches() {
-        val sessionHandle = session.currentHandle() ?: return
+        val sessionHandle = sessionInteractor.currentHandle() ?: return
         if (!sessionHandle.supportsTextBreakPatches) {
             ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("当前文档不支持 TXT 换行修正")))
             return
@@ -1114,7 +1150,7 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun executeSearch() {
-        val sessionHandle = session.currentHandle() ?: return
+        val sessionHandle = sessionInteractor.currentHandle() ?: return
         val query = ui.state.value.search.query.trim()
         if (query.isBlank()) {
             ui.update { it.copy(search = it.search.copy(results = emptyList(), error = null)) }
@@ -1129,7 +1165,7 @@ class ReaderViewModel @Inject constructor(
 
             fun isCurrentSearch(): Boolean {
                 return searchGeneration == generation &&
-                    session.currentHandle() === sessionHandle
+                    sessionInteractor.currentHandle() === sessionHandle
             }
 
             ui.update {
@@ -1237,9 +1273,6 @@ class ReaderViewModel @Inject constructor(
         pendingUndoTurn = null
         pendingTouchLastOpenedBookId = null
         cancelFinalRender()
-        renderGate.clearSession()
-        appliedLayoutConstraints = null
-        appliedTextLayouterFactoryKey = null
         ui.update {
             it.copy(
                 page = null,
@@ -1247,7 +1280,7 @@ class ReaderViewModel @Inject constructor(
                 supportsTextBreakPatches = false
             )
         }
-        session.closeCurrent { bookId, locator, progression ->
+        sessionInteractor.closeCurrent { bookId, locator, progression ->
             launchRepository.saveProgress(bookId, locator, progression)
         }
     }
@@ -1528,31 +1561,10 @@ class ReaderViewModel @Inject constructor(
     }
 
     private suspend fun bindViewportIfReady(sessionHandle: ReaderHandle): ReaderResult<Unit>? {
-        val snapshot = renderGate.snapshotIfReady() ?: return null
-        if (snapshot.sessionHandle !== sessionHandle) {
-            return null
-        }
-        val environmentKey = snapshot.textLayouterFactory?.environmentKey
-        if (appliedLayoutConstraints == snapshot.layoutConstraints &&
-            appliedTextLayouterFactoryKey == environmentKey
-        ) {
-            return ReaderResult.Ok(Unit)
-        }
-        return when (
-            val result = render.withNavigationLock {
-                sessionHandle.bindViewport(
-                    constraints = snapshot.layoutConstraints,
-                    textLayouterFactory = snapshot.textLayouterFactory
-                )
+        return sessionInteractor.bindViewportIfReady(sessionHandle) { block ->
+            render.withNavigationLock {
+                block()
             }
-        ) {
-            is ReaderResult.Ok -> {
-                appliedLayoutConstraints = snapshot.layoutConstraints
-                appliedTextLayouterFactoryKey = environmentKey
-                result
-            }
-
-            is ReaderResult.Err -> result
         }
     }
 }

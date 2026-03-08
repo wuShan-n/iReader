@@ -1,5 +1,20 @@
 先给结论：我最推荐的不是继续把目录拆得更细，而是把 **Reader 做成真正的平台层**：`core/reader/api + core/reader/runtime + engines/*`，再把 TXT 从“一个大 Controller 驱动全部功能”重构成“**产物流水线 + 会话门面 + 双层 locator**”的架构。Android 官方对多模块本来就不主张唯一标准答案，而是建议按稳定边界拆分；同时推荐明确分层、single source of truth、UDF 和 state holder。([Android Developers][1])
 
+## 0. 当前落地状态（2026-03-08）
+
+这一轮已经落地的部分：
+
+* `feature/reader` 用 `ReaderSessionInteractor` 收口了会话、viewport 前置条件和 collector 生命周期。
+* `ReaderUiState` 不再直接持有 `ReaderHandle`；嵌入式渲染改走独立的 `surfaceHandle` 流。
+* 批注创建成功后会 `invalidate + 立即重绘当前页`，而不是只清缓存。
+* TXT 会话层已经拆成 `TxtSessionFacade + TxtArtifactCoordinator`。
+* `TxtController` 已经把导航、分页后台任务、页面 links/decorations 拆给内部 service。
+
+这一轮刻意保留的点：
+
+* `ReaderHandle` 仍然是 `feature/reader` 直接面对的 runtime 门面，没有再额外包一层 public facade。
+* outline 仍保持按需构建；search 会在合适条件下后台 warmup。
+
 你这套提案里，我会保留的部分很多，差不多有 80%：
 
 * `app` 作为唯一组装者
@@ -188,7 +203,7 @@ engines/txt/internal/
 这几个不必等大重构，直接改：
 
 * 批注创建成功后，**不要只 invalidate cache，要立即 rerender 当前页**
-* `TxtSession.create()` 里把 `outline/search warmup` 接上，不要只留实现不调用
+* `TxtSessionFacade` 里把搜索 warmup 与产物补齐链路正式接上；outline 继续保持按需构建
 * `next/prev` 不该因为 layouter factory 为空而失败；应该在 `bindViewport` 前根本不暴露可导航状态
 * `RenderPrereqGate` / `RenderCoordinator` 可以保留思路，但应尽量下沉到 runtime handle，而不是留在 feature 作为长期业务逻辑
 

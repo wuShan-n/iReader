@@ -307,7 +307,6 @@ class TxtControllerTest {
             blockIndex = runtime.blockIndex,
             projectionEngine = projectionEngine,
             blockStore = blockStore,
-            initialLocator = null,
             initialOffset = 0L,
             initialConfig = RenderConfig.ReflowText(),
             maxPageCache = 8,

@@ -90,6 +90,7 @@ import com.ireader.feature.reader.ui.components.ReaderSettingsPanel
 import com.ireader.feature.reader.ui.components.SearchSheet
 import com.ireader.feature.reader.ui.components.SettingsSheet
 import com.ireader.reader.api.render.RenderContent
+import com.ireader.reader.runtime.ReaderHandle
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -115,6 +116,7 @@ import com.ireader.reader.api.render.LayoutConstraints
 @Composable
 fun ReaderScaffold(
     state: ReaderUiState,
+    surfaceHandle: ReaderHandle?,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
     onIntent: (ReaderIntent) -> Unit,
@@ -195,6 +197,7 @@ fun ReaderScaffold(
             ) {
                 PageRenderer(
                     state = state,
+                    embeddedHandle = surfaceHandle,
                     textColor = readerTextColor,
                     backgroundColor = bgColor,
                     onBackgroundTap = { tap, size, allowPageTurn ->

@@ -9,6 +9,7 @@ import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
 import com.ireader.engines.txt.internal.runtime.BlockStore
 import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.render.TxtController
+import com.ireader.engines.txt.internal.session.TxtSessionFacade
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.engine.DocumentCapabilities
@@ -127,7 +128,6 @@ internal class TxtDocument(
                     blockIndex = blockIndex,
                     projectionEngine = projectionEngine,
                     blockStore = blockStore,
-                    initialLocator = initialLocator,
                     initialOffset = initialOffset,
                     initialConfig = effectiveConfig,
                     maxPageCache = maxPageCache,
@@ -139,7 +139,7 @@ internal class TxtDocument(
                     defaultDispatcher = defaultDispatcher
                 )
                 ReaderResult.Ok(
-                    TxtSession.create(
+                    TxtSessionFacade.create(
                         controller = controller,
                         files = files,
                         meta = meta,
