@@ -17,7 +17,7 @@ class DependencyGuardPlugin : Plugin<Project> {
                 .forEach { conf ->
                     conf.dependencies.withType(ProjectDependency::class.java).forEach { dep ->
                         val depPath = dep.path
-                        if (!rule.isAllowed(depPath)) {
+                        if (!rule.isAllowed(conf.name, depPath)) {
                             violations += "${conf.name} -> $depPath"
                         }
                     }
@@ -48,22 +48,26 @@ class DependencyGuardPlugin : Plugin<Project> {
             ownerPath.startsWith(FEATURE_PREFIX) -> Rule(
                 layerName = "feature",
                 allowedTargetsDescription = "feature/*, core/*",
-                isAllowed = { depPath ->
+                isAllowed = { _, depPath ->
                     depPath.startsWith(FEATURE_PREFIX) || depPath.startsWith(CORE_PREFIX)
                 }
             )
             ownerPath.startsWith(CORE_PREFIX) -> Rule(
                 layerName = "core",
                 allowedTargetsDescription = "core/*",
-                isAllowed = { depPath ->
+                isAllowed = { _, depPath ->
                     depPath.startsWith(CORE_PREFIX)
                 }
             )
             ownerPath.startsWith(ENGINES_PREFIX) -> Rule(
                 layerName = "engines",
-                allowedTargetsDescription = "engines/*, core:reader:api, core:common, core:common-android, core:model, core:files",
-                isAllowed = { depPath ->
-                    depPath.startsWith(ENGINES_PREFIX) || depPath in ENGINE_ALLOWED_CORE_TARGETS
+                allowedTargetsDescription =
+                    "engines/*, core:reader:api, core:common, core:common-android, core:model, core:files; test* -> core:reader:testkit",
+                isAllowed = { configName, depPath ->
+                    depPath.startsWith(ENGINES_PREFIX) ||
+                        depPath in ENGINE_ALLOWED_CORE_TARGETS ||
+                        (configName.contains("test", ignoreCase = true) &&
+                            depPath in ENGINE_ALLOWED_TEST_CORE_TARGETS)
                 }
             )
             else -> null
@@ -73,7 +77,7 @@ class DependencyGuardPlugin : Plugin<Project> {
     private data class Rule(
         val layerName: String,
         val allowedTargetsDescription: String,
-        val isAllowed: (String) -> Boolean
+        val isAllowed: (String, String) -> Boolean
     )
 
     companion object {
@@ -88,6 +92,10 @@ class DependencyGuardPlugin : Plugin<Project> {
             ":core:common-android",
             ":core:model",
             ":core:files"
+        )
+
+        private val ENGINE_ALLOWED_TEST_CORE_TARGETS = setOf(
+            ":core:reader:testkit"
         )
     }
 }

@@ -17,6 +17,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation("org.robolectric:robolectric:4.16")
+    testImplementation(project(":core:reader:testkit"))
 }
 
 tasks.register<Detekt>("detektTxtHotspots") {

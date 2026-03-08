@@ -163,6 +163,35 @@ class DependencyGuardPluginTest {
         assertTrue(result.output.contains("testImplementation -> :core:reader:runtime"))
     }
 
+    @Test
+    fun `engines test dependency on core reader testkit should pass`() {
+        val projectDir = createTempProjectDir()
+        writeSettings(
+            projectDir,
+            ":engines:pdf",
+            ":core:reader:testkit"
+        )
+        writeBuild(projectDir, ":core:reader:testkit")
+        writeBuild(
+            projectDir,
+            ":engines:pdf",
+            """
+            plugins {
+                id("com.ireader.dependency.guard")
+            }
+
+            configurations.create("testImplementation")
+
+            dependencies {
+                add("testImplementation", project(":core:reader:testkit"))
+            }
+            """
+        )
+
+        val result = runGradle(projectDir, ":engines:pdf:help")
+        assertTrue(result.output.contains("BUILD SUCCESSFUL"))
+    }
+
     private fun runGradle(projectDir: Path, vararg args: String) =
         GradleRunner.create()
             .withProjectDir(projectDir.toFile())
