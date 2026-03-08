@@ -5,8 +5,8 @@ package com.ireader.engines.txt.internal.render
 import com.ireader.engines.txt.internal.provider.ChapterDetector
 import com.ireader.engines.txt.internal.runtime.BlockStore
 import com.ireader.engines.txt.internal.runtime.LogicalParagraph
-import com.ireader.engines.txt.internal.runtime.ProjectedTextRange
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.ProjectedTextRange
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.PAGE_PADDING_BOTTOM_DP_EXTRA_KEY
@@ -25,7 +25,7 @@ import kotlin.math.roundToInt
 internal class TxtPageFitter(
     private val store: Utf16TextStore,
     private val blockStore: BlockStore,
-    private val breakResolver: BreakResolver
+    private val projectionEngine: TextProjectionEngine
 ) {
     private val pageEndAdjuster = TxtPageEndAdjuster(ChapterDetector())
     private var textLayouterFactory: TextLayouterFactory? = null
@@ -130,7 +130,7 @@ internal class TxtPageFitter(
         }
 
         if (pageText.isEmpty() && safeStart < store.lengthCodeUnits) {
-            val projection = breakResolver.projectRange(safeStart, (safeStart + 1L).coerceAtMost(store.lengthCodeUnits))
+            val projection = projectionEngine.projectRange(safeStart, (safeStart + 1L).coerceAtMost(store.lengthCodeUnits))
             appendProjection(
                 pageText = pageText,
                 pageRaw = pageRaw,
@@ -195,7 +195,7 @@ internal class TxtPageFitter(
         if (previousChar != '\n') {
             return true
         }
-        return breakResolver.stateAt(previousOffset)?.emitsVisibleNewline == false
+        return projectionEngine.stateAt(previousOffset)?.emitsVisibleNewline == false
     }
 
     private fun appendProjection(

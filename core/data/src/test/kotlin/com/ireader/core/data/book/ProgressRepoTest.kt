@@ -16,7 +16,7 @@ class ProgressRepoTest {
         val dao = FakeProgressDao().apply {
             byBookId[7L] = ProgressEntity(
                 bookId = 7L,
-                locatorJson = """{"scheme":"txt.anchor","value":"2049:0:f:1"}""",
+                locatorJson = """{"scheme":"txt.stable.anchor","value":"2049:0"}""",
                 progression = 0.25,
                 updatedAtEpochMs = 123L
             )

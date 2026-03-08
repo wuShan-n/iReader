@@ -1,5 +1,6 @@
 package com.ireader.feature.reader.domain.usecase
 
+import com.ireader.core.data.reader.ReaderPreferencesRepository
 import com.ireader.core.datastore.reader.ReaderBackgroundPreset
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.core.datastore.reader.ReaderSettingsStore
@@ -9,7 +10,7 @@ import com.ireader.reader.api.render.READER_APPEARANCE_THEME_DARK
 import com.ireader.reader.api.render.READER_APPEARANCE_THEME_EXTRA_KEY
 import com.ireader.reader.api.render.READER_APPEARANCE_THEME_LIGHT
 import com.ireader.reader.api.render.RenderConfig
-import com.ireader.reader.model.DocumentCapabilities
+import com.ireader.reader.api.engine.DocumentCapabilities
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,7 +34,9 @@ class ObserveEffectiveConfigTest {
                 backgroundPreset = ReaderBackgroundPreset.SYSTEM
             )
         )
-        val useCase = ObserveEffectiveConfig(settingsStore = settingsStore)
+        val useCase = ObserveEffectiveConfig(
+            preferencesRepository = ReaderPreferencesRepository(settingsStore)
+        )
         val emissions = mutableListOf<RenderConfig>()
 
         val job = launch {
@@ -64,7 +67,9 @@ class ObserveEffectiveConfigTest {
                 backgroundPreset = ReaderBackgroundPreset.SYSTEM
             )
         )
-        val useCase = ObserveEffectiveConfig(settingsStore = settingsStore)
+        val useCase = ObserveEffectiveConfig(
+            preferencesRepository = ReaderPreferencesRepository(settingsStore)
+        )
 
         val config = useCase(fixedCapabilities()).take(1).toList().single() as RenderConfig.FixedPage
         assertEquals(0xFF131313.toInt().toString(), config.extra[READER_APPEARANCE_BG_ARGB_EXTRA_KEY])

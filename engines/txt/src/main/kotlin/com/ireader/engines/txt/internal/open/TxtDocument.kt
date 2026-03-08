@@ -2,13 +2,12 @@
 
 package com.ireader.engines.txt.internal.open
 
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
 import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.render.TxtController
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.store.Utf16TextStore
@@ -17,6 +16,7 @@ import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.provider.AnnotationProvider
 import com.ireader.reader.api.render.RenderConfig
@@ -90,33 +90,34 @@ internal class TxtDocument(
                         ReaderError.Internal("TXT engine requires RenderConfig.ReflowText")
                     )
                 val effectiveConfig = config.sanitized()
-                val initialOffset = when {
-                    initialLocator == null -> 0L
-                    else -> TxtAnchorLocatorCodec.parseOffset(
-                        locator = initialLocator,
-                        blockIndex = blockIndex,
-                        expectedRevision = meta.contentRevision,
-                        maxOffset = store.lengthChars
-                    ) ?: 0L
-                }.coerceIn(0L, store.lengthChars)
-                val annotationProvider = annotationProviderFactory?.invoke(id)
                 val breakIndex = SoftBreakIndex.openIfValid(
                     file = files.breakMap,
                     meta = meta,
                     profile = SoftBreakTuningProfile.BALANCED,
                     rulesVersion = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED).rulesVersion
                 )
-                val breakResolver = BreakResolver(
+                val projectionEngine = TextProjectionEngine(
                     store = store,
                     files = files,
                     meta = meta,
                     breakIndex = breakIndex
                 )
+                val initialOffset = when {
+                    initialLocator == null -> 0L
+                    else -> TxtLocatorResolver.parsePublicOffset(
+                        locator = initialLocator,
+                        blockIndex = blockIndex,
+                        contentFingerprint = meta.contentFingerprint,
+                        maxOffset = store.lengthChars,
+                        projectionEngine = projectionEngine
+                    ) ?: 0L
+                }.coerceIn(0L, store.lengthChars)
+                val annotationProvider = annotationProviderFactory?.invoke(id)
                 val blockStore = BlockStore(
                     store = store,
                     blockIndex = blockIndex,
                     revision = meta.contentRevision,
-                    breakResolver = breakResolver
+                    projectionEngine = projectionEngine
                 )
 
                 val controller = TxtController(
@@ -124,7 +125,7 @@ internal class TxtDocument(
                     store = store,
                     meta = meta,
                     blockIndex = blockIndex,
-                    breakResolver = breakResolver,
+                    projectionEngine = projectionEngine,
                     blockStore = blockStore,
                     initialLocator = initialLocator,
                     initialOffset = initialOffset,
@@ -143,7 +144,7 @@ internal class TxtDocument(
                         files = files,
                         meta = meta,
                         blockIndex = blockIndex,
-                        breakResolver = breakResolver,
+                        projectionEngine = projectionEngine,
                         blockStore = blockStore,
                         ioDispatcher = ioDispatcher,
                         persistOutline = persistOutline,

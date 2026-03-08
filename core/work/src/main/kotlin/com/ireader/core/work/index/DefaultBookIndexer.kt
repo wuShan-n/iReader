@@ -9,11 +9,11 @@ import com.ireader.core.files.storage.BookStorage
 import com.ireader.core.work.enrich.BitmapIO
 import com.ireader.core.work.enrich.CoverRenderer
 import com.ireader.core.work.enrich.epub.EpubZipEnricher
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.model.DocumentCapabilities
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.runtime.BookProbeResult
 import com.ireader.reader.runtime.ReaderRuntime
@@ -195,19 +195,20 @@ class DefaultBookIndexer @Inject constructor(
         }
 
         return try {
-            val layoutResult = sessionHandle.controller.setLayoutConstraints(
+            val layoutResult = sessionHandle.bindViewport(
                 LayoutConstraints(
                     viewportWidthPx = COVER_WIDTH,
                     viewportHeightPx = COVER_HEIGHT,
                     density = 1f,
                     fontScale = 1f
-                )
+                ),
+                textLayouterFactory = null
             )
             if (layoutResult !is ReaderResult.Ok) {
                 return false
             }
 
-            val page = when (val renderResult = sessionHandle.controller.render()) {
+            val page = when (val renderResult = sessionHandle.render()) {
                 is ReaderResult.Ok -> renderResult.value
                 is ReaderResult.Err -> return false
             }

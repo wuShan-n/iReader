@@ -1,7 +1,7 @@
 package com.ireader.engines.common.android.id
 
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.id.DocumentIds
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.model.DocumentId
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream

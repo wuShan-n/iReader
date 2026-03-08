@@ -4,6 +4,8 @@ import com.ireader.engines.common.cache.LruCache
 import com.ireader.engines.txt.internal.locator.TextAnchor
 import com.ireader.engines.txt.internal.locator.TextAnchorAffinity
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
+import com.ireader.engines.txt.internal.projection.ProjectedTextRange
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 
 internal data class BlockText(
@@ -37,7 +39,7 @@ internal class BlockStore(
     private val store: Utf16TextStore,
     private val blockIndex: TxtBlockIndex,
     private val revision: Int,
-    private val breakResolver: BreakResolver,
+    private val projectionEngine: TextProjectionEngine,
     blockCacheSize: Int = 12
 ) {
     private val blockCache = LruCache<Int, BlockText>(blockCacheSize.coerceAtLeast(4))
@@ -88,7 +90,7 @@ internal class BlockStore(
         if (previous != '\n') {
             return false
         }
-        return breakResolver.stateAt(previousOffset)?.emitsVisibleNewline != false
+        return projectionEngine.stateAt(previousOffset)?.emitsVisibleNewline != false
     }
 
     fun readParagraphs(startAnchor: TextAnchor, codeUnitBudget: Int): ParagraphBatch {
@@ -102,7 +104,7 @@ internal class BlockStore(
         var cursor = startOffset
         while (cursor < store.lengthCodeUnits) {
             val end = findNextParagraphEnd(cursor)
-            val projection = breakResolver.projectRange(cursor, end)
+            val projection = projectionEngine.projectRange(cursor, end)
             val paragraph = LogicalParagraph(
                 startAnchor = anchorForOffset(cursor, TextAnchorAffinity.FORWARD),
                 endAnchor = anchorForOffset(end, TextAnchorAffinity.BACKWARD),
@@ -135,7 +137,7 @@ internal class BlockStore(
                     continue
                 }
                 val globalOffset = block.startOffset + index.toLong()
-                val state = breakResolver.stateAt(globalOffset)
+                val state = projectionEngine.stateAt(globalOffset)
                 if (state == null || state.emitsVisibleNewline) {
                     return (globalOffset + 1L).coerceAtMost(store.lengthCodeUnits)
                 }

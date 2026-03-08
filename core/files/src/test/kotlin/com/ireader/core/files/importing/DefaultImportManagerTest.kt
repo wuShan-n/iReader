@@ -12,7 +12,7 @@ import com.ireader.core.database.importing.ImportJobEntity
 import com.ireader.core.database.importing.ImportStatus
 import com.ireader.core.files.permission.UriPermissionGateway
 import com.ireader.core.files.permission.UriPermissionResult
-import com.ireader.core.files.source.DocumentSource
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.core.files.source.UriDocumentSourceFactory
 import java.io.ByteArrayInputStream
 import java.io.InputStream

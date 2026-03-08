@@ -1,4 +1,4 @@
-package com.ireader.engines.txt.internal.runtime
+package com.ireader.engines.txt.internal.projection
 
 import com.ireader.engines.common.io.readStringUtf8
 import com.ireader.engines.txt.internal.softbreak.BreakMapState
@@ -9,7 +9,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-class BreakResolverTest {
+class TextProjectionEngineTest {
 
     @Test
     fun `patch should persist and affect projected text`() = runBlocking {
@@ -19,12 +19,12 @@ class BreakResolverTest {
             ioDispatcher = Dispatchers.IO
         )
         try {
-            fixture.breakResolver.patch(offset = 1L, state = BreakMapState.SOFT_SPACE)
+            fixture.projectionEngine.patch(offset = 1L, state = BreakMapState.SOFT_SPACE)
 
-            val projected = fixture.breakResolver.projectRange(0L, fixture.sourceText.length.toLong())
+            val projected = fixture.projectionEngine.projectRange(0L, fixture.sourceText.length.toLong())
             assertEquals("甲 乙", projected.displayText)
 
-            val reopened = BreakResolver(
+            val reopened = TextProjectionEngine(
                 store = fixture.store,
                 files = fixture.files,
                 meta = fixture.meta,
@@ -54,7 +54,7 @@ class BreakResolverTest {
         try {
             corruptFirstBreakMapBlockCount(fixture.files.breakMap)
 
-            val projected = fixture.breakResolver.projectRange(
+            val projected = fixture.projectionEngine.projectRange(
                 startOffset = 0L,
                 endOffsetExclusive = fixture.sourceText.length.toLong()
             )

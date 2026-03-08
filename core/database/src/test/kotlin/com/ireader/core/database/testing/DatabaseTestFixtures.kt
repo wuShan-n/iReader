@@ -74,7 +74,7 @@ fun sampleProgress(
 ): ProgressEntity {
     return ProgressEntity(
         bookId = bookId,
-        locatorJson = """{"scheme":"txt.anchor","value":"2049:0:f:1"}""",
+        locatorJson = """{"scheme":"txt.stable.anchor","value":"2049:0"}""",
         progression = progression,
         updatedAtEpochMs = updatedAtEpochMs
     )

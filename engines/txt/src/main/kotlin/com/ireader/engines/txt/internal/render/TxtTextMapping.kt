@@ -2,8 +2,9 @@
 
 package com.ireader.engines.txt.internal.render
 
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.reader.api.render.TextMapping
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
@@ -12,16 +13,19 @@ internal class TxtTextMapping(
     private val pageStart: Long,
     private val pageEnd: Long,
     private val blockIndex: TxtBlockIndex,
-    private val revision: Int,
+    private val contentFingerprint: String,
+    private val projectionEngine: TextProjectionEngine,
     private val projectedBoundaryToRawOffsets: LongArray? = null
 ) : TextMapping {
 
     override fun locatorAt(charIndex: Int): Locator {
         val global = rawOffsetForBoundary(charIndex)
-        return TxtAnchorLocatorCodec.locatorForOffset(
+        return TxtLocatorResolver.locatorForOffset(
             offset = global,
             blockIndex = blockIndex,
-            revision = revision
+            contentFingerprint = contentFingerprint,
+            maxOffset = pageEnd,
+            projectionEngine = projectionEngine
         )
     }
 
@@ -32,26 +36,30 @@ internal class TxtTextMapping(
         val maxLocal = maxOf(localStart, localEnd)
         val startGlobal = rawOffsetForBoundary(minLocal)
         val endGlobal = rawOffsetForBoundary(maxLocal)
-        return TxtAnchorLocatorCodec.rangeForOffsets(
+        return TxtLocatorResolver.rangeForOffsets(
             startOffset = startGlobal,
             endOffset = endGlobal,
             blockIndex = blockIndex,
-            revision = revision
+            contentFingerprint = contentFingerprint,
+            maxOffset = pageEnd,
+            projectionEngine = projectionEngine
         )
     }
 
     override fun charRangeFor(range: LocatorRange): IntRange? {
-        val startGlobal = TxtAnchorLocatorCodec.parseOffset(
+        val startGlobal = TxtLocatorResolver.parsePublicOffset(
             locator = range.start,
             blockIndex = blockIndex,
-            expectedRevision = revision,
-            maxOffset = pageEnd
+            contentFingerprint = contentFingerprint,
+            maxOffset = pageEnd,
+            projectionEngine = projectionEngine
         ) ?: return null
-        val endGlobal = TxtAnchorLocatorCodec.parseOffset(
+        val endGlobal = TxtLocatorResolver.parsePublicOffset(
             locator = range.end,
             blockIndex = blockIndex,
-            expectedRevision = revision,
-            maxOffset = pageEnd
+            contentFingerprint = contentFingerprint,
+            maxOffset = pageEnd,
+            projectionEngine = projectionEngine
         ) ?: return null
         val minGlobal = minOf(startGlobal, endGlobal)
         val maxGlobal = maxOf(startGlobal, endGlobal)

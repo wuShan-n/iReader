@@ -2,7 +2,7 @@ package com.ireader.reader.runtime
 
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import com.ireader.core.files.source.DocumentSource
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.engine.EngineRegistry
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderEngine
@@ -28,7 +28,7 @@ import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.model.DocumentCapabilities
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
@@ -166,7 +166,7 @@ private class FakeSession : ReaderSession {
 private class FakeController : ReaderController {
     override val state = MutableStateFlow(
         RenderState(
-            locator = Locator("txt.anchor", "0:0:f:1"),
+            locator = Locator("txt.stable.anchor", "0:0"),
             progression = Progression(0.0),
             nav = NavigationAvailability(canGoPrev = false, canGoNext = false),
             config = RenderConfig.ReflowText()

@@ -36,7 +36,7 @@ sealed interface AnnotationDocumentLookup {
 
 enum class AnnotationMutationFailure {
     MISSING_PROGRESS,
-    LEGACY_TXT_LOCATOR,
+    UNSUPPORTED_PROGRESS_LOCATOR,
     MISSING_ANNOTATION,
     CREATE_FAILED,
     UPDATE_FAILED,
@@ -74,7 +74,7 @@ class AnnotationRepository @Inject constructor(
         val fallbackLocator = resolveFallbackLocator(bookId)
             ?: return AnnotationMutationResult.Failure(AnnotationMutationFailure.MISSING_PROGRESS)
         val anchor = fallbackLocator.toAnchorOrNull()
-            ?: return AnnotationMutationResult.Failure(AnnotationMutationFailure.LEGACY_TXT_LOCATOR)
+            ?: return AnnotationMutationResult.Failure(AnnotationMutationFailure.UNSUPPORTED_PROGRESS_LOCATOR)
         return when (
             annotationStore.create(
                 documentId = DocumentId(documentId),
@@ -155,10 +155,13 @@ class AnnotationRepository @Inject constructor(
     private fun Locator.toAnchorOrNull(): AnnotationAnchor? {
         return if (scheme == LocatorSchemes.PDF_PAGE) {
             AnnotationAnchor.FixedRects(page = this, rects = emptyList())
-        } else if (scheme == "txt.offset" || scheme == "txt.block") {
-            null
-        } else {
+        } else if (scheme == LocatorSchemes.EPUB_CFI ||
+            scheme == LocatorSchemes.REFLOW_PAGE ||
+            scheme == LocatorSchemes.TXT_STABLE_ANCHOR
+        ) {
             AnnotationAnchor.ReflowRange(LocatorRange(start = this, end = this))
+        } else {
+            null
         }
     }
 }

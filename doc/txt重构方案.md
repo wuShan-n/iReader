@@ -102,7 +102,7 @@ DI 方面我会直接用 Hilt + multibinding，把 `Set<ReaderEngine>` 注入 `E
 engines/txt/internal/
 ├── artifact/          # text.store / meta / manifest / block.idx / break.map / search.idx / outline.idx
 ├── canonical/         # 编码探测、标准化、Utf16TextStore、BlockIndex
-├── projection/        # BreakResolver、patch overlay、raw/display offset mapping
+├── projection/        # TextProjectionEngine、patch overlay、raw/display offset mapping
 ├── location/          # StableLocator <-> RenderLocator 解析与恢复
 ├── pagination/        # TxtPageFitter、PaginationCoordinator、page cache、checkpoint
 ├── navigation/        # next/prev/goTo/goToProgress
@@ -162,7 +162,7 @@ engines/txt/internal/
 
 进度和批注仍然有恢复空间。
 
-你现在的 `TxtAnchorLocatorCodec` 这种偏绝对 offset 的做法，短期性能很好，但长期兼容性会越来越贵。
+你现在的 `TxtStableLocatorCodec` 这种偏绝对 offset 的做法，短期性能很好，但长期兼容性会越来越贵。
 
 ## 6. 产物要分三层，而不是一锅炖
 
@@ -181,7 +181,7 @@ engines/txt/internal/
 
 **`outline.idx` 和 `search.idx` 不应该只依赖 sourceVersion，而应该依赖 `projectionVersion`。**
 
-因为你现在已经明确了：搜索、目录都基于 `BreakResolver.projectRange()` 之后的显示文本。那 patch 一变，搜索/目录天然就该失效并异步重建；这个方向是对的，但要把它设计成正式依赖图，而不是散落在几个 invalidate 调用里。
+因为你现在已经明确了：搜索、目录都基于 `TextProjectionEngine.projectRange()` 之后的显示文本。那 patch 一变，搜索/目录天然就该失效并异步重建；这个方向是对的，但要把它设计成正式依赖图，而不是散落在几个 invalidate 调用里。
 
 ## 7. 你当前流程里有 4 个地方要立刻修
 

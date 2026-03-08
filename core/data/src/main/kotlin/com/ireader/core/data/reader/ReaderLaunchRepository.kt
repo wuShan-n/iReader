@@ -48,10 +48,15 @@ class ReaderLaunchRepository @Inject constructor(
             return ReaderOpenResult.MissingSource
         }
 
-        val routeLocator = locatorArg?.let(locatorCodec::decode)
+        val routeLocator = locatorArg
+            ?.let(locatorCodec::decode)
+            ?.takeIf { it.isSupportedFor(book.format) }
         val historyLocator = if (routeLocator == null) {
             runCatching {
-                progressRepo.getByBookId(book.bookId)?.locatorJson?.let(locatorCodec::decode)
+                progressRepo.getByBookId(book.bookId)
+                    ?.locatorJson
+                    ?.let(locatorCodec::decode)
+                    ?.takeIf { it.isSupportedFor(book.format) }
             }.getOrNull()
         } else {
             null
@@ -110,5 +115,12 @@ class ReaderLaunchRepository @Inject constructor(
 
     suspend fun touchLastOpened(bookId: Long) {
         bookRepo.touchLastOpened(bookId)
+    }
+
+    private fun Locator.isSupportedFor(format: BookFormat): Boolean {
+        return when (format) {
+            BookFormat.TXT -> scheme == com.ireader.reader.model.LocatorSchemes.TXT_STABLE_ANCHOR
+            else -> true
+        }
     }
 }

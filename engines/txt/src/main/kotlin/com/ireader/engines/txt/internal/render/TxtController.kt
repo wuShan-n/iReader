@@ -6,12 +6,13 @@ import android.util.Log
 import com.ireader.engines.common.android.controller.BaseCoroutineReaderController
 import com.ireader.engines.common.cache.LruCache
 import com.ireader.engines.txt.internal.link.LinkDetector
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
+import com.ireader.engines.txt.internal.locator.TxtProjectionVersion
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.softbreak.BreakMapState
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.engine.TextBreakPatchDirection
@@ -58,7 +59,8 @@ private fun initialRenderState(
     maxOffset: Long,
     config: RenderConfig.ReflowText,
     blockIndex: TxtBlockIndex,
-    revision: Int
+    contentFingerprint: String,
+    projectionEngine: TextProjectionEngine
 ): RenderState {
     val safeMax = maxOffset.coerceAtLeast(0L)
     val start = initialOffset.coerceIn(0L, safeMax)
@@ -69,10 +71,12 @@ private fun initialRenderState(
     }.coerceIn(0.0, 1.0)
 
     return RenderState(
-        locator = TxtAnchorLocatorCodec.locatorForOffset(
+        locator = TxtLocatorResolver.locatorForOffset(
             offset = start,
             blockIndex = blockIndex,
-            revision = revision,
+            contentFingerprint = contentFingerprint,
+            maxOffset = maxOffset,
+            projectionEngine = projectionEngine,
             extras = mapOf(LocatorExtraKeys.PROGRESSION to String.format(Locale.US, "%.6f", percent))
         ),
         progression = Progression(
@@ -92,14 +96,14 @@ internal class TxtController(
     private val store: Utf16TextStore,
     private val meta: TxtMeta,
     private val blockIndex: TxtBlockIndex,
-    private val breakResolver: BreakResolver,
+    private val projectionEngine: TextProjectionEngine,
     private val blockStore: BlockStore,
     private val initialLocator: Locator?,
     initialOffset: Long,
     initialConfig: RenderConfig.ReflowText,
     maxPageCache: Int,
     persistPagination: Boolean,
-    files: TxtBookFiles,
+    private val files: TxtBookFiles,
     private val annotationProvider: AnnotationProvider?,
     private val ioDispatcher: CoroutineDispatcher,
     private val paginationDispatcher: CoroutineDispatcher,
@@ -110,7 +114,8 @@ internal class TxtController(
         maxOffset = store.lengthCodeUnits,
         config = initialConfig,
         blockIndex = blockIndex,
-        revision = meta.contentRevision
+        contentFingerprint = meta.contentFingerprint,
+        projectionEngine = projectionEngine
     ),
     dispatcher = defaultDispatcher
 ) {
@@ -118,7 +123,7 @@ internal class TxtController(
         documentKey = documentKey,
         store = store,
         blockStore = blockStore,
-        breakResolver = breakResolver,
+        projectionEngine = projectionEngine,
         maxPageCache = maxPageCache,
         persistPagination = persistPagination,
         files = files,
@@ -142,7 +147,8 @@ internal class TxtController(
     private val navigation = TxtNavigationState(
         initialStart = initialStart,
         blockIndex = blockIndex,
-        revision = meta.contentRevision
+        contentFingerprint = meta.contentFingerprint,
+        projectionEngine = projectionEngine
     )
 
     private var constraints: LayoutConstraints? = null
@@ -267,11 +273,13 @@ internal class TxtController(
 
     override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> {
         return guardControllerCall("goTo") {
-            val offset = TxtAnchorLocatorCodec.parseOffset(
+            val offset = TxtLocatorResolver.parseOffset(
                 locator = locator,
                 blockIndex = blockIndex,
-                expectedRevision = meta.contentRevision,
-                maxOffset = store.lengthCodeUnits
+                contentFingerprint = meta.contentFingerprint,
+                maxOffset = store.lengthCodeUnits,
+                projectionEngine = projectionEngine,
+                expectedProjectionVersion = projectionVersion()
             ) ?: return@guardControllerCall ReaderResult.Err(
                 ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
             )
@@ -335,11 +343,13 @@ internal class TxtController(
         state: TextBreakPatchState
     ): ReaderResult<RenderPage> {
         return guardControllerCall("applyBreakPatch") {
-            val offset = TxtAnchorLocatorCodec.parseOffset(
+            val offset = TxtLocatorResolver.parseOffset(
                 locator = locator,
                 blockIndex = blockIndex,
-                expectedRevision = meta.contentRevision,
-                maxOffset = store.lengthCodeUnits
+                contentFingerprint = meta.contentFingerprint,
+                maxOffset = store.lengthCodeUnits,
+                projectionEngine = projectionEngine,
+                expectedProjectionVersion = projectionVersion()
             ) ?: return@guardControllerCall ReaderResult.Err(
                 ReaderError.Internal("Unsupported TXT locator: ${locator.scheme}:${locator.value}")
             )
@@ -351,7 +361,7 @@ internal class TxtController(
                 ) ?: return@withLock ReaderResult.Err(
                     ReaderError.Internal("No newline found near the current TXT anchor")
                 )
-                breakResolver.patch(newlineOffset, state.toBreakMapState())
+                projectionEngine.patch(newlineOffset, state.toBreakMapState())
                 invalidateBreakProjectionLocked()
                 renderSnapshotLocked(RenderPolicy.Default)
             }
@@ -366,7 +376,7 @@ internal class TxtController(
         return guardControllerCall("clearBreakPatches") {
             val snapshotResult = mutex.withLock {
                 cancelPaginationJobsLocked()
-                breakResolver.clearPatches()
+                projectionEngine.clearPatches()
                 invalidateBreakProjectionLocked()
                 renderSnapshotLocked(RenderPolicy.Default)
             }
@@ -414,11 +424,13 @@ internal class TxtController(
             endOffset = slice.endOffset
         )
         updateStateLocked()
-        val pageRange = TxtAnchorLocatorCodec.rangeForOffsets(
+        val pageRange = TxtLocatorResolver.rangeForOffsets(
             startOffset = slice.startOffset,
             endOffset = slice.endOffset,
             blockIndex = blockIndex,
-            revision = meta.contentRevision
+            contentFingerprint = meta.contentFingerprint,
+            maxOffset = store.lengthCodeUnits,
+            projectionEngine = projectionEngine
         )
         return ReaderResult.Ok(
             RenderSnapshot(
@@ -453,7 +465,8 @@ internal class TxtController(
                     pageStart = snapshot.startOffset,
                     pageEnd = snapshot.endOffset,
                     blockIndex = blockIndex,
-                    revision = meta.contentRevision,
+                    contentFingerprint = meta.contentFingerprint,
+                    projectionEngine = projectionEngine,
                     projectedBoundaryToRawOffsets = snapshot.projectedBoundaryToRawOffsets
                 ),
                 justifyVisibleLastLine = snapshot.continuesParagraph
@@ -505,7 +518,8 @@ internal class TxtController(
             text = text,
             pageStartOffset = startOffset,
             blockIndex = blockIndex,
-            revision = meta.contentRevision,
+            contentFingerprint = meta.contentFingerprint,
+            projectionEngine = projectionEngine,
             projectedBoundaryToRawOffsets = projectedBoundaryToRawOffsets
         )
         return mutex.withLock {
@@ -573,6 +587,8 @@ internal class TxtController(
             config = currentConfig
         )
     }
+
+    private fun projectionVersion(): String = TxtProjectionVersion.current(files, meta)
 
     private fun maybeSchedulePageCompletionLocked() {
         if (pageCompletionJob?.isActive == true) {

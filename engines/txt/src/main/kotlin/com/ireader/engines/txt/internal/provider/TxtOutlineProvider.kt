@@ -6,12 +6,13 @@ import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.replaceFileAtomically
 import com.ireader.engines.txt.internal.locator.TextAnchorAffinity
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
+import com.ireader.engines.txt.internal.locator.TxtProjectionVersion
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.model.LocatorExtraKeys
@@ -31,7 +32,7 @@ internal class TxtOutlineProvider(
     private val files: TxtBookFiles,
     private val meta: TxtMeta,
     private val blockIndex: TxtBlockIndex,
-    private val breakResolver: BreakResolver,
+    private val projectionEngine: TextProjectionEngine,
     private val blockStore: BlockStore,
     private val ioDispatcher: CoroutineDispatcher,
     private val persistOutline: Boolean
@@ -92,7 +93,7 @@ internal class TxtOutlineProvider(
         if (json.optInt("version", -1) != 1) {
             return null
         }
-        if (json.optString("sampleHash", "") != meta.sampleHash) {
+        if (json.optString("projectionVersion", "") != TxtProjectionVersion.current(files, meta)) {
             return null
         }
         val items = json.optJSONArray("items") ?: return emptyList()
@@ -108,10 +109,12 @@ internal class TxtOutlineProvider(
             out.add(
                 OutlineNode(
                     title = title,
-                    locator = TxtAnchorLocatorCodec.locatorForOffset(
+                    locator = TxtLocatorResolver.locatorForOffset(
                         offset = offset,
                         blockIndex = blockIndex,
-                        revision = meta.contentRevision,
+                        contentFingerprint = meta.contentFingerprint,
+                        maxOffset = blockIndex.lengthCodeUnits,
+                        projectionEngine = projectionEngine,
                         extras = outlineExtras(
                             confidence = confidence,
                             level = item.optInt("level", 1)
@@ -137,7 +140,7 @@ internal class TxtOutlineProvider(
         }
         val root = JSONObject().apply {
             put("version", 1)
-            put("sampleHash", meta.sampleHash)
+            put("projectionVersion", TxtProjectionVersion.current(files, meta))
             put("items", items)
         }
         val temp = java.io.File(files.bookDir, "outline.idx.tmp")
@@ -206,10 +209,12 @@ internal class TxtOutlineProvider(
     private fun toOutlineNode(node: DetectedOutlineNode): OutlineNode {
         return OutlineNode(
             title = node.title,
-            locator = TxtAnchorLocatorCodec.locatorForOffset(
+            locator = TxtLocatorResolver.locatorForOffset(
                 offset = node.offset,
                 blockIndex = blockIndex,
-                revision = meta.contentRevision,
+                contentFingerprint = meta.contentFingerprint,
+                maxOffset = blockIndex.lengthCodeUnits,
+                projectionEngine = projectionEngine,
                 extras = outlineExtras(
                     confidence = node.confidence,
                     level = node.level

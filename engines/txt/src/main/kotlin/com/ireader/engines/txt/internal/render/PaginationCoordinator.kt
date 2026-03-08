@@ -3,7 +3,7 @@ package com.ireader.engines.txt.internal.render
 import com.ireader.engines.common.android.pagination.ReflowPaginationProfile
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.RenderConfig
@@ -17,7 +17,7 @@ internal class PaginationCoordinator(
     private val documentKey: String,
     private val store: Utf16TextStore,
     private val blockStore: BlockStore,
-    private val breakResolver: BreakResolver,
+    private val projectionEngine: TextProjectionEngine,
     maxPageCache: Int,
     persistPagination: Boolean,
     files: TxtBookFiles,
@@ -31,7 +31,7 @@ internal class PaginationCoordinator(
     private val pageFitter = TxtPageFitter(
         store = store,
         blockStore = blockStore,
-        breakResolver = breakResolver
+        projectionEngine = projectionEngine
     )
 
     private var constraints: LayoutConstraints? = null

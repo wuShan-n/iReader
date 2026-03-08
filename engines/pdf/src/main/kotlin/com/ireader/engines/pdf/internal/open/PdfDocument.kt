@@ -1,6 +1,5 @@
 package com.ireader.engines.pdf.internal.open
 
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.pdf.PdfEngineConfig
 import com.ireader.engines.pdf.internal.provider.InMemoryPdfAnnotationProvider
@@ -16,6 +15,7 @@ import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.sanitized

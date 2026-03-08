@@ -1,6 +1,7 @@
 package com.ireader.feature.annotations.presentation
 
 import androidx.lifecycle.SavedStateHandle
+import com.ireader.core.data.annotation.AnnotationRepository
 import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.book.LocatorCodec
 import com.ireader.core.data.book.ProgressRepo
@@ -58,7 +59,7 @@ class AnnotationsViewModelTest {
             bookEntity = sampleBook(bookId = 7L, documentId = "doc-7"),
             progressEntity = ProgressEntity(
                 bookId = 7L,
-                locatorJson = locatorCodec.encode(Locator(LocatorSchemes.TXT_ANCHOR, "128:0:f:1")),
+                locatorJson = locatorCodec.encode(Locator(LocatorSchemes.TXT_STABLE_ANCHOR, "128:0")),
                 progression = 0.1,
                 updatedAtEpochMs = 1L
             )
@@ -78,7 +79,7 @@ class AnnotationsViewModelTest {
     fun `save and delete should update list state`() = runTest {
         val locatorCodec = FakeLocatorCodec()
         val store = FakeAnnotationStore()
-        val locator = Locator(LocatorSchemes.TXT_ANCHOR, "16:0:f:1")
+        val locator = Locator(LocatorSchemes.TXT_STABLE_ANCHOR, "16:0")
         store.seed(
             documentId = DocumentId("doc-edit"),
             annotations = listOf(
@@ -135,7 +136,7 @@ class AnnotationsViewModelTest {
         vm.createAnnotation()
         advanceUntilIdle()
 
-        assertTrue(vm.uiState.value.errorMessage.orEmpty().contains("旧版 TXT 定位已失效"))
+        assertTrue(vm.uiState.value.errorMessage.orEmpty().contains("当前阅读定位不支持创建笔记"))
         assertTrue(vm.uiState.value.items.isEmpty())
     }
 
@@ -169,10 +170,12 @@ class AnnotationsViewModelTest {
             savedStateHandle = SavedStateHandle(
                 mapOf(AppRoutes.ARG_BOOK_ID to bookEntity.bookId)
             ),
-            bookRepo = bookRepo,
-            progressRepo = progressRepo,
-            annotationStore = annotationStore,
-            locatorCodec = locatorCodec
+            annotationRepository = AnnotationRepository(
+                bookRepo = bookRepo,
+                progressRepo = progressRepo,
+                annotationStore = annotationStore,
+                locatorCodec = locatorCodec
+            )
         )
     }
 

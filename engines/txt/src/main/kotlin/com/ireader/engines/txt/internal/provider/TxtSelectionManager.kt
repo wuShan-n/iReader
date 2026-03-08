@@ -4,10 +4,10 @@ package com.ireader.engines.txt.internal.provider
 
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.txt.internal.locator.TextAnchorAffinity
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.SelectionController
@@ -25,8 +25,8 @@ import kotlinx.coroutines.sync.withLock
 
 internal class TxtSelectionManager(
     private val blockIndex: TxtBlockIndex,
-    private val revision: Int,
-    private val breakResolver: BreakResolver,
+    private val contentFingerprint: String,
+    private val projectionEngine: TextProjectionEngine,
     private val blockStore: BlockStore,
     private val ioDispatcher: CoroutineDispatcher,
     private val maxSelectedChars: Int = 4_096
@@ -85,33 +85,38 @@ internal class TxtSelectionManager(
     }
 
     private fun parseOffset(locator: Locator): Long? {
-        return TxtAnchorLocatorCodec.parseOffset(
+        return TxtLocatorResolver.parsePublicOffset(
             locator = locator,
             blockIndex = blockIndex,
-            expectedRevision = revision,
-            maxOffset = blockIndex.lengthCodeUnits
+            contentFingerprint = contentFingerprint,
+            maxOffset = blockIndex.lengthCodeUnits,
+            projectionEngine = projectionEngine
         )
     }
 
     private fun buildSelection(anchorOffset: Long, edgeOffset: Long): SelectionProvider.Selection {
         val startOffset = min(anchorOffset, edgeOffset).coerceIn(0L, blockIndex.lengthCodeUnits)
         val endOffset = max(anchorOffset, edgeOffset).coerceIn(0L, blockIndex.lengthCodeUnits)
-        val startLocator = TxtAnchorLocatorCodec.locatorForOffset(
+        val startLocator = TxtLocatorResolver.locatorForOffset(
             offset = startOffset,
             blockIndex = blockIndex,
-            revision = revision
+            contentFingerprint = contentFingerprint,
+            maxOffset = blockIndex.lengthCodeUnits,
+            projectionEngine = projectionEngine
         )
-        val endLocator = TxtAnchorLocatorCodec.locatorForOffset(
+        val endLocator = TxtLocatorResolver.locatorForOffset(
             offset = endOffset,
             blockIndex = blockIndex,
-            revision = revision,
-            affinity = TextAnchorAffinity.BACKWARD
+            contentFingerprint = contentFingerprint,
+            maxOffset = blockIndex.lengthCodeUnits,
+            projectionEngine = projectionEngine,
+            extras = mapOf("affinity" to TextAnchorAffinity.BACKWARD.storageCode)
         )
         val selectedText = if (endOffset <= startOffset) {
             null
         } else {
             val cappedEnd = (startOffset + maxSelectedChars.toLong()).coerceAtMost(endOffset)
-            breakResolver.projectRange(
+            projectionEngine.projectRange(
                 startOffset = startOffset,
                 endOffsetExclusive = cappedEnd
             ).displayText.takeIf { it.isNotBlank() }

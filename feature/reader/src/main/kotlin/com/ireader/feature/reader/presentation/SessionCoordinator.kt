@@ -22,10 +22,6 @@ internal class SessionCoordinator {
         sessionHandle = handle
     }
 
-    fun attach(bookId: Long, handle: com.ireader.reader.runtime.ReaderSessionHandle) {
-        attach(bookId = bookId, handle = handle as ReaderHandle)
-    }
-
     fun clearHandle() {
         activeBookId = -1L
         sessionHandle = null

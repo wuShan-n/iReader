@@ -2,7 +2,9 @@ package com.ireader.core.files.source
 
 import android.content.Context
 import android.net.Uri
+import com.ireader.core.data.book.BookSourceResolver
 import com.ireader.core.data.book.BookRecord
+import com.ireader.reader.api.open.DocumentSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject

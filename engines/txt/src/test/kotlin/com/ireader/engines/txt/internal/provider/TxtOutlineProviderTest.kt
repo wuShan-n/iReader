@@ -31,7 +31,7 @@ class TxtOutlineProviderTest {
             files = fixture.files,
             meta = fixture.meta,
             blockIndex = fixture.blockIndex,
-            breakResolver = fixture.breakResolver,
+            projectionEngine = fixture.projectionEngine,
             blockStore = fixture.blockStore,
             ioDispatcher = Dispatchers.IO,
             persistOutline = true
@@ -61,7 +61,7 @@ class TxtOutlineProviderTest {
             files = fixture.files,
             meta = fixture.meta,
             blockIndex = fixture.blockIndex,
-            breakResolver = fixture.breakResolver,
+            projectionEngine = fixture.projectionEngine,
             blockStore = fixture.blockStore,
             ioDispatcher = Dispatchers.IO,
             persistOutline = false
@@ -86,7 +86,7 @@ class TxtOutlineProviderTest {
             files = fixture.files,
             meta = fixture.meta,
             blockIndex = fixture.blockIndex,
-            breakResolver = fixture.breakResolver,
+            projectionEngine = fixture.projectionEngine,
             blockStore = fixture.blockStore,
             ioDispatcher = Dispatchers.IO,
             persistOutline = false

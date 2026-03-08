@@ -2,6 +2,7 @@ package com.ireader.core.files.source
 
 import android.content.Context
 import android.net.Uri
+import com.ireader.reader.api.open.DocumentSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton

@@ -1,7 +1,6 @@
 package com.ireader.engines.pdf.internal.backend
 
 import android.os.ParcelFileDescriptor
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.pdf.PdfBackendStrategy
 import com.ireader.engines.pdf.PdfEngineConfig
@@ -11,6 +10,7 @@ import com.ireader.engines.pdf.internal.open.OpenedPdf
 import com.ireader.engines.pdf.internal.open.PdfOpener
 import com.ireader.engines.common.io.closeQuietly
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import java.io.Closeable
 
 internal class BackendFactory(

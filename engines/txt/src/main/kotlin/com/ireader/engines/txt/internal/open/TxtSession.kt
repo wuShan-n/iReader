@@ -3,13 +3,13 @@ package com.ireader.engines.txt.internal.open
 import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.replaceFileAtomically
 import com.ireader.engines.common.android.session.BaseReaderSession
-import com.ireader.engines.txt.internal.open.TxtArtifactManifest.Companion.initial
+import com.ireader.engines.txt.internal.locator.TxtProjectionVersion
 import com.ireader.engines.txt.internal.provider.TxtOutlineProvider
 import com.ireader.engines.txt.internal.provider.TxtSearchProviderPro
 import com.ireader.engines.txt.internal.provider.TxtSelectionManager
 import com.ireader.engines.txt.internal.provider.TxtTextProvider
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.store.Utf16TextStore
@@ -37,7 +37,7 @@ internal class TxtSession(
     private val txtController: com.ireader.engines.txt.internal.render.TxtController,
     private val files: TxtBookFiles,
     private val meta: TxtMeta,
-    private val breakResolver: BreakResolver,
+    private val projectionEngine: TextProjectionEngine,
     private val outlineProvider: TxtOutlineProvider,
     private val searchProvider: TxtSearchProviderPro,
     private val textProvider: TxtTextProvider,
@@ -61,6 +61,8 @@ internal class TxtSession(
             txtController.events
                 .filterIsInstance<ReaderEvent.Rendered>()
                 .first()
+            outlineProvider.warmup()
+            searchProvider.warmup()
             delay(BACKGROUND_ARTIFACT_DELAY_MS)
             ensureBackgroundArtifactsReady()
         }
@@ -70,7 +72,7 @@ internal class TxtSession(
         sessionScope.cancel()
         runCatching { outlineProvider.close() }
         runCatching { searchProvider.close() }
-        runCatching { breakResolver.close() }
+        runCatching { projectionEngine.close() }
     }
 
     override suspend fun applyBreakPatch(
@@ -80,8 +82,7 @@ internal class TxtSession(
     ): com.ireader.reader.api.error.ReaderResult<RenderPage> {
         val result = txtController.applyBreakPatch(locator, direction, state)
         if (result is com.ireader.reader.api.error.ReaderResult.Ok) {
-            outlineProvider.invalidate()
-            searchProvider.invalidate()
+            refreshProjectionArtifacts()
         }
         return result
     }
@@ -89,14 +90,18 @@ internal class TxtSession(
     override suspend fun clearBreakPatches(): com.ireader.reader.api.error.ReaderResult<RenderPage> {
         val result = txtController.clearBreakPatches()
         if (result is com.ireader.reader.api.error.ReaderResult.Ok) {
-            outlineProvider.invalidate()
-            searchProvider.invalidate()
+            refreshProjectionArtifacts()
         }
         return result
     }
 
     private suspend fun ensureBackgroundArtifactsReady() {
-        var manifest = TxtArtifactManifest.readIfValid(files.manifestJson, meta) ?: initial(meta)
+        val projectionVersion = TxtProjectionVersion.current(files, meta)
+        var manifest = TxtArtifactManifest.readIfValid(
+            file = files.manifestJson,
+            meta = meta,
+            expectedProjectionVersion = projectionVersion
+        ) ?: TxtArtifactManifest.initial(meta, projectionVersion)
         manifest = ensureBlockIndexReady(manifest)
         ensureBreakMapReady(manifest)
     }
@@ -126,7 +131,7 @@ internal class TxtSession(
     }
 
     private suspend fun ensureBreakMapReady(manifest: TxtArtifactManifest) {
-        val nextManifest = if (!breakResolver.hasIndexedBreaks()) {
+        val nextManifest = if (!projectionEngine.hasIndexedBreaks()) {
             SoftBreakIndexBuilder.buildIfNeeded(
                 files = files,
                 meta = meta,
@@ -140,7 +145,7 @@ internal class TxtSession(
                 rulesVersion = SoftBreakRuleConfig.forProfile(SoftBreakTuningProfile.BALANCED).rulesVersion
             )
             if (builtIndex != null) {
-                breakResolver.attachIndex(builtIndex)
+                projectionEngine.attachIndex(builtIndex)
                 manifest.markBreakMapReady(SOFT_BREAK_MAP_VERSION)
             } else {
                 manifest.copy(breakMapVersion = null, breakMapReady = false)
@@ -163,6 +168,27 @@ internal class TxtSession(
         replaceFileAtomically(tempFile = temp, targetFile = files.manifestJson)
     }
 
+    private fun refreshProjectionArtifacts() {
+        outlineProvider.invalidate()
+        searchProvider.invalidate()
+        val hasBlockIndex = TxtBlockIndex.openIfValid(files.blockIdx, meta) != null
+        val projectionVersion = TxtProjectionVersion.current(files, meta)
+        writeArtifactManifest(
+            TxtArtifactManifest(
+                version = TxtArtifactManifest.VERSION,
+                sampleHash = meta.sampleHash,
+                contentRevision = meta.contentRevision,
+                projectionVersion = projectionVersion,
+                blockIndexVersion = if (hasBlockIndex) TXT_BLOCK_INDEX_VERSION else null,
+                breakMapVersion = if (projectionEngine.hasIndexedBreaks()) SOFT_BREAK_MAP_VERSION else null,
+                blockIndexReady = hasBlockIndex,
+                breakMapReady = projectionEngine.hasIndexedBreaks()
+            )
+        )
+        outlineProvider.warmup()
+        searchProvider.warmup()
+    }
+
     companion object {
         private const val TXT_BLOCK_INDEX_VERSION = 1
         private const val SOFT_BREAK_MAP_VERSION = 7
@@ -173,7 +199,7 @@ internal class TxtSession(
             files: TxtBookFiles,
             meta: TxtMeta,
             blockIndex: TxtBlockIndex,
-            breakResolver: BreakResolver,
+            projectionEngine: TextProjectionEngine,
             blockStore: BlockStore,
             ioDispatcher: CoroutineDispatcher,
             persistOutline: Boolean,
@@ -183,7 +209,7 @@ internal class TxtSession(
                 files = files,
                 meta = meta,
                 blockIndex = blockIndex,
-                breakResolver = breakResolver,
+                projectionEngine = projectionEngine,
                 blockStore = blockStore,
                 ioDispatcher = ioDispatcher,
                 persistOutline = persistOutline
@@ -192,21 +218,21 @@ internal class TxtSession(
                 files = files,
                 meta = meta,
                 blockIndex = blockIndex,
-                breakResolver = breakResolver,
+                projectionEngine = projectionEngine,
                 blockStore = blockStore,
                 ioDispatcher = ioDispatcher
             )
             val textProvider = TxtTextProvider(
                 blockIndex = blockIndex,
-                revision = meta.contentRevision,
+                contentFingerprint = meta.contentFingerprint,
                 blockStore = blockStore,
-                breakResolver = breakResolver,
+                projectionEngine = projectionEngine,
                 ioDispatcher = ioDispatcher
             )
             val selectionManager = TxtSelectionManager(
                 blockIndex = blockIndex,
-                revision = meta.contentRevision,
-                breakResolver = breakResolver,
+                contentFingerprint = meta.contentFingerprint,
+                projectionEngine = projectionEngine,
                 blockStore = blockStore,
                 ioDispatcher = ioDispatcher
             )
@@ -214,7 +240,7 @@ internal class TxtSession(
                 txtController = controller,
                 files = files,
                 meta = meta,
-                breakResolver = breakResolver,
+                projectionEngine = projectionEngine,
                 outlineProvider = outlineProvider,
                 searchProvider = searchProvider,
                 textProvider = textProvider,

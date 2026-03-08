@@ -2,7 +2,6 @@ package com.ireader.feature.reader.presentation
 
 import com.ireader.core.data.reader.ReaderDisplayPrefs
 import com.ireader.reader.api.engine.DocumentCapabilities
-import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.PageTurnMode
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPage
@@ -100,7 +99,6 @@ data class ReaderUiState(
     val capabilities: DocumentCapabilities? = null,
     val renderState: RenderState? = null,
     val page: RenderPage? = null,
-    val controller: ReaderController? = null,
     val handle: ReaderHandle? = null,
     val resources: ResourceProvider? = null,
     val toc: TocState = TocState(),

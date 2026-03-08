@@ -1,7 +1,6 @@
 package com.ireader.engines.pdf
 
 import android.content.Context
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.common.android.id.SourceDocumentIds
 import com.ireader.engines.pdf.internal.backend.BackendFactory
@@ -11,6 +10,7 @@ import com.ireader.engines.pdf.internal.open.PdfOpener
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderEngine
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.BookFormat
 import com.ireader.reader.model.DocumentId

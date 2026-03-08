@@ -7,13 +7,16 @@ internal data class TxtArtifactManifest(
     val version: Int,
     val sampleHash: String,
     val contentRevision: Int,
+    val projectionVersion: String,
     val blockIndexVersion: Int?,
     val breakMapVersion: Int?,
     val blockIndexReady: Boolean,
     val breakMapReady: Boolean
 ) {
-    fun matches(meta: TxtMeta): Boolean {
-        return sampleHash == meta.sampleHash && contentRevision == meta.contentRevision
+    fun matches(meta: TxtMeta, expectedProjectionVersion: String): Boolean {
+        return sampleHash == meta.sampleHash &&
+            contentRevision == meta.contentRevision &&
+            projectionVersion == expectedProjectionVersion
     }
 
     fun markBlockIndexReady(version: Int): TxtArtifactManifest {
@@ -38,6 +41,7 @@ internal data class TxtArtifactManifest(
             put("version", version)
             put("sampleHash", sampleHash)
             put("contentRevision", contentRevision)
+            put("projectionVersion", projectionVersion)
             if (blockIndexVersion != null) {
                 put("blockIndexVersion", blockIndexVersion)
             }
@@ -50,13 +54,14 @@ internal data class TxtArtifactManifest(
     }
 
     companion object {
-        const val VERSION = 1
+        const val VERSION = 2
 
-        fun initial(meta: TxtMeta): TxtArtifactManifest {
+        fun initial(meta: TxtMeta, projectionVersion: String): TxtArtifactManifest {
             return TxtArtifactManifest(
                 version = VERSION,
                 sampleHash = meta.sampleHash,
                 contentRevision = meta.contentRevision,
+                projectionVersion = projectionVersion,
                 blockIndexVersion = null,
                 breakMapVersion = null,
                 blockIndexReady = false,
@@ -64,7 +69,11 @@ internal data class TxtArtifactManifest(
             )
         }
 
-        fun readIfValid(file: File, meta: TxtMeta): TxtArtifactManifest? {
+        fun readIfValid(
+            file: File,
+            meta: TxtMeta,
+            expectedProjectionVersion: String
+        ): TxtArtifactManifest? {
             if (!file.exists()) {
                 return null
             }
@@ -74,13 +83,14 @@ internal data class TxtArtifactManifest(
                     version = json.getInt("version"),
                     sampleHash = json.getString("sampleHash"),
                     contentRevision = json.optInt("contentRevision", meta.contentRevision),
+                    projectionVersion = json.optString("projectionVersion", ""),
                     blockIndexVersion = if (json.has("blockIndexVersion")) json.getInt("blockIndexVersion") else null,
                     breakMapVersion = if (json.has("breakMapVersion")) json.getInt("breakMapVersion") else null,
                     blockIndexReady = json.optBoolean("blockIndexReady", false),
                     breakMapReady = json.optBoolean("breakMapReady", false)
                 )
             }.getOrNull() ?: return null
-            if (manifest.version != VERSION || !manifest.matches(meta)) {
+            if (manifest.version != VERSION || !manifest.matches(meta, expectedProjectionVersion)) {
                 return null
             }
             return manifest

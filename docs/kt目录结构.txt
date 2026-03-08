@@ -1198,7 +1198,7 @@
 │   │                                   │   └── RenderDefaults.kt
 │   │                                   ├── DefaultReaderRuntime.kt
 │   │                                   ├── ReaderRuntime.kt
-│   │                                   └── ReaderSessionHandle.kt
+│   │                                   └── ReaderHandle.kt
 │   ├── testing
 │   │   └── src
 │   │       └── main
@@ -1490,9 +1490,7 @@
 │   │                               │   ├── appearance
 │   │                               │   │   └── ReaderAppearanceConfig.kt
 │   │                               │   └── usecase
-│   │                               │       ├── ObserveEffectiveConfig.kt
-│   │                               │       ├── OpenReaderSession.kt
-│   │                               │       └── SaveReadingProgress.kt
+│   │                               │       └── ObserveEffectiveConfig.kt
 │   │                               ├── navigation
 │   │                               │   ├── ReaderNavGraph.kt
 │   │                               │   └── ReaderRoute.kt

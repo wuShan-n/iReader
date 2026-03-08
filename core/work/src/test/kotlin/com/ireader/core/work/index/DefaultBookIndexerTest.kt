@@ -11,25 +11,20 @@ import com.ireader.core.database.book.BookEntity
 import com.ireader.core.database.book.BookSourceType
 import com.ireader.core.database.book.IndexState
 import com.ireader.core.database.book.ReadingStatus
-import com.ireader.core.files.source.DocumentSource
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.core.files.storage.BookStorage
 import com.ireader.reader.api.engine.ReaderDocument
-import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.open.OpenOptions
-import com.ireader.reader.api.provider.AnnotationProvider
-import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.api.provider.ResourceProvider
-import com.ireader.reader.api.provider.SearchProvider
-import com.ireader.reader.api.provider.SelectionController
+import com.ireader.reader.api.provider.SearchHit
+import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.provider.SelectionProvider
-import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.api.render.InvalidateReason
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.NavigationAvailability
 import com.ireader.reader.api.render.PageId
-import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
 import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderContent
@@ -38,15 +33,16 @@ import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
 import com.ireader.reader.api.render.RenderSurface
 import com.ireader.reader.model.BookFormat
-import com.ireader.reader.model.DocumentCapabilities
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.DocumentMetadata
 import com.ireader.reader.model.Locator
+import com.ireader.reader.model.OutlineNode
 import com.ireader.reader.model.Progression
-import com.ireader.reader.model.SessionId
+import com.ireader.reader.model.annotation.AnnotationDraft
 import com.ireader.reader.runtime.BookProbeResult
+import com.ireader.reader.runtime.ReaderHandle
 import com.ireader.reader.runtime.ReaderRuntime
-import com.ireader.reader.runtime.ReaderSessionHandle
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -56,6 +52,7 @@ import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -154,7 +151,7 @@ class DefaultBookIndexerTest {
                 capabilities = null
             )
         )
-        runtime.openSessionResult = ReaderResult.Ok(fakeSessionHandle(bitmapColor = Color.BLUE))
+        runtime.openSessionResult = ReaderResult.Ok(fakeHandle(bitmapColor = Color.BLUE))
 
         val result = indexer.index(inserted.bookId)
 
@@ -333,25 +330,20 @@ class DefaultBookIndexerTest {
         }
     }
 
-    private fun fakeSessionHandle(bitmapColor: Int): ReaderSessionHandle {
+    private fun fakeHandle(bitmapColor: Int): ReaderHandle {
         val bitmap = Bitmap.createBitmap(120, 180, Bitmap.Config.ARGB_8888).apply { eraseColor(bitmapColor) }
         val page = RenderPage(
             id = PageId("page"),
             locator = Locator(scheme = "pdf.page", value = "0"),
             content = RenderContent.BitmapPage(bitmap)
         )
-        val controller = FakeReaderController(page)
-        val session = FakeReaderSession(controller)
-        return ReaderSessionHandle(
-            document = FakeReaderDocument(),
-            session = session
-        )
+        return FakeReaderHandle(page)
     }
 }
 
 private class FakeReaderRuntime : ReaderRuntime {
     var probeResult: ReaderResult<BookProbeResult> = ReaderResult.Err(ReaderError.Internal("probe not set"))
-    var openSessionResult: ReaderResult<ReaderSessionHandle> = ReaderResult.Err(
+    var openSessionResult: ReaderResult<ReaderHandle> = ReaderResult.Err(
         ReaderError.Internal("session not set")
     )
     var openSessionCalls: Int = 0
@@ -367,7 +359,7 @@ private class FakeReaderRuntime : ReaderRuntime {
         initialLocator: Locator?,
         initialConfig: RenderConfig?,
         resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)?
-    ): ReaderResult<ReaderSessionHandle> {
+    ): ReaderResult<ReaderHandle> {
         openSessionCalls += 1
         return openSessionResult
     }
@@ -378,9 +370,12 @@ private class FakeReaderRuntime : ReaderRuntime {
     ): ReaderResult<BookProbeResult> = probeResult
 }
 
-private class FakeReaderDocument : ReaderDocument {
-    override val id: DocumentId = DocumentId("doc")
+private class FakeReaderHandle(
+    page: RenderPage
+) : ReaderHandle {
+    private val renderResult = ReaderResult.Ok(page)
     override val format: BookFormat = BookFormat.PDF
+    override val documentId: DocumentId = DocumentId("doc")
     override val capabilities: DocumentCapabilities = DocumentCapabilities(
         reflowable = false,
         fixedLayout = true,
@@ -391,36 +386,7 @@ private class FakeReaderDocument : ReaderDocument {
         selection = false,
         links = false
     )
-    override val openOptions: OpenOptions = OpenOptions()
-
-    override suspend fun metadata(): ReaderResult<DocumentMetadata> = ReaderResult.Ok(DocumentMetadata())
-
-    override suspend fun createSession(
-        initialLocator: Locator?,
-        initialConfig: RenderConfig
-    ): ReaderResult<ReaderSession> = ReaderResult.Err(ReaderError.Internal("unused"))
-
-    override fun close() = Unit
-}
-
-private class FakeReaderSession(
-    override val controller: ReaderController
-) : ReaderSession {
-    override val id: SessionId = SessionId("session")
-    override val outline: OutlineProvider? = null
-    override val search: SearchProvider? = null
-    override val text: TextProvider? = null
-    override val annotations: AnnotationProvider? = null
     override val resources: ResourceProvider? = null
-    override val selection: SelectionProvider? = null
-    override val selectionController: SelectionController? = null
-    override fun close() = Unit
-}
-
-private class FakeReaderController(
-    page: RenderPage
-) : ReaderController {
-    private val renderResult = ReaderResult.Ok(page)
     override val state = MutableStateFlow(
         RenderState(
             locator = Locator("pdf.page", "0"),
@@ -430,20 +396,56 @@ private class FakeReaderController(
         )
     )
     override val events: Flow<ReaderEvent> = MutableSharedFlow()
+    override val supportsTextBreakPatches: Boolean = false
 
     override suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
     override suspend fun unbindSurface(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
-    override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> = ReaderResult.Ok(Unit)
-    override suspend fun setTextLayouterFactory(
-        factory: com.ireader.reader.api.render.TextLayouterFactory
+
+    override suspend fun bindViewport(
+        constraints: LayoutConstraints,
+        textLayouterFactory: com.ireader.reader.api.render.TextLayouterFactory?
     ): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
     override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
     override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> = renderResult
+
     override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> = renderResult
+
     override suspend fun prev(policy: RenderPolicy): ReaderResult<RenderPage> = renderResult
+
     override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> = renderResult
+
     override suspend fun goToProgress(percent: Double, policy: RenderPolicy): ReaderResult<RenderPage> = renderResult
-    override suspend fun prefetchNeighbors(count: Int): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
     override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun getOutline(): ReaderResult<List<OutlineNode>> = ReaderResult.Ok(emptyList())
+
+    override fun search(query: String, options: SearchOptions): Flow<ReaderResult<SearchHit>> = flowOf()
+
+    override suspend fun currentSelection(): ReaderResult<SelectionProvider.Selection?> = ReaderResult.Ok(null)
+
+    override suspend fun startSelection(locator: Locator): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun updateSelection(locator: Locator): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun finishSelection(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun clearSelection(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun createAnnotation(draft: AnnotationDraft): ReaderResult<Unit> =
+        ReaderResult.Err(ReaderError.Internal("unused"))
+
+    override suspend fun applyBreakPatch(
+        locator: Locator,
+        direction: com.ireader.reader.api.engine.TextBreakPatchDirection,
+        state: com.ireader.reader.api.engine.TextBreakPatchState
+    ): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))
+
+    override suspend fun clearBreakPatches(): ReaderResult<RenderPage> =
+        ReaderResult.Err(ReaderError.Internal("unused"))
+
     override fun close() = Unit
 }

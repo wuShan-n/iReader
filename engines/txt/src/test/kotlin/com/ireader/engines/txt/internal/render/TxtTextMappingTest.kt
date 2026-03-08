@@ -20,10 +20,11 @@ class TxtTextMappingTest {
                 pageStart = 100L,
                 pageEnd = 150L,
                 blockIndex = fixture.blockIndex,
-                revision = fixture.meta.contentRevision
+                contentFingerprint = fixture.meta.contentFingerprint,
+                projectionEngine = fixture.projectionEngine
             )
             val locator = mapping.locatorAt(12)
-            assertEquals(LocatorSchemes.TXT_ANCHOR, locator.scheme)
+            assertEquals(LocatorSchemes.TXT_STABLE_ANCHOR, locator.scheme)
             assertEquals(112L, fixture.parseOffset(locator))
         } finally {
             fixture.close()
@@ -38,7 +39,8 @@ class TxtTextMappingTest {
                 pageStart = 200L,
                 pageEnd = 260L,
                 blockIndex = fixture.blockIndex,
-                revision = fixture.meta.contentRevision
+                contentFingerprint = fixture.meta.contentFingerprint,
+                projectionEngine = fixture.projectionEngine
             )
             val range = LocatorRange(
                 start = fixture.locatorFor(205L),
@@ -61,7 +63,8 @@ class TxtTextMappingTest {
                 pageStart = 20L,
                 pageEnd = 40L,
                 blockIndex = fixture.blockIndex,
-                revision = fixture.meta.contentRevision
+                contentFingerprint = fixture.meta.contentFingerprint,
+                projectionEngine = fixture.projectionEngine
             )
             val range = LocatorRange(
                 start = fixture.locatorFor(18L),
@@ -81,7 +84,8 @@ class TxtTextMappingTest {
                 pageStart = 30L,
                 pageEnd = 50L,
                 blockIndex = fixture.blockIndex,
-                revision = fixture.meta.contentRevision
+                contentFingerprint = fixture.meta.contentFingerprint,
+                projectionEngine = fixture.projectionEngine
             )
             val locator = mapping.locatorAt(999)
             assertEquals(50L, fixture.parseOffset(locator))
@@ -98,7 +102,8 @@ class TxtTextMappingTest {
                 pageStart = 500L,
                 pageEnd = 560L,
                 blockIndex = fixture.blockIndex,
-                revision = fixture.meta.contentRevision
+                contentFingerprint = fixture.meta.contentFingerprint,
+                projectionEngine = fixture.projectionEngine
             )
             val range = mapping.rangeFor(startChar = 30, endChar = 12)
             assertEquals(512L, fixture.parseOffset(range.start))

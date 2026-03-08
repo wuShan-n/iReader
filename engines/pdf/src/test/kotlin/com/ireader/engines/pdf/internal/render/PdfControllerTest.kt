@@ -84,7 +84,7 @@ class PdfControllerTest {
         controller.setLayoutConstraints(defaultConstraints())
 
         val result = controller.goTo(
-            locator = Locator(scheme = LocatorSchemes.TXT_ANCHOR, value = "1:0:f:1"),
+            locator = Locator(scheme = LocatorSchemes.TXT_STABLE_ANCHOR, value = "1:0"),
             policy = RenderPolicy.Default
         )
 

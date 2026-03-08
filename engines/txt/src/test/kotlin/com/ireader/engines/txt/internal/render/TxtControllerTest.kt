@@ -6,7 +6,7 @@ import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.open.Utf16LeFileWriter
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
@@ -279,11 +279,11 @@ class TxtControllerTest {
             ioDispatcher = Dispatchers.IO,
             rootDir = dir
         )
-        val breakResolver = if (usePersistedBreakIndex) {
-            runtime.breakResolver
+        val projectionEngine = if (usePersistedBreakIndex) {
+            runtime.projectionEngine
         } else {
             runtime.files.breakMap.delete()
-            BreakResolver(
+            TextProjectionEngine(
                 store = runtime.store,
                 files = runtime.files,
                 meta = runtime.meta,
@@ -297,7 +297,7 @@ class TxtControllerTest {
                 store = runtime.store,
                 blockIndex = runtime.blockIndex,
                 revision = runtime.meta.contentRevision,
-                breakResolver = breakResolver
+                projectionEngine = projectionEngine
             )
         }
         val controller = TxtController(
@@ -305,7 +305,7 @@ class TxtControllerTest {
             store = runtime.store,
             meta = runtime.meta,
             blockIndex = runtime.blockIndex,
-            breakResolver = breakResolver,
+            projectionEngine = projectionEngine,
             blockStore = blockStore,
             initialLocator = null,
             initialOffset = 0L,
@@ -322,7 +322,7 @@ class TxtControllerTest {
         return ControllerFixture(
             controller = controller,
             runtime = runtime,
-            transientBreakResolver = if (usePersistedBreakIndex) null else breakResolver
+            transientProjectionEngine = if (usePersistedBreakIndex) null else projectionEngine
         )
     }
 
@@ -334,11 +334,11 @@ class TxtControllerTest {
     private class ControllerFixture(
         val controller: TxtController,
         val runtime: TxtRuntimeFixture,
-        private val transientBreakResolver: BreakResolver? = null
+        private val transientProjectionEngine: TextProjectionEngine? = null
     ) {
         fun close() {
             controller.close()
-            transientBreakResolver?.close()
+            transientProjectionEngine?.close()
             runtime.close()
         }
     }

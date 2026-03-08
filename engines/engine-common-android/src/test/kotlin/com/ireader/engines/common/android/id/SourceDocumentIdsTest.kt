@@ -2,7 +2,7 @@ package com.ireader.engines.common.android.id
 
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import com.ireader.core.files.source.DocumentSource
+import com.ireader.reader.api.open.DocumentSource
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import org.junit.Assert.assertEquals

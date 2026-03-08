@@ -1,7 +1,8 @@
 package com.ireader.engines.txt.internal.link
 
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.reader.model.DocumentLink
 import com.ireader.reader.model.LinkTarget
 
@@ -16,7 +17,8 @@ internal object LinkDetector {
         text: CharSequence,
         pageStartOffset: Long,
         blockIndex: TxtBlockIndex,
-        revision: Int,
+        contentFingerprint: String,
+        projectionEngine: TextProjectionEngine,
         projectedBoundaryToRawOffsets: LongArray? = null,
         max: Int = 20
     ): List<DocumentLink> {
@@ -77,11 +79,13 @@ internal object LinkDetector {
                 DocumentLink(
                     target = LinkTarget.External(normalized),
                     title = value,
-                    range = TxtAnchorLocatorCodec.rangeForOffsets(
+                    range = TxtLocatorResolver.rangeForOffsets(
                         startOffset = globalStart,
                         endOffset = globalEnd,
                         blockIndex = blockIndex,
-                        revision = revision
+                        contentFingerprint = contentFingerprint,
+                        maxOffset = blockIndex.lengthCodeUnits,
+                        projectionEngine = projectionEngine
                     ),
                     bounds = null
                 )

@@ -40,7 +40,7 @@ internal object ReaderAnnotationDraftFactory {
         val startLocator = start
         val endLocator = end
         if (startLocator != null && endLocator != null) {
-            if (startLocator.isLegacyTxtLocator() || endLocator.isLegacyTxtLocator()) {
+            if (!startLocator.isSupportedReflowLocator() || !endLocator.isSupportedReflowLocator()) {
                 return null
             }
             return AnnotationAnchor.ReflowRange(
@@ -57,25 +57,25 @@ internal object ReaderAnnotationDraftFactory {
                 page = locator,
                 rects = selectionRects()
             )
-        } else if (locator.isLegacyTxtLocator()) {
-            null
         } else {
-            AnnotationAnchor.ReflowRange(LocatorRange(start = locator, end = locator))
+            locator.toFallbackAnchor()
         }
     }
 
     private fun Locator.toFallbackAnchor(): AnnotationAnchor? {
         return if (scheme == LocatorSchemes.PDF_PAGE) {
             AnnotationAnchor.FixedRects(page = this, rects = emptyList())
-        } else if (isLegacyTxtLocator()) {
-            null
-        } else {
+        } else if (isSupportedReflowLocator()) {
             AnnotationAnchor.ReflowRange(LocatorRange(start = this, end = this))
+        } else {
+            null
         }
     }
 
-    private fun Locator.isLegacyTxtLocator(): Boolean {
-        return scheme == "txt.offset" || scheme == "txt.block"
+    private fun Locator.isSupportedReflowLocator(): Boolean {
+        return scheme == LocatorSchemes.EPUB_CFI ||
+            scheme == LocatorSchemes.REFLOW_PAGE ||
+            scheme == LocatorSchemes.TXT_STABLE_ANCHOR
     }
 
     private fun SelectionProvider.Selection.selectionRects(): List<NormalizedRect> {

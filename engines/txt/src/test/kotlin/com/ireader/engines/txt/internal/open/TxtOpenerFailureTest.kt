@@ -2,7 +2,7 @@ package com.ireader.engines.txt.internal.open
 
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import com.ireader.core.files.source.DocumentSource
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
 import java.io.InputStream
 import java.nio.file.Files

@@ -10,7 +10,6 @@
 
 package com.ireader.engines.txt.internal.open
 
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.common.android.error.toReaderError
 import com.ireader.engines.common.android.id.SourceDocumentIds
 import com.ireader.engines.common.hash.Hashing
@@ -19,8 +18,10 @@ import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.replaceFileAtomically
 import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
 import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
+import com.ireader.engines.txt.internal.locator.TxtProjectionVersion
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.DocumentId
 import java.io.BufferedInputStream
@@ -195,6 +196,7 @@ internal class TxtOpener(
             displayName = source.displayName,
             sizeBytes = source.sizeBytes,
             sampleHash = sampleHash,
+            contentFingerprint = sampleHash,
             originalCharset = charset.name(),
             lengthChars = content.lengthChars,
             lengthCodeUnits = content.lengthChars,
@@ -207,7 +209,10 @@ internal class TxtOpener(
         metaTemp.writeText(meta.toJson().toString())
         replaceFileAtomically(tempFile = metaTemp, targetFile = files.metaJson)
         clearDerivedArtifacts(files)
-        writeArtifactManifest(files = files, manifest = TxtArtifactManifest.initial(meta))
+        writeArtifactManifest(
+            files = files,
+            manifest = TxtArtifactManifest.initial(meta, TxtProjectionVersion.current(files, meta))
+        )
         return meta
     }
 
@@ -215,8 +220,12 @@ internal class TxtOpener(
         files: TxtBookFiles,
         meta: TxtMeta
     ): TxtArtifactManifest {
-        var manifest = TxtArtifactManifest.readIfValid(files.manifestJson, meta)
-            ?: TxtArtifactManifest.initial(meta)
+        val projectionVersion = TxtProjectionVersion.current(files, meta)
+        var manifest = TxtArtifactManifest.readIfValid(
+            file = files.manifestJson,
+            meta = meta,
+            expectedProjectionVersion = projectionVersion
+        ) ?: TxtArtifactManifest.initial(meta, projectionVersion)
         manifest = if (TxtBlockIndex.openIfValid(files.blockIdx, meta) != null) {
             manifest.markBlockIndexReady(TXT_BLOCK_INDEX_VERSION)
         } else {

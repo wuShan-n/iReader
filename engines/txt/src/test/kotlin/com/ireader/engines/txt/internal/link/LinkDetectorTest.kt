@@ -24,7 +24,8 @@ class LinkDetectorTest {
                 text = text,
                 pageStartOffset = 100L,
                 blockIndex = fixture.blockIndex,
-                revision = fixture.meta.contentRevision
+                contentFingerprint = fixture.meta.contentFingerprint,
+                projectionEngine = fixture.projectionEngine
             )
 
             assertEquals(3, links.size)
@@ -40,8 +41,8 @@ class LinkDetectorTest {
             links.forEach { link ->
                 val range = link.range
                 assertNotNull(range)
-                assertEquals(LocatorSchemes.TXT_ANCHOR, range!!.start.scheme)
-                assertEquals(LocatorSchemes.TXT_ANCHOR, range.end.scheme)
+                assertEquals(LocatorSchemes.TXT_STABLE_ANCHOR, range!!.start.scheme)
+                assertEquals(LocatorSchemes.TXT_STABLE_ANCHOR, range.end.scheme)
             }
         } finally {
             fixture.close()
@@ -60,7 +61,8 @@ class LinkDetectorTest {
                 text = "This is a plain paragraph without links or mail addresses.",
                 pageStartOffset = 0L,
                 blockIndex = fixture.blockIndex,
-                revision = fixture.meta.contentRevision
+                contentFingerprint = fixture.meta.contentFingerprint,
+                projectionEngine = fixture.projectionEngine
             )
             assertTrue(links.isEmpty())
         } finally {

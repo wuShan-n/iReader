@@ -12,7 +12,7 @@
 
 - `feature/reader/src/main/kotlin/com/ireader/feature/reader/ui/ReaderScreen.kt`
 - `feature/reader/src/main/kotlin/com/ireader/feature/reader/presentation/ReaderViewModel.kt`
-- `feature/reader/src/main/kotlin/com/ireader/feature/reader/domain/usecase/OpenReaderSession.kt`
+- `core/data/src/main/kotlin/com/ireader/core/data/reader/ReaderLaunchRepository.kt`
 - `core/reader/runtime/src/main/kotlin/com/ireader/reader/runtime/DefaultReaderRuntime.kt`
 - `engines/epub/src/main/kotlin/com/ireader/engines/epub/internal/open/EpubOpener.kt`
 - `engines/epub/src/main/kotlin/com/ireader/engines/epub/internal/controller/EpubController.kt`
@@ -20,13 +20,13 @@
 
 ## 1. 打开阅读页到首屏可读
 
-这一段描述从 `ReaderScreen` 进入阅读页，到 `ReaderViewModel` 拿到 `ReaderSessionHandle` 的完整打开链路。
+这一段描述从 `ReaderScreen` 进入阅读页，到 `ReaderViewModel` 拿到 `ReaderHandle` 的完整打开链路。
 
 几个关键事实：
 
 - 当前书籍格式会作为 `hintFormat` 直接传给 `DefaultBookFormatDetector`，对于书架内已知 EPUB 不会再做内容 sniff。
 - EPUB 不会像 TXT 那样提前构造 `initialConfig`，而是在 `DefaultReaderRuntime.openSession()` 内根据 `DocumentCapabilities` 决定是 `fixedConfig` 还是 `reflowConfig`。
-- `EpubSession.create()` 同时组装 controller 和各类 provider，后续目录、搜索、文本、资源、批注都从同一个 `ReaderSessionHandle` 暴露出去。
+- `EpubSession.create()` 同时组装 controller 和各类 provider，后续目录、搜索、文本、资源、批注都从同一个 `ReaderHandle` 暴露出去。
 
 ```mermaid
 sequenceDiagram
@@ -37,7 +37,7 @@ sequenceDiagram
     participant BookRepo as BookRepo
     participant Source as BookSourceResolver
     participant Progress as ProgressRepo
-    participant UC as OpenReaderSession
+    participant UC as ReaderLaunchRepository
     participant Settings as ReaderSettingsStore
     participant Runtime as DefaultReaderRuntime
     participant Detector as DefaultBookFormatDetector
@@ -72,7 +72,7 @@ sequenceDiagram
                 Progress-->>VM: locatorJson?
                 VM->>VM: locatorCodec.decode(locatorJson)
             end
-            VM->>UC: invoke(source, OpenOptions(hintFormat=book.format, password), initialLocator)
+            VM->>UC: openBook(bookId, locatorArg, password)
             UC->>Settings: getOpenSettingsSnapshot()
             Settings-->>UC: displayPrefs + reflowConfig + fixedConfig
             Note over UC,Runtime: EPUB 不预先传入 initialConfig。<br/>Runtime 在拿到 capabilities 后才选择 fixed/reflow 配置。
@@ -122,10 +122,10 @@ sequenceDiagram
                         Session->>Session: buildParts()<br/>EpubController / Outline / Search / Text / Resources / Selection / Annotation
                         Session-->>Doc: ReaderSession
                         Doc-->>Runtime: Ok(session)
-                        Runtime-->>UC: Ok(ReaderSessionHandle)
+                        Runtime-->>UC: Ok(ReaderHandle)
                         UC-->>VM: Ok(handle)
                         VM->>VM: session.attach(bookId, handle)<br/>renderGate.attachSession(handle, openEpoch)<br/>pendingTouchLastOpenedBookId = bookId
-                        VM-->>Screen: 写入 controller/resources/capabilities/currentConfig
+                        VM-->>Screen: 写入 handle/resources/capabilities/currentConfig
                     end
                 end
             end
@@ -225,7 +225,7 @@ sequenceDiagram
 
 - `ReaderSurface` 只有在宿主 `Activity` 是 `FragmentActivity` 时才能绑定 EPUB 导航器，否则只会显示“不支持 EPUB 导航器渲染”文本。
 - `ReaderSurface` 销毁时会调用 `controller.unbindSurface()`；当前 `EpubController` 会把当前位置写回 `pendingLocator`，然后解除 decoration 绑定并移除 fragment。
-- `ReaderViewModel.closeSession()` 最终会经由 `SessionCoordinator.closeCurrent()` 保存当前进度，再关闭 `ReaderSessionHandle -> ReaderSession -> ReaderController -> ReaderDocument`。
+- `ReaderViewModel.closeSession()` 最终会经由 `SessionCoordinator.closeCurrent()` 保存当前进度，再关闭 `ReaderHandle -> ReaderSession -> ReaderDocument`。
 
 ## 3. 翻页、跳转与进度保存
 
@@ -246,7 +246,7 @@ sequenceDiagram
     participant VM as ReaderViewModel
     participant Render as RenderCoordinator
     participant Pub as Publication
-    participant Save as SaveReadingProgress
+    participant Save as ReaderLaunchRepository
     participant Progress as ProgressRepo
 
     alt 阅读区域背景点击
@@ -324,7 +324,7 @@ sequenceDiagram
     actor User as 用户
     participant UI as ReaderScaffold
     participant VM as ReaderViewModel
-    participant Handle as ReaderSessionHandle
+    participant Handle as ReaderHandle
     participant Outline as EpubOutlineProvider
     participant Pub as Publication
     participant State as ReaderUiState
@@ -379,7 +379,7 @@ sequenceDiagram
     actor User as 用户
     participant UI as SearchSheet
     participant VM as ReaderViewModel
-    participant Handle as ReaderSessionHandle
+    participant Handle as ReaderHandle
     participant Search as EpubSearchProvider
     participant Pub as Publication SearchService
     participant State as ReaderUiState
@@ -510,7 +510,7 @@ sequenceDiagram
 
 ## 7. 资源访问与文本提取能力
 
-这部分不是当前阅读主页面的显式主链，但它们已经随 `ReaderSessionHandle` 就绪，后续任何需要直接读取 EPUB 资源或抽取正文片段的功能都要经过这里。
+这部分不是当前阅读主页面的显式主链，但它们已经随 `ReaderHandle` 就绪，后续任何需要直接读取 EPUB 资源或抽取正文片段的功能都要经过这里。
 
 几个关键事实：
 
@@ -521,7 +521,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor Caller as 上层调用者
-    participant Handle as ReaderSessionHandle
+    participant Handle as ReaderHandle
     participant Res as EpubResourceProvider
     participant Text as EpubTextProvider
     participant Pub as Publication

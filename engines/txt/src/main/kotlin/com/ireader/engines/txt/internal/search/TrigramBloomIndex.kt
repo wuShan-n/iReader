@@ -1,8 +1,9 @@
 package com.ireader.engines.txt.internal.search
 
+import com.ireader.engines.txt.internal.locator.TxtProjectionVersion
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtMeta
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.engines.common.io.prepareTempFile
 import com.ireader.engines.common.io.readStringUtf8
@@ -22,6 +23,7 @@ internal class TrigramBloomIndex private constructor(
     private val bitsetBits: Int,
     val lengthChars: Long,
     val sampleHash: String,
+    val projectionVersion: String,
     private val blocksCount: Int,
     private val dataOffset: Long
 ) {
@@ -33,13 +35,17 @@ internal class TrigramBloomIndex private constructor(
 
     companion object {
         private const val MAGIC = "TBI1"
-        private const val VERSION = 1
+        private const val VERSION = 2
         private const val BLOCK_CHARS = 32 * 1024
         private const val BITSET_BITS = 16 * 1024
         private const val MIN_CHARS_FOR_INDEX = 1_000_000L
         private const val INDEX_BLOCK_OVERLAP = 2
 
-        fun openIfValid(file: File, meta: TxtMeta): TrigramBloomIndex? {
+        fun openIfValid(
+            file: File,
+            meta: TxtMeta,
+            projectionVersion: String
+        ): TrigramBloomIndex? {
             if (!file.exists()) {
                 return null
             }
@@ -57,10 +63,14 @@ internal class TrigramBloomIndex private constructor(
                     val bitsetBits = raf.readInt()
                     val lengthChars = raf.readLong()
                     val sampleHash = raf.readStringUtf8()
+                    val storedProjectionVersion = raf.readStringUtf8()
                     val blocksCount = raf.readInt()
                     val dataOffset = raf.filePointer
 
-                    if (lengthChars != meta.lengthCodeUnits || sampleHash != meta.sampleHash) {
+                    if (lengthChars != meta.lengthCodeUnits ||
+                        sampleHash != meta.sampleHash ||
+                        storedProjectionVersion != projectionVersion
+                    ) {
                         return null
                     }
                     TrigramBloomIndex(
@@ -68,6 +78,7 @@ internal class TrigramBloomIndex private constructor(
                         bitsetBits = bitsetBits,
                         lengthChars = lengthChars,
                         sampleHash = sampleHash,
+                        projectionVersion = storedProjectionVersion,
                         blocksCount = blocksCount,
                         dataOffset = dataOffset
                     )
@@ -85,11 +96,12 @@ internal class TrigramBloomIndex private constructor(
             if (meta.lengthCodeUnits < MIN_CHARS_FOR_INDEX) {
                 return@withContext
             }
-            openIfValid(file, meta)?.also { return@withContext }
+            val projectionVersion = TxtProjectionVersion.compute(meta, 0, meta.contentFingerprint)
+            openIfValid(file, meta, projectionVersion)?.also { return@withContext }
             lockFile.parentFile?.mkdirs()
             RandomAccessFile(lockFile, "rw").channel.use { lockChannel ->
                 lockChannel.lock().use {
-                    openIfValid(file, meta)?.also { return@withContext }
+                    openIfValid(file, meta, projectionVersion)?.also { return@withContext }
 
                     val blocksCount = ceil(meta.lengthCodeUnits.toDouble() / BLOCK_CHARS.toDouble()).toInt()
                         .coerceAtLeast(1)
@@ -106,6 +118,7 @@ internal class TrigramBloomIndex private constructor(
                         raf.writeInt(BITSET_BITS)
                         raf.writeLong(meta.lengthCodeUnits)
                         raf.writeStringUtf8(meta.sampleHash)
+                        raf.writeStringUtf8(projectionVersion)
                         raf.writeInt(blocksCount)
 
                         for (bi in 0 until blocksCount) {
@@ -132,18 +145,19 @@ internal class TrigramBloomIndex private constructor(
             file: File,
             lockFile: File,
             blockIndex: TxtBlockIndex,
-            breakResolver: BreakResolver,
+            projectionEngine: TextProjectionEngine,
             meta: TxtMeta,
+            projectionVersion: String,
             ioDispatcher: CoroutineDispatcher
         ) = withContext(ioDispatcher) {
             if (meta.lengthCodeUnits < MIN_CHARS_FOR_INDEX) {
                 return@withContext
             }
-            openIfValid(file, meta)?.also { return@withContext }
+            openIfValid(file, meta, projectionVersion)?.also { return@withContext }
             lockFile.parentFile?.mkdirs()
             RandomAccessFile(lockFile, "rw").channel.use { lockChannel ->
                 lockChannel.lock().use {
-                    openIfValid(file, meta)?.also { return@withContext }
+                    openIfValid(file, meta, projectionVersion)?.also { return@withContext }
 
                     val blocksCount = blockIndex.blockCount.coerceAtLeast(1)
                     val bitsetBytes = BITSET_BITS / 8
@@ -158,6 +172,7 @@ internal class TrigramBloomIndex private constructor(
                         raf.writeInt(BITSET_BITS)
                         raf.writeLong(meta.lengthCodeUnits)
                         raf.writeStringUtf8(meta.sampleHash)
+                        raf.writeStringUtf8(projectionVersion)
                         raf.writeInt(blocksCount)
 
                         for (bi in 0 until blocksCount) {
@@ -167,7 +182,7 @@ internal class TrigramBloomIndex private constructor(
                             val rangeEnd = (blockIndex.blockEndOffset(bi) + INDEX_BLOCK_OVERLAP.toLong())
                                 .coerceAtMost(meta.lengthCodeUnits)
                             val bitset = ByteArray(bitsetBytes)
-                            val displayText = breakResolver.projectRange(
+                            val displayText = projectionEngine.projectRange(
                                 startOffset = rangeStart,
                                 endOffsetExclusive = rangeEnd
                             ).displayText

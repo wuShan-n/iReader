@@ -8,11 +8,7 @@ import com.ireader.core.data.annotation.AnnotationListItem
 import com.ireader.core.data.annotation.AnnotationMutationFailure
 import com.ireader.core.data.annotation.AnnotationMutationResult
 import com.ireader.core.data.annotation.AnnotationRepository
-import com.ireader.core.data.book.BookRepo
-import com.ireader.core.data.book.LocatorCodec
-import com.ireader.core.data.book.ProgressRepo
 import com.ireader.core.navigation.AppRoutes
-import com.ireader.reader.api.provider.AnnotationStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -46,22 +42,6 @@ class AnnotationsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val annotationRepository: AnnotationRepository
 ) : ViewModel() {
-    constructor(
-        savedStateHandle: SavedStateHandle,
-        bookRepo: BookRepo,
-        progressRepo: ProgressRepo,
-        annotationStore: AnnotationStore,
-        locatorCodec: LocatorCodec
-    ) : this(
-        savedStateHandle = savedStateHandle,
-        annotationRepository = AnnotationRepository(
-            bookRepo = bookRepo,
-            progressRepo = progressRepo,
-            annotationStore = annotationStore,
-            locatorCodec = locatorCodec
-        )
-    )
-
     private val bookId: Long = savedStateHandle.get<Long>(AppRoutes.ARG_BOOK_ID) ?: -1L
     private val stateStore = MutableStateFlow(AnnotationsUiState())
     val uiState: StateFlow<AnnotationsUiState> = stateStore.asStateFlow()
@@ -211,7 +191,7 @@ class AnnotationsViewModel @Inject constructor(
     private fun createErrorMessage(reason: AnnotationMutationFailure): String {
         return when (reason) {
             AnnotationMutationFailure.MISSING_PROGRESS -> "缺少阅读定位，无法创建笔记"
-            AnnotationMutationFailure.LEGACY_TXT_LOCATOR -> "旧版 TXT 定位已失效，请先重新打开书籍后再创建笔记"
+            AnnotationMutationFailure.UNSUPPORTED_PROGRESS_LOCATOR -> "当前阅读定位不支持创建笔记，请先重新打开书籍后再试"
             AnnotationMutationFailure.MISSING_ANNOTATION,
             AnnotationMutationFailure.UPDATE_FAILED,
             AnnotationMutationFailure.DELETE_FAILED,

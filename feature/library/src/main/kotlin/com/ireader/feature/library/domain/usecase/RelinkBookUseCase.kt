@@ -5,9 +5,9 @@ import com.ireader.core.data.book.BookMaintenanceScheduler
 import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.book.IndexState
 import com.ireader.core.files.permission.UriPermissionGateway
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.core.files.source.UriDocumentSourceFactory
 import com.ireader.core.files.storage.BookStorage
+import com.ireader.reader.api.open.DocumentSource
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File

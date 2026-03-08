@@ -3,10 +3,10 @@
 package com.ireader.engines.txt.internal.provider
 
 import com.ireader.engines.common.android.error.toReaderError
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
 import com.ireader.reader.api.provider.TextProvider
@@ -19,9 +19,9 @@ import kotlinx.coroutines.withContext
 
 internal class TxtTextProvider(
     private val blockIndex: TxtBlockIndex,
-    private val revision: Int,
+    private val contentFingerprint: String,
     private val blockStore: BlockStore,
-    private val breakResolver: BreakResolver,
+    private val projectionEngine: TextProjectionEngine,
     private val ioDispatcher: CoroutineDispatcher
 ) : TextProvider {
 
@@ -41,7 +41,7 @@ internal class TxtTextProvider(
                 val cappedEnd = (minOffset + MAX_EXTRACT_CODE_UNITS)
                     .coerceAtMost(maxOffset)
                 ReaderResult.Ok(
-                    breakResolver.projectRange(
+                    projectionEngine.projectRange(
                         startOffset = minOffset,
                         endOffsetExclusive = cappedEnd
                     ).displayText
@@ -66,7 +66,7 @@ internal class TxtTextProvider(
                 val start = (offset - half.toLong()).coerceAtLeast(0L)
                 val end = (offset + half.toLong()).coerceAtMost(blockIndex.lengthCodeUnits)
                 ReaderResult.Ok(
-                    breakResolver.projectRange(
+                    projectionEngine.projectRange(
                         startOffset = start,
                         endOffsetExclusive = end
                     ).displayText
@@ -80,11 +80,12 @@ internal class TxtTextProvider(
     }
 
     private fun parseOffset(locator: Locator): Long? {
-        return TxtAnchorLocatorCodec.parseOffset(
+        return TxtLocatorResolver.parsePublicOffset(
             locator = locator,
             blockIndex = blockIndex,
-            expectedRevision = revision,
-            maxOffset = blockIndex.lengthCodeUnits
+            contentFingerprint = contentFingerprint,
+            maxOffset = blockIndex.lengthCodeUnits,
+            projectionEngine = projectionEngine
         )
     }
 

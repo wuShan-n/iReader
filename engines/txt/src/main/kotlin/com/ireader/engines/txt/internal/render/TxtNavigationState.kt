@@ -1,7 +1,8 @@
 package com.ireader.engines.txt.internal.render
 
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorExtraKeys
 import com.ireader.reader.model.Progression
@@ -11,7 +12,8 @@ import kotlin.math.roundToInt
 internal class TxtNavigationState(
     initialStart: Long,
     private val blockIndex: TxtBlockIndex,
-    private val revision: Int
+    private val contentFingerprint: String,
+    private val projectionEngine: TextProjectionEngine
 ) {
     var currentStart: Long = initialStart
         private set
@@ -55,10 +57,12 @@ internal class TxtNavigationState(
         val mergedExtras = extras + mapOf(
             LocatorExtraKeys.PROGRESSION to String.format(Locale.US, "%.6f", percent)
         )
-        return TxtAnchorLocatorCodec.locatorForOffset(
+        return TxtLocatorResolver.locatorForOffset(
             offset = currentStart.coerceIn(0L, maxOffset),
             blockIndex = blockIndex,
-            revision = revision,
+            contentFingerprint = contentFingerprint,
+            maxOffset = maxOffset,
+            projectionEngine = projectionEngine,
             extras = mergedExtras
         )
     }

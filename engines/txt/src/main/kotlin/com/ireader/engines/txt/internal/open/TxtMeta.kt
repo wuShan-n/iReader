@@ -8,6 +8,7 @@ internal data class TxtMeta(
     val displayName: String?,
     val sizeBytes: Long?,
     val sampleHash: String,
+    val contentFingerprint: String = sampleHash,
     val originalCharset: String,
     val lengthChars: Long,
     val hardWrapLikely: Boolean,
@@ -26,6 +27,7 @@ internal data class TxtMeta(
                 put("sizeBytes", sizeBytes)
             }
             put("sampleHash", sampleHash)
+            put("contentFingerprint", contentFingerprint)
             put("originalCharset", originalCharset)
             put("lengthChars", lengthChars)
             put("lengthCodeUnits", lengthCodeUnits)
@@ -50,6 +52,7 @@ internal data class TxtMeta(
                 displayName = json.optString("displayName").takeIf { it.isNotEmpty() },
                 sizeBytes = if (json.has("sizeBytes")) json.getLong("sizeBytes") else null,
                 sampleHash = json.getString("sampleHash"),
+                contentFingerprint = json.optString("contentFingerprint", json.getString("sampleHash")),
                 originalCharset = json.getString("originalCharset"),
                 lengthChars = lengthChars,
                 hardWrapLikely = json.optBoolean("hardWrapLikely", false),

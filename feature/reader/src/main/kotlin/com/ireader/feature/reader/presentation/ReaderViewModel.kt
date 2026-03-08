@@ -2,18 +2,12 @@ package com.ireader.feature.reader.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ireader.core.data.book.BookRepo
-import com.ireader.core.data.book.BookSourceResolver
 import com.ireader.core.data.book.LocatorCodec
-import com.ireader.core.data.book.ProgressRepo
 import com.ireader.core.data.reader.ReaderDisplayPrefs
 import com.ireader.core.data.reader.ReaderLaunchRepository
 import com.ireader.core.data.reader.ReaderOpenResult
 import com.ireader.core.data.reader.ReaderPreferencesRepository
-import com.ireader.core.datastore.reader.ReaderSettingsStore
 import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
-import com.ireader.feature.reader.domain.usecase.OpenReaderSession
-import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
 import com.ireader.feature.reader.web.ExternalLinkPolicy
 import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.api.engine.TextBreakPatchDirection
@@ -69,34 +63,6 @@ class ReaderViewModel @Inject constructor(
     private val observeEffectiveConfig: ObserveEffectiveConfig,
     private val errorMapper: ReaderUiErrorMapper
 ) : ViewModel() {
-    constructor(
-        bookRepo: BookRepo,
-        progressRepo: ProgressRepo,
-        settingsStore: ReaderSettingsStore,
-        sourceResolver: BookSourceResolver,
-        locatorCodec: LocatorCodec,
-        openReaderSession: OpenReaderSession,
-        observeEffectiveConfig: ObserveEffectiveConfig,
-        saveReadingProgress: SaveReadingProgress,
-        errorMapper: ReaderUiErrorMapper
-    ) : this(
-        locatorCodec = locatorCodec,
-        launchRepository = ReaderLaunchRepository(
-            bookRepo = bookRepo,
-            progressRepo = progressRepo,
-            locatorCodec = locatorCodec,
-            sourceResolver = sourceResolver,
-            preferencesRepository = openReaderSession.preferencesRepository,
-            runtime = openReaderSession.runtime
-        ),
-        preferencesRepository = openReaderSession.preferencesRepository,
-        observeEffectiveConfig = observeEffectiveConfig,
-        errorMapper = errorMapper
-    ) {
-        settingsStore.hashCode()
-        saveReadingProgress.hashCode()
-    }
-
     private val stateStore = MutableStateFlow(ReaderUiState())
     val state = stateStore.asStateFlow()
 
@@ -337,7 +303,6 @@ class ReaderViewModel @Inject constructor(
                 layerState = ReaderLayerState.Reading,
                 chromeVisible = false,
                 page = null,
-                controller = null,
                 handle = null,
                 resources = null,
                 capabilities = null,
@@ -391,7 +356,6 @@ class ReaderViewModel @Inject constructor(
                     it.copy(
                         isOpening = false,
                         title = result.book.title?.takeIf(String::isNotBlank) ?: result.book.fileName,
-                        controller = handle.controller,
                         handle = handle,
                         resources = handle.resources,
                         capabilities = handle.capabilities,
@@ -955,8 +919,7 @@ class ReaderViewModel @Inject constructor(
 
     private suspend fun createAnnotation() {
         val sessionHandle = session.currentHandle() ?: return
-        val annotationProvider = sessionHandle.annotations
-        if (annotationProvider == null) {
+        if (!sessionHandle.capabilities.annotations) {
             ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("当前文档不支持批注")))
             return
         }
@@ -982,7 +945,7 @@ class ReaderViewModel @Inject constructor(
             }
         }
 
-        when (annotationProvider.create(draft)) {
+        when (sessionHandle.createAnnotation(draft)) {
             is ReaderResult.Err -> {
                 ui.emit(ReaderEffect.Snackbar(UiText.Dynamic("创建批注失败")))
             }
@@ -1569,7 +1532,7 @@ class ReaderViewModel @Inject constructor(
         if (snapshot.sessionHandle !== sessionHandle) {
             return null
         }
-        val environmentKey = snapshot.textLayouterFactory.environmentKey
+        val environmentKey = snapshot.textLayouterFactory?.environmentKey
         if (appliedLayoutConstraints == snapshot.layoutConstraints &&
             appliedTextLayouterFactoryKey == environmentKey
         ) {

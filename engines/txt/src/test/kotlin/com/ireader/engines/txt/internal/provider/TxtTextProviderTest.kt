@@ -18,9 +18,9 @@ class TxtTextProviderTest {
         )
         val provider = TxtTextProvider(
             blockIndex = fixture.blockIndex,
-            revision = fixture.meta.contentRevision,
+            contentFingerprint = fixture.meta.contentFingerprint,
             blockStore = fixture.blockStore,
-            breakResolver = fixture.breakResolver,
+            projectionEngine = fixture.projectionEngine,
             ioDispatcher = Dispatchers.IO
         )
         try {

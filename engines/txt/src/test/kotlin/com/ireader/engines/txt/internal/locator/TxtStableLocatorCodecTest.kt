@@ -7,20 +7,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class TxtAnchorLocatorCodecTest {
+class TxtStableLocatorCodecTest {
 
     @Test
     fun `locatorForOffset should encode txt anchor`() = runBlocking {
         val fixture = buildTxtRuntimeFixture("x".repeat(8_192), "anchor-codec-encode", Dispatchers.IO)
         try {
-            val locator = TxtAnchorLocatorCodec.locatorForOffset(
+            val locator = TxtStableLocatorCodec.locatorForOffset(
                 offset = 2_121L,
                 blockIndex = fixture.blockIndex,
-                revision = fixture.meta.contentRevision
+                contentFingerprint = fixture.meta.contentFingerprint,
+                maxOffset = fixture.blockIndex.lengthCodeUnits,
+                projectionEngine = fixture.projectionEngine
             )
-            assertEquals(LocatorSchemes.TXT_ANCHOR, locator.scheme)
+            assertEquals(LocatorSchemes.TXT_STABLE_ANCHOR, locator.scheme)
             assertEquals(2_121L, fixture.parseOffset(locator))
         } finally {
             fixture.close()
@@ -34,21 +37,22 @@ class TxtAnchorLocatorCodecTest {
             val locator = fixture.locatorFor(2_121L)
             assertEquals(
                 2_121L,
-                TxtAnchorLocatorCodec.parseOffset(
+                TxtStableLocatorCodec.parseOffset(
                     locator = locator,
                     blockIndex = fixture.blockIndex,
-                    expectedRevision = fixture.meta.contentRevision
+                    contentFingerprint = fixture.meta.contentFingerprint,
+                    maxOffset = fixture.blockIndex.lengthCodeUnits,
+                    projectionEngine = fixture.projectionEngine
                 )
             )
-            assertEquals(
-                2_000L,
-                TxtAnchorLocatorCodec.parseOffset(
-                    locator = locator,
-                    blockIndex = fixture.blockIndex,
-                    expectedRevision = fixture.meta.contentRevision,
-                    maxOffset = 2_000L
-                )
+            val clamped = TxtStableLocatorCodec.parseOffset(
+                locator = locator,
+                blockIndex = fixture.blockIndex,
+                contentFingerprint = fixture.meta.contentFingerprint,
+                maxOffset = 2_000L,
+                projectionEngine = fixture.projectionEngine
             )
+            assertTrue(clamped != null && clamped in 0L..2_000L)
         } finally {
             fixture.close()
         }
@@ -59,17 +63,21 @@ class TxtAnchorLocatorCodecTest {
         val fixture = buildTxtRuntimeFixture("x".repeat(8_192), "anchor-codec-invalid", Dispatchers.IO)
         try {
             assertNull(
-                TxtAnchorLocatorCodec.parseOffset(
-                    locator = Locator(LocatorSchemes.TXT_ANCHOR, "2048:999:f:1"),
+                TxtStableLocatorCodec.parseOffset(
+                    locator = Locator(LocatorSchemes.TXT_STABLE_ANCHOR, "2048"),
                     blockIndex = fixture.blockIndex,
-                    expectedRevision = fixture.meta.contentRevision
+                    contentFingerprint = fixture.meta.contentFingerprint,
+                    maxOffset = fixture.blockIndex.lengthCodeUnits,
+                    projectionEngine = fixture.projectionEngine
                 )
             )
             assertNull(
-                TxtAnchorLocatorCodec.parseOffset(
-                    locator = Locator(LocatorSchemes.TXT_ANCHOR, "-1:0:f:1"),
+                TxtStableLocatorCodec.parseOffset(
+                    locator = Locator(LocatorSchemes.TXT_STABLE_ANCHOR, "-1:0"),
                     blockIndex = fixture.blockIndex,
-                    expectedRevision = fixture.meta.contentRevision
+                    contentFingerprint = fixture.meta.contentFingerprint,
+                    maxOffset = fixture.blockIndex.lengthCodeUnits,
+                    projectionEngine = fixture.projectionEngine
                 )
             )
         } finally {

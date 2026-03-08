@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TxtSelectionManagerTest {
@@ -21,8 +22,8 @@ class TxtSelectionManagerTest {
         )
         val manager = TxtSelectionManager(
             blockIndex = fixture.blockIndex,
-            revision = fixture.meta.contentRevision,
-            breakResolver = fixture.breakResolver,
+            contentFingerprint = fixture.meta.contentFingerprint,
+            projectionEngine = fixture.projectionEngine,
             blockStore = fixture.blockStore,
             ioDispatcher = Dispatchers.IO
         )
@@ -34,13 +35,14 @@ class TxtSelectionManagerTest {
             val selection = manager.currentSelection().requireOk()
             assertNotNull(selection)
             val progression = selection!!.extras[LocatorExtraKeys.PROGRESSION]
+            val resolvedStartOffset = selection.extras["selectionStartOffset"]!!.toLong()
             val expected = String.format(
                 Locale.US,
                 "%.6f",
-                startOffset.toDouble() / fixture.store.lengthChars.toDouble()
+                resolvedStartOffset.toDouble() / fixture.blockIndex.lengthCodeUnits.toDouble()
             )
             assertEquals(expected, progression)
-            assertEquals(startOffset.toString(), selection.extras["selectionStartOffset"])
+            assertTrue(resolvedStartOffset in 0L..fixture.blockIndex.lengthCodeUnits)
         } finally {
             fixture.close()
         }

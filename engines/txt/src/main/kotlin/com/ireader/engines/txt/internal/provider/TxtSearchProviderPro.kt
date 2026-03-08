@@ -2,12 +2,13 @@
 
 package com.ireader.engines.txt.internal.provider
 
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
+import com.ireader.engines.txt.internal.locator.TxtProjectionVersion
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.search.TrigramBloomIndex
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
@@ -31,7 +32,7 @@ internal class TxtSearchProviderPro(
     private val files: TxtBookFiles,
     private val meta: TxtMeta,
     private val blockIndex: TxtBlockIndex,
-    private val breakResolver: BreakResolver,
+    private val projectionEngine: TextProjectionEngine,
     private val blockStore: BlockStore,
     private val ioDispatcher: CoroutineDispatcher
 ) : SearchProvider {
@@ -40,7 +41,7 @@ internal class TxtSearchProviderPro(
     private val bloomBuildScheduled = AtomicBoolean(false)
 
     fun warmup() {
-        if (!breakResolver.hasIndexedBreaks()) {
+        if (!projectionEngine.hasIndexedBreaks()) {
             return
         }
         if (meta.lengthCodeUnits >= WARMUP_MIN_CODE_UNITS) {
@@ -70,19 +71,20 @@ internal class TxtSearchProviderPro(
             options = options,
             startOffset = options.startFrom
                 ?.let {
-                    TxtAnchorLocatorCodec.parseOffset(
+                    TxtLocatorResolver.parsePublicOffset(
                         locator = it,
                         blockIndex = blockIndex,
-                        expectedRevision = meta.contentRevision,
-                        maxOffset = blockIndex.lengthCodeUnits
+                        contentFingerprint = meta.contentFingerprint,
+                        maxOffset = blockIndex.lengthCodeUnits,
+                        projectionEngine = projectionEngine
                     )
                 }
                 ?: 0L
         )
-        val bloom = TrigramBloomIndex.openIfValid(files.searchIdx, meta)
+        val bloom = TrigramBloomIndex.openIfValid(files.searchIdx, meta, projectionVersion())
         if (bloom == null &&
             normalizedQuery.length >= BLOOM_MIN_QUERY_LENGTH &&
-            breakResolver.hasIndexedBreaks()
+            projectionEngine.hasIndexedBreaks()
         ) {
             scheduleBloomBuild()
         }
@@ -95,7 +97,7 @@ internal class TxtSearchProviderPro(
     }
 
     private fun scheduleBloomBuild() {
-        if (!breakResolver.hasIndexedBreaks()) {
+        if (!projectionEngine.hasIndexedBreaks()) {
             return
         }
         if (!bloomBuildScheduled.compareAndSet(false, true)) {
@@ -107,8 +109,9 @@ internal class TxtSearchProviderPro(
                     file = files.searchIdx,
                     lockFile = files.searchLock,
                     blockIndex = blockIndex,
-                    breakResolver = breakResolver,
+                    projectionEngine = projectionEngine,
                     meta = meta,
+                    projectionVersion = projectionVersion(),
                     ioDispatcher = ioDispatcher
                 )
             } finally {
@@ -175,7 +178,7 @@ internal class TxtSearchProviderPro(
             return
         }
 
-        val projection = breakResolver.projectRange(
+        val projection = projectionEngine.projectRange(
             startOffset = rangeStart,
             endOffsetExclusive = rangeEnd
         )
@@ -209,11 +212,13 @@ internal class TxtSearchProviderPro(
             }
             val sent = trySend(
                 SearchHit(
-                    range = TxtAnchorLocatorCodec.rangeForOffsets(
+                    range = TxtLocatorResolver.rangeForOffsets(
                         startOffset = globalStart,
                         endOffset = globalEnd,
                         blockIndex = blockIndex,
-                        revision = meta.contentRevision
+                        contentFingerprint = meta.contentFingerprint,
+                        maxOffset = blockIndex.lengthCodeUnits,
+                        projectionEngine = projectionEngine
                     ),
                     excerpt = buildExcerpt(projection.displayText, matchIndex, context.query.length),
                     sectionTitle = null
@@ -249,6 +254,8 @@ internal class TxtSearchProviderPro(
         private const val EXCERPT_AFTER = 128
         private const val WARMUP_MIN_CODE_UNITS = 128_000L
     }
+
+    private fun projectionVersion(): String = TxtProjectionVersion.current(files, meta)
 }
 
 private fun isWholeWord(chars: CharArray, start: Int, len: Int): Boolean {

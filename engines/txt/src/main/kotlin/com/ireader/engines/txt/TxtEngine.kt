@@ -1,12 +1,12 @@
 package com.ireader.engines.txt
 
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.engines.txt.internal.open.TxtDocument
 import com.ireader.engines.txt.internal.open.TxtOpenResult
 import com.ireader.engines.txt.internal.open.TxtOpener
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderEngine
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
 import com.ireader.reader.model.BookFormat
 

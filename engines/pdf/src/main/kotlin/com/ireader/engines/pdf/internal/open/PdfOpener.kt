@@ -2,9 +2,9 @@ package com.ireader.engines.pdf.internal.open
 
 import android.content.Context
 import android.os.ParcelFileDescriptor
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException

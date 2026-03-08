@@ -3,8 +3,11 @@ package com.ireader.feature.reader.presentation
 import androidx.lifecycle.viewModelScope
 import com.ireader.core.data.book.BookRepo
 import com.ireader.core.data.book.BookRecord
+import com.ireader.core.data.book.BookSourceResolver
 import com.ireader.core.data.book.LocatorCodec
 import com.ireader.core.data.book.ProgressRepo
+import com.ireader.core.data.reader.ReaderLaunchRepository
+import com.ireader.core.data.reader.ReaderPreferencesRepository
 import com.ireader.core.database.book.BookDao
 import com.ireader.core.database.book.BookEntity
 import com.ireader.core.database.book.BookSourceType
@@ -17,29 +20,19 @@ import com.ireader.core.database.collection.CollectionEntity
 import com.ireader.core.database.progress.ProgressDao
 import com.ireader.core.datastore.reader.ReaderDisplayPrefs
 import com.ireader.core.datastore.reader.ReaderSettingsStore
-import com.ireader.core.files.source.BookSourceResolver
-import com.ireader.core.files.source.DocumentSource
 import com.ireader.feature.reader.domain.usecase.ObserveEffectiveConfig
-import com.ireader.feature.reader.domain.usecase.OpenReaderSession
-import com.ireader.feature.reader.domain.usecase.SaveReadingProgress
 import com.ireader.feature.reader.testing.MainDispatcherRule
 import com.ireader.reader.api.engine.TextBreakPatchDirection
 import com.ireader.reader.api.engine.TextBreakPatchState
-import com.ireader.reader.api.engine.TextBreakPatchSupport
-import com.ireader.reader.api.engine.ReaderDocument
-import com.ireader.reader.api.engine.ReaderSession
 import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.open.OpenOptions
-import com.ireader.reader.api.provider.AnnotationProvider
-import com.ireader.reader.api.provider.OutlineProvider
 import com.ireader.reader.api.provider.ResourceProvider
 import com.ireader.reader.api.provider.SearchHit
 import com.ireader.reader.api.provider.SearchOptions
 import com.ireader.reader.api.provider.SearchProvider
-import com.ireader.reader.api.provider.SelectionController
 import com.ireader.reader.api.provider.SelectionProvider
-import com.ireader.reader.api.provider.TextProvider
 import com.ireader.reader.api.render.InvalidateReason
 import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.NavigationAvailability
@@ -56,16 +49,15 @@ import com.ireader.reader.api.render.TextLayoutInput
 import com.ireader.reader.api.render.TextLayoutMeasureResult
 import com.ireader.reader.api.render.TextLayouter
 import com.ireader.reader.api.render.TextLayouterFactory
-import com.ireader.reader.model.DocumentCapabilities
+import com.ireader.reader.api.engine.DocumentCapabilities
 import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.Locator
 import com.ireader.reader.model.LocatorRange
 import com.ireader.reader.model.Progression
-import com.ireader.reader.model.SessionId
 import android.net.Uri
 import com.ireader.reader.runtime.BookProbeResult
+import com.ireader.reader.runtime.ReaderHandle
 import com.ireader.reader.runtime.ReaderRuntime
-import com.ireader.reader.runtime.ReaderSessionHandle
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -76,6 +68,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -227,7 +220,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(controller = controller)
+                handle = readerHandle(controller = controller)
             )
 
             vm.dispatch(
@@ -256,7 +249,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(controller = controller)
+                handle = readerHandle(controller = controller)
             )
 
             vm.dispatch(
@@ -284,7 +277,7 @@ class ReaderViewModelTest {
         val patchSupport = FakeTextBreakPatchSupport(
             page = RenderPage(
                 id = PageId("patched-page"),
-                locator = Locator(scheme = "txt.anchor", value = "8:0:f:1"),
+                locator = Locator(scheme = "txt.stable.anchor", value = "8:0"),
                 content = RenderContent.Text(text = "patched text")
             )
         )
@@ -293,7 +286,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(
+                handle = readerHandle(
                     controller = controller,
                     textBreakPatchSupport = patchSupport
                 )
@@ -352,7 +345,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(controller = controller)
+                handle = readerHandle(controller = controller)
             )
 
             vm.dispatch(ReaderIntent.TextLayouterFactoryChanged(TestTextLayouterFactory))
@@ -388,7 +381,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(controller = delayedController)
+                handle = readerHandle(controller = delayedController)
             )
             vm.dispatch(ReaderIntent.TextLayouterFactoryChanged(TestTextLayouterFactory))
             runCurrent()
@@ -396,7 +389,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 2L,
-                handle = readerSessionHandle(controller = freshController)
+                handle = readerHandle(controller = freshController)
             )
             vm.dispatch(ReaderIntent.LayoutChanged(constraints))
             vm.dispatch(ReaderIntent.TextLayouterFactoryChanged(TestTextLayouterFactory))
@@ -418,7 +411,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(
+                handle = readerHandle(
                     controller = controller,
                     fixedLayout = true
                 )
@@ -469,7 +462,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(
+                handle = readerHandle(
                     controller = controller,
                     search = searchProvider
                 )
@@ -501,7 +494,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(controller = controller)
+                handle = readerHandle(controller = controller)
             )
             val nextCallsBefore = controller.nextCalls
 
@@ -530,7 +523,7 @@ class ReaderViewModelTest {
             attachSession(
                 vm = vm,
                 bookId = 1L,
-                handle = readerSessionHandle(controller = controller)
+                handle = readerHandle(controller = controller)
             )
             val setConfigCallsBefore = controller.setConfigCalls
 
@@ -553,7 +546,7 @@ class ReaderViewModelTest {
     fun `unexpected start exception should not stop later intents`() = runTest {
         val vm = newViewModel(
             bookById = mapOf(1L to bookEntity(1L)),
-            runtime = QueueReaderRuntime(readerSessionHandle()),
+            runtime = QueueReaderRuntime(readerHandle()),
             resolveSource = { FakeDocumentSource() },
             throwOnUpdateLastOpened = true
         )
@@ -561,7 +554,7 @@ class ReaderViewModelTest {
             vm.dispatch(ReaderIntent.Start(bookId = 1L, locatorArg = null))
             awaitStoppedOpening(vm)
             assertFalse(vm.state.value.isOpening)
-            assertNotNull(vm.state.value.error)
+            assertEquals(null, vm.state.value.error)
 
             vm.dispatch(ReaderIntent.OpenMenu)
             advanceUntilIdle()
@@ -579,7 +572,7 @@ class ReaderViewModelTest {
     private fun attachSession(
         vm: ReaderViewModel,
         bookId: Long,
-        handle: ReaderSessionHandle
+        handle: ReaderHandle
     ) {
         val sessionField = ReaderViewModel::class.java.getDeclaredField("session")
         sessionField.isAccessible = true
@@ -587,7 +580,7 @@ class ReaderViewModelTest {
         val attachMethod = sessionCoordinator.javaClass.getDeclaredMethod(
             "attach",
             Long::class.javaPrimitiveType,
-            ReaderSessionHandle::class.java
+            ReaderHandle::class.java
         )
         attachMethod.isAccessible = true
         attachMethod.invoke(sessionCoordinator, bookId, handle)
@@ -599,7 +592,7 @@ class ReaderViewModelTest {
         openEpochField.isAccessible = true
         val attachGateMethod = renderGate.javaClass.getDeclaredMethod(
             "attachSession",
-            ReaderSessionHandle::class.java,
+            ReaderHandle::class.java,
             Long::class.javaPrimitiveType
         )
         attachGateMethod.isAccessible = true
@@ -618,16 +611,17 @@ class ReaderViewModelTest {
         val stateStore = stateField.get(vm) as MutableStateFlow<ReaderUiState>
         stateStore.value = stateStore.value.copy(
             bookId = bookId,
-            controller = handle.controller,
-            capabilities = handle.document.capabilities,
-            renderState = handle.controller.state.value,
-            currentConfig = handle.controller.state.value.config,
-            gestureProfile = if (handle.document.capabilities.fixedLayout) {
+            handle = handle,
+            resources = handle.resources,
+            capabilities = handle.capabilities,
+            renderState = handle.state.value,
+            currentConfig = handle.state.value.config,
+            gestureProfile = if (handle.capabilities.fixedLayout) {
                 ReaderGestureProfile.FIXED
             } else {
                 ReaderGestureProfile.REFLOW
             },
-            supportsTextBreakPatches = handle.session is TextBreakPatchSupport
+            supportsTextBreakPatches = handle.supportsTextBreakPatches
         )
     }
 
@@ -659,22 +653,27 @@ class ReaderViewModelTest {
             bookCollectionDao = fakeBookCollectionDao()
         )
         val progressRepo = ProgressRepo(fakeProgressDao())
+        val preferencesRepository = ReaderPreferencesRepository(settingsStore)
         val locatorCodec = object : LocatorCodec {
             override fun encode(locator: Locator): String = "${locator.scheme}:${locator.value}"
             override fun decode(raw: String): Locator? = null
         }
-
-        return ReaderViewModel(
+        val launchRepository = ReaderLaunchRepository(
             bookRepo = bookRepo,
             progressRepo = progressRepo,
-            settingsStore = settingsStore,
+            locatorCodec = locatorCodec,
             sourceResolver = object : BookSourceResolver {
                 override fun resolve(book: BookRecord) = resolveSource(book)
             },
+            preferencesRepository = preferencesRepository,
+            runtime = runtime
+        )
+
+        return ReaderViewModel(
             locatorCodec = locatorCodec,
-            openReaderSession = OpenReaderSession(runtime = runtime, settings = settingsStore),
-            observeEffectiveConfig = ObserveEffectiveConfig(settingsStore = settingsStore),
-            saveReadingProgress = SaveReadingProgress(progressRepo = progressRepo, locatorCodec = locatorCodec),
+            launchRepository = launchRepository,
+            preferencesRepository = preferencesRepository,
+            observeEffectiveConfig = ObserveEffectiveConfig(preferencesRepository = preferencesRepository),
             errorMapper = ReaderUiErrorMapper()
         )
     }
@@ -802,7 +801,10 @@ private class FakeReaderSettingsStore(
 
 private fun failingRuntime(): ReaderRuntime {
     return object : ReaderRuntime {
-        override suspend fun openDocument(source: DocumentSource, options: OpenOptions): ReaderResult<ReaderDocument> {
+        override suspend fun openDocument(
+            source: DocumentSource,
+            options: OpenOptions
+        ): ReaderResult<com.ireader.reader.api.engine.ReaderDocument> {
             return ReaderResult.Err(ReaderError.NotFound())
         }
 
@@ -812,7 +814,7 @@ private fun failingRuntime(): ReaderRuntime {
             initialLocator: Locator?,
             initialConfig: RenderConfig?,
             resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)?
-        ): ReaderResult<ReaderSessionHandle> = ReaderResult.Err(ReaderError.NotFound())
+        ): ReaderResult<ReaderHandle> = ReaderResult.Err(ReaderError.NotFound())
 
         override suspend fun probe(source: DocumentSource, options: OpenOptions): ReaderResult<BookProbeResult> {
             return ReaderResult.Err(ReaderError.NotFound())
@@ -856,11 +858,14 @@ private fun bookEntity(
 }
 
 private class QueueReaderRuntime(
-    vararg sessionHandles: ReaderSessionHandle
+    vararg sessionHandles: ReaderHandle
 ) : ReaderRuntime {
     private val sessions = ArrayDeque(sessionHandles.toList())
 
-    override suspend fun openDocument(source: DocumentSource, options: OpenOptions): ReaderResult<ReaderDocument> {
+    override suspend fun openDocument(
+        source: DocumentSource,
+        options: OpenOptions
+    ): ReaderResult<com.ireader.reader.api.engine.ReaderDocument> {
         return ReaderResult.Err(ReaderError.Internal("unused"))
     }
 
@@ -870,7 +875,7 @@ private class QueueReaderRuntime(
         initialLocator: Locator?,
         initialConfig: RenderConfig?,
         resolveInitialConfig: (suspend (DocumentCapabilities) -> RenderConfig)?
-    ): ReaderResult<ReaderSessionHandle> {
+    ): ReaderResult<ReaderHandle> {
         if (sessions.isEmpty()) {
             return ReaderResult.Err(ReaderError.NotFound())
         }
@@ -882,7 +887,7 @@ private class QueueReaderRuntime(
     }
 }
 
-private fun readerSessionHandle(
+private fun readerHandle(
     controller: ReaderController = RecordingReaderController(),
     search: SearchProvider? = null,
     textBreakPatchSupport: FakeTextBreakPatchSupport? = null,
@@ -892,7 +897,7 @@ private fun readerSessionHandle(
     } else {
         com.ireader.reader.model.BookFormat.TXT
     }
-): ReaderSessionHandle {
+): ReaderHandle {
     val capabilities = DocumentCapabilities(
         reflowable = !fixedLayout,
         fixedLayout = fixedLayout,
@@ -903,66 +908,120 @@ private fun readerSessionHandle(
         selection = false,
         links = false
     )
-    val document = object : ReaderDocument {
-        override val id: DocumentId = DocumentId("doc")
+    return object : ReaderHandle {
         override val format = documentFormat
-        override val capabilities = capabilities
-        override val openOptions: OpenOptions = OpenOptions()
+        override val documentId: DocumentId = DocumentId("doc")
+        override val capabilities: DocumentCapabilities = capabilities
+        override val resources: ResourceProvider? = null
+        override val state = controller.state
+        override val events: Flow<ReaderEvent> = controller.events
+        override val supportsTextBreakPatches: Boolean = textBreakPatchSupport != null
 
-        override suspend fun metadata(): ReaderResult<com.ireader.reader.model.DocumentMetadata> {
-            return ReaderResult.Ok(com.ireader.reader.model.DocumentMetadata())
+        override suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit> {
+            return controller.bindSurface(surface)
         }
 
-        override suspend fun createSession(
-            initialLocator: Locator?,
-            initialConfig: RenderConfig
-        ): ReaderResult<ReaderSession> = ReaderResult.Err(ReaderError.Internal("unused"))
+        override suspend fun unbindSurface(): ReaderResult<Unit> {
+            return controller.unbindSurface()
+        }
+
+        override suspend fun bindViewport(
+            constraints: LayoutConstraints,
+            textLayouterFactory: TextLayouterFactory?
+        ): ReaderResult<Unit> {
+            if (capabilities.reflowable) {
+                val factory = textLayouterFactory
+                    ?: return ReaderResult.Err(ReaderError.Internal("Reader text layouter is required"))
+                when (val layouterResult = controller.setTextLayouterFactory(factory)) {
+                    is ReaderResult.Err -> return layouterResult
+                    is ReaderResult.Ok -> Unit
+                }
+            } else if (textLayouterFactory != null) {
+                when (val layouterResult = controller.setTextLayouterFactory(textLayouterFactory)) {
+                    is ReaderResult.Err -> return layouterResult
+                    is ReaderResult.Ok -> Unit
+                }
+            }
+            return controller.setLayoutConstraints(constraints)
+        }
+
+        override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> {
+            return controller.setConfig(config)
+        }
+
+        override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> {
+            return controller.render(policy)
+        }
+
+        override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> {
+            return controller.next(policy)
+        }
+
+        override suspend fun prev(policy: RenderPolicy): ReaderResult<RenderPage> {
+            return controller.prev(policy)
+        }
+
+        override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> {
+            return controller.goTo(locator, policy)
+        }
+
+        override suspend fun goToProgress(percent: Double, policy: RenderPolicy): ReaderResult<RenderPage> {
+            return controller.goToProgress(percent, policy)
+        }
+
+        override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> {
+            return controller.invalidate(reason)
+        }
+
+        override suspend fun getOutline(): ReaderResult<List<com.ireader.reader.model.OutlineNode>> {
+            return ReaderResult.Ok(emptyList())
+        }
+
+        override fun search(query: String, options: SearchOptions): Flow<ReaderResult<SearchHit>> {
+            val provider = search ?: return flowOf<ReaderResult<SearchHit>>(
+                ReaderResult.Err(ReaderError.Internal("Search is not available"))
+            )
+            return provider.search(query, options).map { ReaderResult.Ok(it) }
+        }
+
+        override suspend fun currentSelection(): ReaderResult<SelectionProvider.Selection?> {
+            return ReaderResult.Ok(null)
+        }
+
+        override suspend fun startSelection(locator: Locator): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+        override suspend fun updateSelection(locator: Locator): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+        override suspend fun finishSelection(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+        override suspend fun clearSelection(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+        override suspend fun createAnnotation(
+            draft: com.ireader.reader.model.annotation.AnnotationDraft
+        ): ReaderResult<Unit> = ReaderResult.Err(ReaderError.Internal("unused"))
+
+        override suspend fun applyBreakPatch(
+            locator: Locator,
+            direction: TextBreakPatchDirection,
+            state: TextBreakPatchState
+        ): ReaderResult<RenderPage> {
+            val support = textBreakPatchSupport ?: return ReaderResult.Err(
+                ReaderError.Internal("Text break patching is not available")
+            )
+            support.applyCalls += 1
+            return ReaderResult.Ok(support.page)
+        }
+
+        override suspend fun clearBreakPatches(): ReaderResult<RenderPage> {
+            val support = textBreakPatchSupport ?: return ReaderResult.Err(
+                ReaderError.Internal("Text break patching is not available")
+            )
+            support.clearCalls += 1
+            return ReaderResult.Ok(support.page)
+        }
 
         override fun close() = Unit
     }
-    val session = if (textBreakPatchSupport == null) {
-        object : ReaderSession {
-            override val id: SessionId = SessionId("session")
-            override val controller: ReaderController = controller
-            override val outline: OutlineProvider? = null
-            override val search: SearchProvider? = search
-            override val text: TextProvider? = null
-            override val annotations: AnnotationProvider? = null
-            override val resources: ResourceProvider? = null
-            override val selection: SelectionProvider? = null
-            override val selectionController: SelectionController? = null
-            override fun close() = Unit
-        }
-    } else {
-        object : ReaderSession, TextBreakPatchSupport {
-            override val id: SessionId = SessionId("session")
-            override val controller: ReaderController = controller
-            override val outline: OutlineProvider? = null
-            override val search: SearchProvider? = search
-            override val text: TextProvider? = null
-            override val annotations: AnnotationProvider? = null
-            override val resources: ResourceProvider? = null
-            override val selection: SelectionProvider? = null
-            override val selectionController: SelectionController? = null
-
-            override suspend fun applyBreakPatch(
-                locator: Locator,
-                direction: TextBreakPatchDirection,
-                state: TextBreakPatchState
-            ): ReaderResult<RenderPage> {
-                textBreakPatchSupport.applyCalls += 1
-                return ReaderResult.Ok(textBreakPatchSupport.page)
-            }
-
-            override suspend fun clearBreakPatches(): ReaderResult<RenderPage> {
-                textBreakPatchSupport.clearCalls += 1
-                return ReaderResult.Ok(textBreakPatchSupport.page)
-            }
-
-            override fun close() = Unit
-        }
-    }
-    return ReaderSessionHandle(document = document, session = session)
 }
 
 private data class FakeTextBreakPatchSupport(
@@ -984,7 +1043,7 @@ private class RecordingReaderController(
 
     private val stateStore = MutableStateFlow(
         RenderState(
-            locator = Locator(scheme = "txt.anchor", value = "0:0:f:1"),
+            locator = Locator(scheme = "txt.stable.anchor", value = "0:0"),
             progression = Progression(0.0),
             nav = NavigationAvailability(canGoPrev = true, canGoNext = true),
             config = initialConfig
@@ -1065,7 +1124,7 @@ private class DelayedRenderController(
     private var hasLayoutConstraints: Boolean = false
     private val stateStore = MutableStateFlow(
         RenderState(
-            locator = Locator(scheme = "txt.anchor", value = "0:0:f:1"),
+            locator = Locator(scheme = "txt.stable.anchor", value = "0:0"),
             progression = Progression(0.0),
             nav = NavigationAvailability(canGoPrev = true, canGoNext = true),
             config = RenderConfig.ReflowText()
@@ -1173,7 +1232,8 @@ private class FakeSearchProvider(
 }
 
 private class FakeDocumentSource : DocumentSource {
-    override val uri: Uri = Uri.EMPTY
+    override val uri: Uri
+        get() = throw UnsupportedOperationException("unused")
     override val displayName: String? = "book"
     override val mimeType: String? = "text/plain"
     override val sizeBytes: Long? = 1L

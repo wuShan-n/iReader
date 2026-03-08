@@ -2,13 +2,12 @@ package com.ireader.engines.txt.testing
 
 import com.ireader.engines.common.android.reflow.SoftBreakRuleConfig
 import com.ireader.engines.common.android.reflow.SoftBreakTuningProfile
-import com.ireader.engines.txt.internal.locator.TextAnchorAffinity
-import com.ireader.engines.txt.internal.locator.TxtAnchorLocatorCodec
+import com.ireader.engines.txt.internal.locator.TxtLocatorResolver
 import com.ireader.engines.txt.internal.open.TxtBlockIndex
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.runtime.BlockStore
-import com.ireader.engines.txt.internal.runtime.BreakResolver
+import com.ireader.engines.txt.internal.projection.TextProjectionEngine
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndexBuilder
 import com.ireader.engines.txt.internal.store.Utf16TextStore
@@ -24,30 +23,32 @@ internal data class TxtRuntimeFixture(
     val meta: TxtMeta,
     val blockIndex: TxtBlockIndex,
     val breakIndex: SoftBreakIndex,
-    val breakResolver: BreakResolver,
+    val projectionEngine: TextProjectionEngine,
     val blockStore: BlockStore,
     val sourceText: String
 ) {
-    fun locatorFor(offset: Long, affinity: TextAnchorAffinity = TextAnchorAffinity.FORWARD): Locator {
-        return TxtAnchorLocatorCodec.locatorForOffset(
+    fun locatorFor(offset: Long): Locator {
+        return TxtLocatorResolver.locatorForOffset(
             offset = offset,
             blockIndex = blockIndex,
-            revision = meta.contentRevision,
-            affinity = affinity
+            contentFingerprint = meta.contentFingerprint,
+            maxOffset = blockIndex.lengthCodeUnits,
+            projectionEngine = projectionEngine
         )
     }
 
     fun parseOffset(locator: Locator): Long? {
-        return TxtAnchorLocatorCodec.parseOffset(
+        return TxtLocatorResolver.parsePublicOffset(
             locator = locator,
             blockIndex = blockIndex,
-            expectedRevision = meta.contentRevision,
-            maxOffset = blockIndex.lengthCodeUnits
+            contentFingerprint = meta.contentFingerprint,
+            maxOffset = blockIndex.lengthCodeUnits,
+            projectionEngine = projectionEngine
         )
     }
 
     fun close() {
-        runCatching { breakResolver.close() }
+        runCatching { projectionEngine.close() }
         runCatching { breakIndex.close() }
         runCatching { store.close() }
         rootDir.deleteRecursively()
@@ -101,7 +102,7 @@ internal suspend fun buildTxtRuntimeFixture(
     ) {
         "Missing break map"
     }
-    val breakResolver = BreakResolver(
+    val projectionEngine = TextProjectionEngine(
         store = store,
         files = files,
         meta = meta,
@@ -111,7 +112,7 @@ internal suspend fun buildTxtRuntimeFixture(
         store = store,
         blockIndex = blockIndex,
         revision = meta.contentRevision,
-        breakResolver = breakResolver
+        projectionEngine = projectionEngine
     )
     return TxtRuntimeFixture(
         rootDir = rootDir,
@@ -120,7 +121,7 @@ internal suspend fun buildTxtRuntimeFixture(
         meta = meta,
         blockIndex = blockIndex,
         breakIndex = breakIndex,
-        breakResolver = breakResolver,
+        projectionEngine = projectionEngine,
         blockStore = blockStore,
         sourceText = text
     )

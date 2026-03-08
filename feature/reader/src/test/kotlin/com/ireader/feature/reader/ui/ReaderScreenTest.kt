@@ -6,28 +6,34 @@ import com.ireader.feature.reader.presentation.ReaderIntent
 import com.ireader.feature.reader.presentation.ReaderLayerState
 import com.ireader.feature.reader.presentation.ReaderSheet
 import com.ireader.feature.reader.presentation.ReaderUiState
+import com.ireader.reader.api.engine.DocumentCapabilities
+import com.ireader.reader.api.error.ReaderError
 import com.ireader.reader.api.error.ReaderResult
+import com.ireader.reader.api.provider.ResourceProvider
+import com.ireader.reader.api.provider.SearchHit
+import com.ireader.reader.api.provider.SearchOptions
+import com.ireader.reader.api.provider.SelectionProvider
 import com.ireader.reader.api.render.InvalidateReason
-import com.ireader.reader.api.render.LayoutConstraints
 import com.ireader.reader.api.render.NavigationAvailability
-import com.ireader.reader.api.render.PageId
-import com.ireader.reader.api.render.ReaderController
 import com.ireader.reader.api.render.ReaderEvent
-import com.ireader.reader.api.render.RenderContent
+import com.ireader.reader.api.render.RenderConfig
 import com.ireader.reader.api.render.RenderPage
-import com.ireader.reader.api.render.RenderPolicy
 import com.ireader.reader.api.render.RenderState
-import com.ireader.reader.api.render.RenderSurface
+import com.ireader.reader.model.BookFormat
+import com.ireader.reader.model.DocumentId
 import com.ireader.reader.model.Locator
+import com.ireader.reader.model.OutlineNode
 import com.ireader.reader.model.Progression
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.ireader.reader.runtime.ReaderHandle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 
 class ReaderScreenTest {
 
@@ -74,57 +80,94 @@ private fun readerUiState(
     return ReaderUiState(
         layerState = layerState,
         displayPrefs = ReaderDisplayPrefs(volumeKeyPagingEnabled = true),
-        controller = NoOpReaderController()
+        handle = DummyReaderHandle
     )
 }
 
-private class NoOpReaderController : ReaderController {
-    private val stateStore = MutableStateFlow(
+private object DummyReaderHandle : ReaderHandle {
+    override val format: BookFormat = BookFormat.TXT
+    override val documentId: DocumentId = DocumentId("doc")
+    override val capabilities: DocumentCapabilities = DocumentCapabilities(
+        reflowable = true,
+        fixedLayout = false,
+        outline = false,
+        search = false,
+        textExtraction = false,
+        annotations = false,
+        selection = false,
+        links = false
+    )
+    override val resources: ResourceProvider? = null
+    override val state = MutableStateFlow(
         RenderState(
-            locator = Locator(scheme = "txt.anchor", value = "0:0:f:1"),
+            locator = Locator("txt.stable.anchor", "0:0"),
             progression = Progression(0.0),
             nav = NavigationAvailability(canGoPrev = true, canGoNext = true),
-            config = com.ireader.reader.api.render.RenderConfig.ReflowText()
+            config = RenderConfig.ReflowText()
         )
     )
-
-    override val state = stateStore
     override val events: Flow<ReaderEvent> = MutableSharedFlow()
+    override val supportsTextBreakPatches: Boolean = false
 
-    override suspend fun bindSurface(surface: RenderSurface): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+    override suspend fun bindSurface(surface: com.ireader.reader.api.render.RenderSurface): ReaderResult<Unit> =
+        ReaderResult.Ok(Unit)
 
     override suspend fun unbindSurface(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-    override suspend fun setLayoutConstraints(constraints: LayoutConstraints): ReaderResult<Unit> = ReaderResult.Ok(Unit)
-
-    override suspend fun setTextLayouterFactory(
-        factory: com.ireader.reader.api.render.TextLayouterFactory
+    override suspend fun bindViewport(
+        constraints: com.ireader.reader.api.render.LayoutConstraints,
+        textLayouterFactory: com.ireader.reader.api.render.TextLayouterFactory?
     ): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-    override suspend fun setConfig(config: com.ireader.reader.api.render.RenderConfig): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+    override suspend fun setConfig(config: RenderConfig): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-    override suspend fun render(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Ok(page("render"))
+    override suspend fun render(policy: com.ireader.reader.api.render.RenderPolicy): ReaderResult<RenderPage> =
+        ReaderResult.Err(ReaderError.Internal("unused"))
 
-    override suspend fun next(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Ok(page("next"))
+    override suspend fun next(policy: com.ireader.reader.api.render.RenderPolicy): ReaderResult<RenderPage> =
+        ReaderResult.Err(ReaderError.Internal("unused"))
 
-    override suspend fun prev(policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Ok(page("prev"))
+    override suspend fun prev(policy: com.ireader.reader.api.render.RenderPolicy): ReaderResult<RenderPage> =
+        ReaderResult.Err(ReaderError.Internal("unused"))
 
-    override suspend fun goTo(locator: Locator, policy: RenderPolicy): ReaderResult<RenderPage> = ReaderResult.Ok(page("goto"))
+    override suspend fun goTo(
+        locator: Locator,
+        policy: com.ireader.reader.api.render.RenderPolicy
+    ): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))
 
-    override suspend fun goToProgress(percent: Double, policy: RenderPolicy): ReaderResult<RenderPage> =
-        ReaderResult.Ok(page("progress"))
-
-    override suspend fun prefetchNeighbors(count: Int): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+    override suspend fun goToProgress(
+        percent: Double,
+        policy: com.ireader.reader.api.render.RenderPolicy
+    ): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))
 
     override suspend fun invalidate(reason: InvalidateReason): ReaderResult<Unit> = ReaderResult.Ok(Unit)
 
-    override fun close() = Unit
+    override suspend fun getOutline(): ReaderResult<List<OutlineNode>> = ReaderResult.Ok(emptyList())
 
-    private fun page(id: String): RenderPage {
-        return RenderPage(
-            id = PageId(id),
-            locator = stateStore.value.locator,
-            content = RenderContent.Text(text = id)
-        )
-    }
+    override fun search(query: String, options: SearchOptions): Flow<ReaderResult<SearchHit>> = flowOf()
+
+    override suspend fun currentSelection(): ReaderResult<SelectionProvider.Selection?> = ReaderResult.Ok(null)
+
+    override suspend fun startSelection(locator: Locator): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun updateSelection(locator: Locator): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun finishSelection(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun clearSelection(): ReaderResult<Unit> = ReaderResult.Ok(Unit)
+
+    override suspend fun createAnnotation(
+        draft: com.ireader.reader.model.annotation.AnnotationDraft
+    ): ReaderResult<Unit> = ReaderResult.Err(ReaderError.Internal("unused"))
+
+    override suspend fun applyBreakPatch(
+        locator: Locator,
+        direction: com.ireader.reader.api.engine.TextBreakPatchDirection,
+        state: com.ireader.reader.api.engine.TextBreakPatchState
+    ): ReaderResult<RenderPage> = ReaderResult.Err(ReaderError.Internal("unused"))
+
+    override suspend fun clearBreakPatches(): ReaderResult<RenderPage> =
+        ReaderResult.Err(ReaderError.Internal("unused"))
+
+    override fun close() = Unit
 }

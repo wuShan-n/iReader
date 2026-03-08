@@ -8,7 +8,7 @@ internal data class RenderPrereqSnapshot(
     val sessionHandle: ReaderHandle,
     val openEpoch: Long,
     val layoutConstraints: LayoutConstraints,
-    val textLayouterFactory: TextLayouterFactory
+    val textLayouterFactory: TextLayouterFactory?
 )
 
 internal class RenderPrereqGate {
@@ -20,10 +20,6 @@ internal class RenderPrereqGate {
     fun attachSession(handle: ReaderHandle, openEpoch: Long) {
         sessionHandle = handle
         sessionOpenEpoch = openEpoch
-    }
-
-    fun attachSession(handle: com.ireader.reader.runtime.ReaderSessionHandle, openEpoch: Long) {
-        attachSession(handle = handle as ReaderHandle, openEpoch = openEpoch)
     }
 
     fun clearSession() {
@@ -46,7 +42,10 @@ internal class RenderPrereqGate {
     fun snapshotIfReady(): RenderPrereqSnapshot? {
         val handle = sessionHandle ?: return null
         val layout = layoutConstraints ?: return null
-        val layouter = textLayouterFactory ?: return null
+        val layouter = textLayouterFactory
+        if (handle.capabilities.reflowable && layouter == null) {
+            return null
+        }
         return RenderPrereqSnapshot(
             sessionHandle = handle,
             openEpoch = sessionOpenEpoch,

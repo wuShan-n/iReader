@@ -1,4 +1,4 @@
-package com.ireader.engines.txt.internal.runtime
+package com.ireader.engines.txt.internal.projection
 
 import com.ireader.engines.common.android.reflow.SoftBreakClassifier
 import com.ireader.engines.common.android.reflow.SoftBreakClassifierContext
@@ -9,6 +9,7 @@ import com.ireader.engines.common.cache.LruCache
 import com.ireader.engines.txt.internal.open.TxtBookFiles
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.provider.ChapterDetector
+import com.ireader.engines.txt.internal.runtime.BreakPatchStore
 import com.ireader.engines.txt.internal.softbreak.BreakMapState
 import com.ireader.engines.txt.internal.softbreak.SoftBreakDecisionSupport
 import com.ireader.engines.txt.internal.softbreak.SoftBreakIndex
@@ -44,7 +45,7 @@ internal data class ProjectedTextRange(
     }
 }
 
-internal class BreakResolver(
+internal class TextProjectionEngine(
     private val store: Utf16TextStore,
     private val files: TxtBookFiles,
     private val meta: TxtMeta,

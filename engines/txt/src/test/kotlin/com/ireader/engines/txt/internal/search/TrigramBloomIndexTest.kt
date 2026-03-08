@@ -1,5 +1,6 @@
 package com.ireader.engines.txt.internal.search
 
+import com.ireader.engines.txt.internal.locator.TxtProjectionVersion
 import com.ireader.engines.txt.internal.open.TxtMeta
 import com.ireader.engines.txt.internal.store.Utf16TextStore
 import com.ireader.engines.txt.testing.createBookFiles
@@ -31,7 +32,8 @@ class TrigramBloomIndexTest {
             createdAtEpochMs = 0L
         )
 
-        val opened = TrigramBloomIndex.openIfValid(indexFile, meta)
+        val projectionVersion = TxtProjectionVersion.compute(meta, 0, meta.contentFingerprint)
+        val opened = TrigramBloomIndex.openIfValid(indexFile, meta, projectionVersion)
         assertNull(opened)
         root.deleteRecursively()
     }
@@ -62,6 +64,7 @@ class TrigramBloomIndexTest {
         )
 
         try {
+            val projectionVersion = TxtProjectionVersion.compute(meta, 0, meta.contentFingerprint)
             TrigramBloomIndex.buildIfNeeded(
                 file = files.searchIdx,
                 lockFile = files.searchLock,
@@ -69,7 +72,7 @@ class TrigramBloomIndexTest {
                 meta = meta,
                 ioDispatcher = Dispatchers.IO
             )
-            val opened = TrigramBloomIndex.openIfValid(files.searchIdx, meta)
+            val opened = TrigramBloomIndex.openIfValid(files.searchIdx, meta, projectionVersion)
             checkNotNull(opened)
 
             val hashes = opened.buildQueryTrigramHashes("needle")

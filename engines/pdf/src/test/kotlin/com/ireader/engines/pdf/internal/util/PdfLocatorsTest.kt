@@ -21,7 +21,7 @@ class PdfLocatorsTest {
 
     @Test
     fun `locator parser rejects non-pdf scheme`() {
-        val locator = Locator(scheme = LocatorSchemes.TXT_ANCHOR, value = "10:0:f:1")
+        val locator = Locator(scheme = LocatorSchemes.TXT_STABLE_ANCHOR, value = "10:0")
         assertNull(locator.toPdfPageIndexOrNull(pageCount = 100))
     }
 

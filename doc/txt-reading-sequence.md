@@ -7,7 +7,7 @@
 主要代码入口：
 - `feature/reader/src/main/kotlin/com/ireader/feature/reader/ui/ReaderScreen.kt`
 - `feature/reader/src/main/kotlin/com/ireader/feature/reader/presentation/ReaderViewModel.kt`
-- `feature/reader/src/main/kotlin/com/ireader/feature/reader/domain/usecase/OpenReaderSession.kt`
+- `core/data/src/main/kotlin/com/ireader/core/data/reader/ReaderLaunchRepository.kt`
 - `core/reader/runtime/src/main/kotlin/com/ireader/reader/runtime/DefaultReaderRuntime.kt`
 - `engines/txt/src/main/kotlin/com/ireader/engines/txt/TxtEngine.kt`
 - `engines/txt/src/main/kotlin/com/ireader/engines/txt/internal/open/TxtOpener.kt`
@@ -30,7 +30,7 @@ sequenceDiagram
     participant SourceResolver as BookSourceResolver
     participant ProgressRepo as ProgressRepo
     participant LocatorCodec as LocatorCodec
-    participant OpenUC as OpenReaderSession
+    participant LaunchRepo as ReaderLaunchRepository
     participant Settings as ReaderSettingsStore
     participant Runtime as DefaultReaderRuntime
     participant Detector as DefaultBookFormatDetector
@@ -41,9 +41,9 @@ sequenceDiagram
     participant Source as DocumentSource
     participant Document as TxtDocument
     participant BlockIndex as TxtBlockIndex
-    participant TxtLocator as TxtAnchorLocatorCodec
+    participant TxtLocator as TxtStableLocatorCodec
     participant BreakIndex as SoftBreakIndex
-    participant BreakResolver as BreakResolver
+    participant TextProjectionEngine as TextProjectionEngine
     participant BlockStore as BlockStore
     participant Controller as TxtController
     participant TxtSession as TxtSession
@@ -75,10 +75,10 @@ sequenceDiagram
                 LocatorCodec-->>VM: historyLocator?
             end
 
-            VM->>OpenUC: invoke(source, OpenOptions(hintFormat=TXT, password), initialLocator)
-            OpenUC->>Settings: getOpenSettingsSnapshot()
-            Settings-->>OpenUC: open settings snapshot
-            OpenUC->>Runtime: openSession(source, options, initialLocator, initialConfig=reflowConfig+appearance)
+            VM->>LaunchRepo: openBook(bookId, locatorArg, password)
+            LaunchRepo->>Settings: getOpenSettingsSnapshot()
+            Settings-->>LaunchRepo: open settings snapshot
+            LaunchRepo->>Runtime: openSession(source, options, initialLocator, initialConfig=reflowConfig+appearance)
 
             Runtime->>Detector: detect(source, hintFormat=TXT)
             Note right of Detector: hint 存在时直接返回 TXT
@@ -115,14 +115,14 @@ sequenceDiagram
             Document->>TxtLocator: parseOffset(initialLocator)
             Document->>BreakIndex: openIfValid(files.breakMap, meta, BALANCED)
             BreakIndex-->>Document: breakIndex?
-            Document->>BreakResolver: new(store, files, meta, breakIndex)
-            Document->>BlockStore: new(store, blockIndex, breakResolver)
-            Document->>Controller: new(initialOffset, initialConfig, blockIndex, breakResolver, blockStore, ...)
-            Document->>TxtSession: create(controller, files, meta, blockIndex, breakResolver, blockStore, ...)
+            Document->>TextProjectionEngine: new(store, files, meta, breakIndex)
+            Document->>BlockStore: new(store, blockIndex, projectionEngine)
+            Document->>Controller: new(initialOffset, initialConfig, blockIndex, projectionEngine, blockStore, ...)
+            Document->>TxtSession: create(controller, files, meta, blockIndex, projectionEngine, blockStore, ...)
             TxtSession-->>Document: ReaderSession(TxtSession)
 
-            Runtime-->>OpenUC: ReaderSessionHandle(document, session)
-            OpenUC-->>VM: ReaderSessionHandle
+            Runtime-->>LaunchRepo: ReaderHandle
+            LaunchRepo-->>VM: ReaderHandle
 
             VM->>Session: attach(bookId, handle)
             VM->>VM: renderGate.attachSession(handle, openEpoch)
@@ -142,7 +142,7 @@ sequenceDiagram
 关键点：
 - `ReaderScreen` 的 `Start`、`TextLayouterFactoryChanged`、`LayoutChanged` 是三条独立输入，`RenderPrereqGate` 要求三者齐备才会触发渲染。
 - `TxtOpener.openMinimal()` 只保证 `text.store`、`meta.json`、`manifest.json` 足够打开阅读，会话可先建立，`block.idx` 和 `break.map` 可以稍后后台补齐。
-- `OpenReaderSession` 对 TXT 会直接使用 `reflowConfig.withReaderAppearance(displayPrefs)` 作为初始配置。
+- `ReaderLaunchRepository` 对 TXT 会直接使用 `reflowConfig.withReaderAppearance(displayPrefs)` 作为初始配置。
 
 ## 2. 首次渲染与翻页
 
@@ -160,7 +160,7 @@ sequenceDiagram
     participant Checkpoint as TxtLayoutCheckpointStore
     participant Fitter as TxtPageFitter
     participant BlockStore as BlockStore
-    participant BreakResolver as BreakResolver
+    participant TextProjectionEngine as TextProjectionEngine
     participant Store as Utf16TextStore
     participant Layouter as TextLayouter
     participant Adjuster as TxtPageEndAdjuster
@@ -191,8 +191,8 @@ sequenceDiagram
             loop 最多 8 个 paragraph batch
                 Fitter->>BlockStore: readParagraphs(startAnchor, codeUnitBudget)
                 BlockStore->>Store: readString/readBlock()
-                BlockStore->>BreakResolver: stateAt()/projectRange()
-                BreakResolver-->>BlockStore: 逻辑段落投射结果
+                BlockStore->>TextProjectionEngine: stateAt()/projectRange()
+                TextProjectionEngine-->>BlockStore: 逻辑段落投射结果
                 BlockStore-->>Fitter: LogicalParagraph batch
                 Fitter->>Layouter: measure(candidateText, TextLayoutInput)
                 alt 当前批次仍能放入页面
@@ -250,7 +250,7 @@ sequenceDiagram
     participant Store as Utf16TextStore
     participant BreakBuilder as SoftBreakIndexBuilder
     participant BreakIndex as SoftBreakIndex
-    participant BreakResolver as BreakResolver
+    participant TextProjectionEngine as TextProjectionEngine
 
     Note over TxtSession: init 中启动 sessionScope 协程
     TxtSession->>Controller: 监听 events.filterIsInstance<Rendered>().first()
@@ -279,13 +279,13 @@ sequenceDiagram
         TxtSession->>BreakIndex: openIfValid(files.breakMap, meta, BALANCED)
         BreakIndex-->>TxtSession: builtIndex?
         alt break.map 打开成功
-            TxtSession->>BreakResolver: attachIndex(builtIndex)
+            TxtSession->>TextProjectionEngine: attachIndex(builtIndex)
             TxtSession->>Manifest: markBreakMapReady(version=7)
             TxtSession->>Manifest: write manifest.json
         else break.map 仍不可用
             Note over TxtSession: manifest 保持 breakMapReady=false
         end
-    else breakResolver 已有 indexed breaks
+    else projectionEngine 已有 indexed breaks
         opt manifest 还没标记 ready
             TxtSession->>Manifest: markBreakMapReady(version=7)
             TxtSession->>Manifest: write manifest.json
@@ -308,7 +308,7 @@ sequenceDiagram
     participant VM as ReaderViewModel
     participant Outline as TxtOutlineProvider
     participant BlockStore as BlockStore
-    participant BreakResolver as BreakResolver
+    participant TextProjectionEngine as TextProjectionEngine
     participant Detector as ChapterDetector
     participant UI as Reader UI
 
@@ -322,8 +322,8 @@ sequenceDiagram
     else 走实时检测
         loop 最多 64 个 batch
             Outline->>BlockStore: readParagraphs(cursor, OUTLINE_SCAN_BUDGET=64000)
-            BlockStore->>BreakResolver: projectRange()
-            BreakResolver-->>BlockStore: paragraph.displayText
+            BlockStore->>TextProjectionEngine: projectRange()
+            TextProjectionEngine-->>BlockStore: paragraph.displayText
             Outline->>Detector: isChapterTitle(title)
             Detector-->>Outline: true/false
             Outline->>Outline: confidenceFor(title, paragraphText)
@@ -347,9 +347,9 @@ sequenceDiagram
     participant VM as ReaderViewModel
     participant Search as TxtSearchProviderPro
     participant Bloom as TrigramBloomIndex
-    participant BreakResolver as BreakResolver
+    participant TextProjectionEngine as TextProjectionEngine
     participant Matcher as KmpMatcher
-    participant Locator as TxtAnchorLocatorCodec
+    participant Locator as TxtStableLocatorCodec
     participant Acc as SearchResultAccumulator
     participant UI as Reader UI
 
@@ -362,7 +362,7 @@ sequenceDiagram
         loop candidate blocks
             Search->>Bloom: mayContainAll(blockId, trigramHashes)
             alt 可能命中
-                Search->>BreakResolver: projectRange(rangeStart, rangeEnd)
+                Search->>TextProjectionEngine: projectRange(rangeStart, rangeEnd)
                 Search->>Matcher: forEachMatch(displayText)
                 Matcher-->>Search: matchIndex*
                 Search->>Locator: rangeForOffsets(globalStart, globalEnd)
@@ -370,11 +370,11 @@ sequenceDiagram
             end
         end
     else bloom 不可用或 query 太短
-        opt breakResolver.hasIndexedBreaks() 且 query.length >= 3
+        opt projectionEngine.hasIndexedBreaks() 且 query.length >= 3
             Search->>Search: scheduleBloomBuild() 后台构建 search.idx
         end
         loop blocks from startBlock
-            Search->>BreakResolver: projectRange(rangeStart, rangeEnd)
+            Search->>TextProjectionEngine: projectRange(rangeStart, rangeEnd)
             Search->>Matcher: forEachMatch(displayText)
             Search->>Locator: rangeForOffsets(globalStart, globalEnd)
             Search-->>VM: emit SearchHit(range, excerpt)
@@ -387,7 +387,7 @@ sequenceDiagram
 ```
 
 关键点：
-- 搜索不是直接扫原始 `text.store`，而是先经过 `BreakResolver.projectRange()`，因此搜索文本与页面显示文本保持一致。
+- 搜索不是直接扫原始 `text.store`，而是先经过 `TextProjectionEngine.projectRange()`，因此搜索文本与页面显示文本保持一致。
 - `TxtSearchProviderPro` 在 bloom index 不可用时会退化为全块扫描，不会阻塞功能可用性。
 
 ## 5. 选区、批注、换行修正
@@ -400,8 +400,8 @@ sequenceDiagram
     actor User as User
     participant VM as ReaderViewModel
     participant Selection as TxtSelectionManager
-    participant Locator as TxtAnchorLocatorCodec
-    participant BreakResolver as BreakResolver
+    participant Locator as TxtStableLocatorCodec
+    participant TextProjectionEngine as TextProjectionEngine
 
     User->>VM: SelectionStart(locator)
     VM->>Selection: start(locator)
@@ -412,7 +412,7 @@ sequenceDiagram
     User->>VM: SelectionUpdate(locator)
     VM->>Selection: update(locator)
     Selection->>Locator: parseOffset(locator)
-    Selection->>BreakResolver: projectRange(startOffset, cappedEndOffset)
+    Selection->>TextProjectionEngine: projectRange(startOffset, cappedEndOffset)
     Selection-->>VM: ReaderResult.Ok(Unit)
 
     User->>VM: SelectionFinish / ClearSelection
@@ -461,8 +461,8 @@ sequenceDiagram
     participant VM as ReaderViewModel
     participant PatchSupport as TxtSession(TextBreakPatchSupport)
     participant Controller as TxtController
-    participant Locator as TxtAnchorLocatorCodec
-    participant BreakResolver as BreakResolver
+    participant Locator as TxtStableLocatorCodec
+    participant TextProjectionEngine as TextProjectionEngine
     participant Pagination as PaginationCoordinator
     participant Outline as TxtOutlineProvider
     participant Search as TxtSearchProviderPro
@@ -474,7 +474,7 @@ sequenceDiagram
     PatchSupport->>Controller: applyBreakPatch(locator, direction, state)
     Controller->>Locator: parseOffset(locator)
     Controller->>Controller: findNearestNewlineOffset()
-    Controller->>BreakResolver: patch(newlineOffset, BreakMapState)
+    Controller->>TextProjectionEngine: patch(newlineOffset, BreakMapState)
     Controller->>Pagination: invalidateProjectedContent()
     Controller->>Controller: renderSnapshotLocked(RenderPolicy.Default)
     Controller-->>PatchSupport: RenderPage
@@ -490,14 +490,14 @@ sequenceDiagram
     User->>VM: ClearTextBreakPatches
     VM->>PatchSupport: clearBreakPatches()
     PatchSupport->>Controller: clearBreakPatches()
-    Controller->>BreakResolver: clearPatches()
+    Controller->>TextProjectionEngine: clearPatches()
     Controller->>Pagination: invalidateProjectedContent()
     Controller-->>VM: RenderPage
     VM->>UI: replacePage(nextPage) + Snackbar
 ```
 
 关键点：
-- 换行修正真正修改的是 `BreakResolver` 的 patch 层，不会回写原始 `text.store`。
+- 换行修正真正修改的是 `TextProjectionEngine` 的 patch 层，不会回写原始 `text.store`。
 - 一旦 patch 变化，`TxtSession` 会主动让目录缓存和搜索缓存失效，因为章节识别与搜索都依赖投射后的显示文本。
 
 ## 6. 汇总
@@ -505,8 +505,8 @@ sequenceDiagram
 实际代码中的 TXT 阅读主链路可以概括为：
 
 1. `ReaderScreen` 先后把 `Start`、`TextLayouterFactoryChanged`、`LayoutChanged` 送入 `ReaderViewModel`。
-2. `ReaderViewModel.open()` 负责拿书、找源、恢复历史定位，并通过 `OpenReaderSession -> DefaultReaderRuntime -> TxtEngine -> TxtOpener` 打开最小可读文档。
-3. `TxtDocument.createSession()` 在会话阶段组装 `TxtController + BreakResolver + BlockStore + providers`。
+2. `ReaderViewModel.open()` 负责拿书、找源、恢复历史定位，并通过 `ReaderLaunchRepository -> DefaultReaderRuntime -> TxtEngine -> TxtOpener` 打开最小可读文档。
+3. `TxtDocument.createSession()` 在会话阶段组装 `TxtController + TextProjectionEngine + BlockStore + providers`。
 4. `RenderPrereqGate` 等待会话、布局、排版器三者都准备好后，`RenderCoordinator` 才调用 `TxtController.render()`。
-5. `TxtController` 通过 `PaginationCoordinator -> TxtPageFitter -> BlockStore/BreakResolver/TextLayouter` 计算 `TxtPageSlice`，再包装成 `RenderPage` 返给 UI。
-6. 首个 `Rendered` 事件之后，`TxtSession` 后台补齐 `block.idx` 与 `break.map`，后续目录、搜索、换行修正、选区都建立在这些产物和 `BreakResolver` 的投射能力之上。
+5. `TxtController` 通过 `PaginationCoordinator -> TxtPageFitter -> BlockStore/TextProjectionEngine/TextLayouter` 计算 `TxtPageSlice`，再包装成 `RenderPage` 返给 UI。
+6. 首个 `Rendered` 事件之后，`TxtSession` 后台补齐 `block.idx` 与 `break.map`，后续目录、搜索、换行修正、选区都建立在这些产物和 `TextProjectionEngine` 的投射能力之上。

@@ -1,6 +1,6 @@
 package com.ireader.di
 
-import com.ireader.core.files.source.DocumentSource
+import com.ireader.reader.api.open.DocumentSource
 import com.ireader.reader.api.engine.EngineRegistry
 import com.ireader.reader.api.engine.ReaderDocument
 import com.ireader.reader.api.engine.ReaderEngine

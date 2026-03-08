@@ -53,9 +53,7 @@ class DefaultReaderRuntime(
                 val sessionResult = catchingSuspend { document.createSession(initialLocator, sanitized) }
                 when (sessionResult) {
                     is ReaderResult.Ok -> ReaderResult.Ok(
-                        DefaultReaderHandle(
-                            ReaderSessionHandle(document, sessionResult.value)
-                        )
+                        DefaultReaderHandle(document = document, session = sessionResult.value)
                     )
                     is ReaderResult.Err -> {
                         runCatching { document.close() }

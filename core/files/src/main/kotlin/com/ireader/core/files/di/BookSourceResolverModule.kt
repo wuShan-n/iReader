@@ -1,6 +1,6 @@
 package com.ireader.core.files.di
 
-import com.ireader.core.files.source.BookSourceResolver
+import com.ireader.core.data.book.BookSourceResolver
 import com.ireader.core.files.source.DefaultBookSourceResolver
 import dagger.Binds
 import dagger.Module
@@ -16,4 +16,3 @@ abstract class BookSourceResolverModule {
     @Singleton
     abstract fun bindBookSourceResolver(impl: DefaultBookSourceResolver): BookSourceResolver
 }
-
